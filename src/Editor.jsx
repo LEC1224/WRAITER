@@ -9,9 +9,10 @@ import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
 import { GhostText, SearchHighlight, ParagraphFormat, ghostKey } from './extensions.js';
 import { DEFAULT_HOTKEYS, shortcutFromEvent } from './hotkeys.js';
+import { HISTORY_SELECTION_META } from './history.js';
 
 export const extensions = [
-  StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: false } }),
+  StarterKit.configure({ undoRedo: false, heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: false } }),
   TextStyleKit, TextAlign.configure({ types: ['heading', 'paragraph'] }),
   Highlight.configure({ multicolor: true }), Image.configure({ allowBase64: true }), TableKit.configure({ table: { resizable: true } }),
   Placeholder.configure({ placeholder: 'Start writing…' }), ParagraphFormat, GhostText, SearchHighlight
@@ -28,7 +29,9 @@ export default function ManuscriptEditor({ chapter, prefs, onReady, onChange, on
         const keys = { ...DEFAULT_HOTKEYS, ...callbacks.current.prefs.hotkeys }, pressed = shortcutFromEvent(event);
         if (!pressed) return false;
         let action;
-        if (ghost?.text && pressed === keys.accept) action = 'accept';
+        if (['Ctrl+Z', 'Meta+Z'].includes(pressed)) action = 'undo';
+        else if (['Ctrl+Y', 'Ctrl+Shift+Z', 'Shift+Meta+Z'].includes(pressed)) action = 'redo';
+        else if (ghost?.text && pressed === keys.accept) action = 'accept';
         else if (ghost?.text && ghost.kind !== 'revision' && pressed === keys.acceptCharacter) action = 'accept-character';
         else if (ghost?.text && ghost.kind !== 'revision' && pressed === keys.acceptWord) action = 'accept-word';
         else if (ghost && pressed === keys.dismiss) action = 'dismiss';
@@ -38,6 +41,14 @@ export default function ManuscriptEditor({ chapter, prefs, onReady, onChange, on
         if (action) { event.preventDefault(); callbacks.current.onAction(action); return true; }
         return false;
       },
+      handleDOMEvents: {
+        beforeinput(view, event) {
+          if (!['historyUndo', 'historyRedo'].includes(event.inputType)) return false;
+          event.preventDefault();
+          callbacks.current.onAction(event.inputType === 'historyUndo' ? 'undo' : 'redo');
+          return true;
+        }
+      },
       handleTextInput(view, from, to, text) {
         const item = ghostKey.getState(view.state);
         // A revision is only a preview. Typing resumes after the untouched selection.
@@ -46,11 +57,17 @@ export default function ManuscriptEditor({ chapter, prefs, onReady, onChange, on
         return true;
       }
     },
-    onUpdate: ({ editor, transaction }) => callbacks.current.onChange(editor.getJSON(), editor, transaction),
+    onUpdate: ({ editor, transaction, appendedTransactions }) => callbacks.current.onChange(editor.getJSON(), editor, transaction, { appendedTransactions }),
     onSelectionUpdate: ({ editor }) => callbacks.current.onSelection(editor.state.selection),
     onTransaction: () => callbacks.current.onAction('toolbar-refresh')
   });
-  useEffect(() => { if (editor) callbacks.current.onReady(editor); return () => callbacks.current.onReady(null); }, [editor]);
+  useEffect(() => {
+    if (!editor) return;
+    const captureSelection = ({ transaction }) => transaction.setMeta(HISTORY_SELECTION_META, editor.state.selection.toJSON());
+    editor.on('beforeTransaction', captureSelection);
+    callbacks.current.onReady(editor);
+    return () => { editor.off('beforeTransaction', captureSelection); callbacks.current.onReady(null); };
+  }, [editor]);
   useEffect(() => { editor?.setOptions({ editorProps: { ...editor.options.editorProps, attributes: { ...editor.options.editorProps.attributes, spellcheck: String(prefs.spellcheck), lang: prefs.language } } }); }, [editor, prefs.spellcheck, prefs.language]);
   return <EditorContent editor={editor} />;
 }

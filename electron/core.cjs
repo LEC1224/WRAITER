@@ -147,7 +147,7 @@ class DocumentStore {
     for (const target of [this.recoveryPath, `${this.recoveryPath}.bak`]) {
       try {
         const recovery = JSON.parse((await readLimited(target, 70 * 1024 * 1024)).toString('utf8')); validateProject(recovery.project);
-        if (recovery.path != null && (typeof recovery.path !== 'string' || !path.isAbsolute(recovery.path) || !recovery.path.toLowerCase().endsWith('.wraiter'))) throw new Error('Invalid recovery path.');
+        if (recovery.path != null && (typeof recovery.path !== 'string' || !path.isAbsolute(recovery.path) || !/\.(wraiter|odt|docx|txt|md|markdown|html|htm)$/i.test(recovery.path))) throw new Error('Invalid recovery path.');
         if (recovery.expectedHash != null && !/^[a-f0-9]{64}$/.test(recovery.expectedHash)) throw new Error('Invalid recovery fingerprint.');
         this.project = recovery.project; this.currentPath = recovery.path || null; this.expectedHash = recovery.expectedHash || null;
         return { project: this.project, path: this.currentPath, warning: warnings.length ? 'Restored the preceding recovery backup because the latest recovery could not be read.' : '' };

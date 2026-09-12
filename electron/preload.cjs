@@ -3,6 +3,7 @@ const invoke = channel => (...args) => ipcRenderer.invoke(channel, ...args);
 contextBridge.exposeInMainWorld('wraiter', {
   boot: invoke('boot'), getRecents: invoke('recent:list'), open: invoke('open'), openRecent: invoke('open-recent'), save: invoke('save'),
   autosave: invoke('autosave'), newProject: invoke('new-project'), exportFile: invoke('export'),
+  bindNative: invoke('native:bind'), chooseSaveTarget: invoke('save:choose'), saveEncoded: invoke('save:encoded'), loadEditHistory: invoke('history:load'), appendEditHistory: invoke('history:append'), restartEditHistory: invoke('history:restart'), runAgent: invoke('agent:run'),
   reference: invoke('reference'), image: invoke('image'), settings: invoke('settings'),
   generate: invoke('generate'), cancel: invoke('cancel'), probe: invoke('probe'),
   connectionStatus: invoke('provider:status'), connectProvider: invoke('provider:connect'), reconnectProvider: invoke('provider:reconnect'), loginProvider: invoke('provider:login'), listModels: invoke('provider:models'),

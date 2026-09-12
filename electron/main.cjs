@@ -7,12 +7,15 @@ const { defaults, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, merg
 const { GitHistory } = require('./git-history.cjs');
 const { listFonts, spellLanguage, menuTemplate } = require('./desktop.cjs');
 const { ReferenceLibrary } = require('./references.cjs');
+const { DocumentFiles, FORMATS, formatOf } = require('./document-files.cjs');
+const { EditJournal } = require('./edit-journal.cjs');
+const { runWritingAgent } = require('./writing-agent.cjs');
 
 if (process.env.WRAITER_USER_DATA) app.setPath('userData', path.resolve(process.env.WRAITER_USER_DATA));
 app.setName('WRAITER');
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
-let win, closing = false, closePending = false, closeFinishing = false, closeTimer, store, bootResult, gitHistory, fontList, referenceLibrary, lastReferenceWarnings = '';
+let win, closing = false, closePending = false, closeFinishing = false, closeTimer, store, bootResult, gitHistory, fontList, referenceLibrary, documentFiles, editJournal, lastReferenceWarnings = '';
 let writeQueue = Promise.resolve();
 let prefs = {};
 const activeRequests = new Map();
@@ -40,17 +43,22 @@ async function rememberPath(target) {
   await atomicWrite(file('settings.json'), JSON.stringify(prefs)).catch(error => console.error('Could not save recent documents:', error.message));
 }
 async function openPath(target) {
-  const extension = path.extname(target).toLowerCase();
-  if (extension === '.wraiter') {
-    const result = await store.open(target);
+  const result = await documentFiles.open(target);
+  if (result.project) {
     gitHistory.record(result.project, 'Opened manuscript').catch(error => console.error('Git history:', error.message));
     if (result.recoveredPath) await rememberPath(result.recoveredPath);
     await rememberPath(target);
-    return result;
   }
-  if (!['.odt', '.docx', '.txt', '.md', '.html', '.htm'].includes(extension)) throw new Error('Choose a WRAITER, ODT, DOCX, text, Markdown, or HTML document.');
-  const bytes = await readLimited(target);
-  return { import: true, name: path.basename(target, extension), extension, bytes: new Uint8Array(bytes) };
+  return result;
+}
+async function persistDocument(project, payload, events, options) {
+  validateProject(project);
+  if (events?.length) await editJournal.append(project.id, events);
+  if (project.historySequence != null) {
+    const history = await editJournal.read(project.id);
+    if (!Number.isSafeInteger(project.historySequence) || project.historySequence < 0 || project.historySequence > history.totalEvents) throw new Error('The editing history must be saved before its document snapshot.');
+  }
+  return documentFiles.persist(project, payload, options);
 }
 function updateMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys)));
@@ -81,7 +89,7 @@ function createWindow() {
   win.webContents.on('context-menu', (_event, params) => {
     const items = params.dictionarySuggestions.slice(0, 5).map(label => ({ label, click: () => win.webContents.replaceMisspelling(label) }));
     if (params.misspelledWord) items.push({ label: 'Add to dictionary', click: () => win.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord) }, { type: 'separator' });
-    items.push({ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' });
+    items.push({ label: 'Undo', click: () => win.webContents.send('command', 'undo') }, { label: 'Redo', click: () => win.webContents.send('command', 'redo') }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' });
     Menu.buildFromTemplate(items).popup({ window: win });
   });
   win.once('ready-to-show', () => win.show());
@@ -116,15 +124,50 @@ app.whenReady().then(async () => {
   store = new DocumentStore(app.getPath('userData'));
   referenceLibrary = new ReferenceLibrary(file('linked-references.json'));
   bootResult = await store.boot();
+  documentFiles = new DocumentFiles(store, app.getPath('userData')); await documentFiles.recover();
+  editJournal = new EditJournal(app.getPath('userData'));
   gitHistory = new GitHistory(app.getPath('userData'));
   if (store.project) gitHistory.record(store.project, 'Recovered manuscript').catch(error => console.error('Git history:', error.message));
   updateMenu();
   createWindow();
-  ipcMain.handle('boot', () => ({ ...bootResult, project: store.project, path: store.currentPath, prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
+  ipcMain.handle('boot', () => ({ ...bootResult, project: store.project, path: store.currentPath, binding: documentFiles.binding, prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
   ipcMain.handle('recent:list', () => [...(prefs.recent || [])]);
-  ipcMain.handle('autosave', (_e, project) => serial(async () => { const result = await store.persist(project); gitHistory.schedule(project); return result; }));
+  ipcMain.handle('autosave', (_e, project, payload, events) => serial(async () => { const result = await persistDocument(project, payload, events); gitHistory.schedule(project); return result; }));
+  ipcMain.handle('history:load', (_e, projectId) => serial(() => editJournal.read(projectId)));
+  ipcMain.handle('history:append', (_e, projectId, events) => serial(() => editJournal.append(projectId, events)));
+  ipcMain.handle('history:restart', (_e, project, initial, reason) => serial(async () => {
+    validateProject(project);
+    if (store.project && store.project.id !== project.id) throw new Error('This history belongs to another document.');
+    const result = await editJournal.restart(project, initial, String(reason || '').slice(0, 2000));
+    await store.writeRecovery({ ...project, historySequence: 1 }, store.currentPath, store.expectedHash);
+    await documentFiles.saveSidecar(store.project);
+    return result;
+  }));
+  ipcMain.handle('native:bind', (_e, project, source) => serial(async () => { const result = await documentFiles.bind(project, source); if (result.recoveredPath) await rememberPath(result.recoveredPath); await rememberPath(result.path); return result; }));
+  ipcMain.handle('save:choose', async (_e, { title, format = documentFiles.binding?.format || 'wraiter', copy = true } = {}) => {
+    if (typeof title !== 'string' || title.length > 2000 || !FORMATS.includes(format)) throw new Error('Invalid save format.');
+    const filters = [format, ...FORMATS.filter(item => item !== format)].map(item => ({ name: ({ wraiter: 'WRAITER manuscript', odt: 'OpenDocument Text', docx: 'Word document', txt: 'Plain text', md: 'Markdown', html: 'HTML document' })[item], extensions: [item] }));
+    const chosen = await dialog.showSaveDialog(win, { title: copy ? 'Save as' : 'Save document', defaultPath: `${safeFilename(title)}.${format}`, filters });
+    if (chosen.canceled) return null;
+    const target = path.extname(chosen.filePath) ? chosen.filePath : `${chosen.filePath}.${format}`;
+    return documentFiles.authorizeTarget(target);
+  });
+  ipcMain.handle('save:encoded', (_e, project, payload, options = {}, events = []) => serial(async () => {
+    const warnings = documentFiles.reviewWarnings(project, payload, options);
+    if (warnings.length) {
+      const details = warnings.join('\n');
+      const choice = await dialog.showMessageBox(win, { type: 'warning', message: 'Review format compatibility before saving', detail: `${details}\n\nSaving writes the supported document content. The complete original will be preserved in WRAITER’s Format originals folder, with a preceding-save .bak beside the document.`, buttons: ['Save with original backup', 'Save a copy', 'Cancel'], defaultId: 1, cancelId: 2 });
+      if (choice.response === 2) return null;
+      if (choice.response === 1) return { chooseCopy: true };
+      options = { ...options, reviewed: true };
+    }
+    const result = await persistDocument(project, payload, events, options);
+    if (result.path) await rememberPath(result.path);
+    await gitHistory.record(project, 'Saved document'); return result;
+  }));
   ipcMain.handle('new-project', (_e, project) => serial(async () => {
     const result = await store.replace(project);
+    documentFiles.binding = null;
     gitHistory.record(project, 'New manuscript').catch(error => console.error('Git history:', error.message));
     if (result.recoveredPath) await rememberPath(result.recoveredPath);
     return result;
@@ -138,13 +181,15 @@ app.whenReady().then(async () => {
       target = result.filePath;
       if (!target.toLowerCase().endsWith('.wraiter')) target += '.wraiter';
     }
+    if (documentFiles.binding && !copy) throw new Error('This document needs its native format encoder to save.');
     const result = await store.persist(project, target, !samePath(target, store.currentPath));
+    documentFiles.binding = null;
     await rememberPath(target);
     try { await gitHistory.record(project, copy ? 'Saved a copy' : 'Saved manuscript'); } catch (error) { result.gitWarning = error.message; }
     return result;
   }));
   ipcMain.handle('open', () => serial(async () => {
-    const result = await dialog.showOpenDialog(win, { title: 'Open or import a manuscript', properties: ['openFile'], filters: [{ name: 'Writing documents', extensions: ['wraiter', 'odt', 'docx', 'txt', 'md', 'html'] }] });
+    const result = await dialog.showOpenDialog(win, { title: 'Open document', properties: ['openFile'], filters: [{ name: 'Writing documents', extensions: ['odt', 'docx', 'wraiter', 'txt', 'md', 'markdown', 'html', 'htm'] }] });
     if (result.canceled) return null;
     return openPath(result.filePaths[0]);
   }));
@@ -198,6 +243,22 @@ app.whenReady().then(async () => {
     finally { clearTimeout(timeout); activeRequests.delete(request.id); finished(); }
   });
   ipcMain.handle('cancel', cancelAll);
+  ipcMain.handle('agent:run', async (_event, request) => {
+    if (!prefs.enabled) throw new Error('Enable AI writing assistance first.');
+    if (activeRequests.size) throw new Error('Finish or cancel the current AI request first.');
+    if (!request || typeof request.instruction !== 'string' || !request.instruction.trim() || request.instruction.length > 16000) throw new Error('Enter a writing request.');
+    validateProject(request.project);
+    if (store.project && store.project.id !== request.project.id) throw new Error('The requested document is no longer open.');
+    const settings = resolveTask(prefs, 'chat'), id = request.id || `agent-${Date.now()}`, controller = new AbortController();
+    let finished; controller.finished = new Promise(resolve => { finished = resolve; });
+    const timeout = setTimeout(() => controller.abort(), 240000); activeRequests.set(id, controller);
+    try {
+      const refs = await referenceLibrary.refresh((request.project.references || []).filter(reference => reference.enabled !== false), { verifyContents: settings.provider === 'codex', signal: controller.signal });
+      if (refs.warnings.length) win?.webContents.send('command', `reference-warning:${refs.warnings.join(' ')}`);
+      return await runWritingAgent({ ...request, references: refs.references, settings, key: await getKey(settings), signal: controller.signal, onProgress: activity => win?.webContents.send('command', `agent-progress:${JSON.stringify({ requestId: id, ...activity })}`) });
+    } catch (error) { throw new Error(controller.signal.aborted ? 'Assistant stopped. No pending edits were applied.' : error.message); }
+    finally { clearTimeout(timeout); activeRequests.delete(id); finished(); }
+  });
   ipcMain.handle('probe', (_e, draft) => providerProbe(draft));
   ipcMain.handle('provider:models', (_e, draft) => providerProbe(draft));
   ipcMain.handle('provider:connect', async (_e, task = 'continue') => {
@@ -232,7 +293,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('git:list', () => store.project ? gitHistory.list(store.project.id) : { available: true, entries: [] });
   ipcMain.handle('git:revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.revision(store.project.id, revision); });
   ipcMain.handle('git:snapshot', (_e, project, label) => serial(async () => {
-    await store.persist(project);
+    await persistDocument(project);
     return gitHistory.record(project, label || 'Manual checkpoint', true);
   }));
   ipcMain.handle('choose-codex', async () => {
@@ -242,9 +303,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('export', async (_e, payload) => {
     if (!payload || typeof payload !== 'object') throw new Error('Invalid export.');
     const { format, title, data, html } = payload;
-    if (!['txt', 'md', 'html', 'pdf', 'docx', 'bbcode'].includes(format)) throw new Error('Unsupported export.');
+    if (!['txt', 'md', 'html', 'pdf', 'docx', 'odt', 'epub', 'bbcode'].includes(format)) throw new Error('Unsupported export.');
     if (typeof title !== 'string' || title.length > 2000) throw new Error('Invalid export title.');
-    if (format === 'pdf' ? typeof html !== 'string' || Buffer.byteLength(html) > 100 * 1024 * 1024 : format === 'docx' ? !(data instanceof Uint8Array || data instanceof ArrayBuffer) || data.byteLength > 100 * 1024 * 1024 : typeof data !== 'string' || Buffer.byteLength(data) > 100 * 1024 * 1024) throw new Error('Invalid or oversized export content.');
+    const binary = ['docx', 'odt', 'epub'].includes(format);
+    if (format === 'pdf' ? typeof html !== 'string' || Buffer.byteLength(html) > 100 * 1024 * 1024 : binary ? !(data instanceof Uint8Array || data instanceof ArrayBuffer) || data.byteLength > 100 * 1024 * 1024 : typeof data !== 'string' || Buffer.byteLength(data) > 100 * 1024 * 1024) throw new Error('Invalid or oversized export content.');
     const extension = format === 'bbcode' ? 'txt' : format;
     const result = await dialog.showSaveDialog(win, { title: `Export ${format.toUpperCase()}`, defaultPath: `${safeFilename(title)}.${extension}`, filters: [{ name: format.toUpperCase(), extensions: [extension] }] });
     if (result.canceled) return null;
@@ -256,18 +318,18 @@ app.whenReady().then(async () => {
       print.webContents.session.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('data:') }));
       try {
         await print.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-        const pdf = await print.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { top: 0.8, bottom: 0.8, left: 0.8, right: 0.8 }, preferCSSPageSize: true });
+        const pdf = await print.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { top: 0, bottom: 0, left: 0, right: 0 }, displayHeaderFooter: false, preferCSSPageSize: true });
         await atomicWrite(target, pdf);
       } finally { print.destroy(); }
-    } else await atomicWrite(target, format === 'docx' ? Buffer.from(data) : String(data));
+    } else await atomicWrite(target, binary ? Buffer.from(data) : String(data));
     return target;
   });
   ipcMain.handle('reveal', () => { if (store.currentPath) shell.showItemInFolder(store.currentPath); });
-  ipcMain.handle('finish-close', async (_e, project) => {
+  ipcMain.handle('finish-close', async (_e, project, payload, events) => {
     if (closing) return true;
     if (closeFinishing) return false;
     closeFinishing = true; clearTimeout(closeTimer);
-    try { if (project) await serial(async () => { await store.persist(project); gitHistory.schedule(project); }); else await writeQueue; }
+    try { if (project) await serial(async () => { await persistDocument(project, payload, events); gitHistory.schedule(project); }); else await writeQueue; }
     catch (error) {
       const result = await dialog.showMessageBox(win, { type: 'warning', message: 'The latest save needs attention', detail: error.message, buttons: ['Keep writing', 'Close anyway'], defaultId: 0, cancelId: 0 });
       if (result.response === 0) { closePending = false; closeFinishing = false; return false; }

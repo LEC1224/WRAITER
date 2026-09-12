@@ -75,11 +75,12 @@ const waitFor = async (fn, label, timeout = 12000) => {
     await page.getByRole('button', { name: 'Replace', exact: true }).click(); assert.match(await visibleText(), /bright hour/);
     await page.getByRole('button', { name: 'Close search', exact: true }).click(); await editor.click(); await page.keyboard.press('Control+z'); assert.match(await visibleText(), /quiet hour/);
     events.push('Chapter navigation, titles and undoable find/replace preserve the manuscript.');
-    await selectText('A quiet hour.'); await page.getByRole('combobox', { name: 'Font family', exact: true }).selectOption('Arial');
+    await selectText('A quiet hour.'); await page.getByRole('combobox', { name: 'Font family', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Search fonts', exact: true }).fill('Arial'); await page.getByRole('option', { name: /^Arial Aa$/ }).click();
     await page.getByRole('spinbutton', { name: 'Font size in points', exact: true }).fill('22'); await page.keyboard.press('Enter');
     await waitFor(async () => JSON.stringify(await recover()).includes('22pt'), 'font formatting save'); assert.ok(JSON.stringify((await recover()).chapters[1]).includes('Arial'));
     await page.screenshot({ path: path.join(output, '01-paper.png') }); events.push('Installed font and point-size controls apply formatting to the selected text.');
-    await menu('View', 'Git version history'); await page.getByRole('button', { name: 'Save version', exact: true }).click();
+    await menu('View', 'Revision history'); await page.getByRole('tab', { name: /^Checkpoints/ }).click(); await page.getByRole('button', { name: 'Save version', exact: true }).click();
     await page.getByRole('textbox', { name: 'Version description', exact: true }).fill('Before AI editing'); await page.getByRole('dialog').getByRole('button', { name: 'Save version', exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'hidden' }); const versions = await page.evaluate(() => window.wraiter.listGitHistory());
     assert.ok(versions.available && versions.entries.some(entry => entry.message === 'Before AI editing'));
@@ -117,11 +118,11 @@ const waitFor = async (fn, label, timeout = 12000) => {
     assert.ok(requests.at(-1).prompt.includes('translate ONLY that selected text') && requests.at(-1).prompt.includes('SELECTED TEXT:\nfika'));
     await page.keyboard.press('Tab'); assert.equal(await visibleText(), 'We stopped for a coffee break.');
     events.push('Spell correction uses its own model and content language; native-language translation replaces only the selection.');
-    await menu('View', 'Writing assistant'); await page.getByRole('textbox', { name: 'Ask the writing assistant', exact: true }).fill('Is the pacing clear?'); nextReply = 'The pacing is clear.';
-    await page.getByRole('button', { name: 'Send writing question', exact: true }).click(); await page.locator('.chat-message.assistant').filter({ hasText: nextReply }).waitFor(); assert.equal(requests.at(-1).model, 'mock-chat');
+    await menu('View', 'Writing assistant'); await page.getByRole('textbox', { name: 'Ask the writing assistant', exact: true }).fill('Is the pacing clear?'); nextReply = JSON.stringify({ message: 'The pacing is clear.', done: true, tools: [] });
+    await page.getByRole('button', { name: 'Send writing question', exact: true }).click(); await page.locator('.chat-message.assistant').filter({ hasText: 'The pacing is clear.' }).waitFor(); assert.equal(requests.at(-1).model, 'mock-chat');
     events.push('Autocomplete, correction, rephrasing and chat route to four independently selected models.');
     const pdfPath = path.join(userData, 'Export.pdf'); await app.evaluate(({ dialog }, target) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: target }); }, pdfPath);
-    await menu('File', 'Export…'); await page.getByRole('button', { name: /PDF document/ }).click(); await waitFor(async () => (await fs.readFile(pdfPath)).subarray(0, 4).toString() === '%PDF', 'PDF export', 20000);
+    await menu('File', 'Export…'); await page.getByRole('combobox', { name: 'Export scope', exact: true }).selectOption('manuscript'); await page.getByRole('combobox', { name: 'Export format', exact: true }).selectOption('pdf'); await page.getByRole('dialog').getByRole('button', { name: 'Export', exact: true }).click(); await waitFor(async () => (await fs.readFile(pdfPath)).subarray(0, 4).toString() === '%PDF', 'PDF export', 20000);
     events.push('Native File menu exports a real PDF.');
     await waitFor(async () => JSON.stringify(await recover()).includes('coffee break'), 'before preference reload');
     await page.evaluate(() => window.wraiter.settings({ theme: 'dark', hotkeys: { complete: 'Ctrl+Space', accept: 'Ctrl+Enter', save: 'Ctrl+Alt+W' } }));
@@ -136,7 +137,7 @@ const waitFor = async (fn, label, timeout = 12000) => {
     await page.screenshot({ path: path.join(output, '02-dark.png') }); await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(960, 650)); await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(output, '03-compact.png') }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false);
     events.push('Custom AI keys work; native custom Save fires once; dark theme and minimum-width layout persist.');
-    await menu('View', 'Git version history'); const restoreCard = page.locator('.snapshot-card').filter({ hasText: 'Before AI editing' });
+    await menu('View', 'Revision history'); await page.getByRole('tab', { name: /^Checkpoints/ }).click(); const restoreCard = page.locator('.snapshot-card').filter({ hasText: 'Before AI editing' });
     await restoreCard.getByRole('button', { name: 'Restore this version', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Restore version', exact: true }).click(); await page.getByRole('dialog').waitFor({ state: 'hidden' });
     await page.getByRole('status').filter({ hasText: 'Earlier version restored' }).waitFor();
     await chapter2().click(); assert.equal(await visibleText(), 'Before. A quiet hour. After.');

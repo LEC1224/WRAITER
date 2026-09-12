@@ -3,7 +3,7 @@ export const DEFAULT_HOTKEYS = {
   toggleAI: 'Ctrl+Shift+Space', toggleContinuous: 'Ctrl+Alt+Space', correct: 'Ctrl+Alt+G', rewrite: 'Ctrl+Alt+R',
   save: 'Ctrl+S', saveCopy: 'Ctrl+Shift+S', open: 'Ctrl+O', new: 'Ctrl+N', find: 'Ctrl+F', replace: 'Ctrl+H', preferences: 'Ctrl+,', focus: 'F11', snapshot: 'Ctrl+Alt+S'
 };
-export const HOTKEY_LABELS = { complete: 'Suggest / rephrase selection', accept: 'Accept suggestion', acceptCharacter: 'Accept next character', acceptWord: 'Accept next word', dismiss: 'Dismiss / cancel', toggleAI: 'Toggle AI assistance', toggleContinuous: 'Toggle continuous suggestions', correct: 'Correct selection', rewrite: 'Rephrase selection', save: 'Save', saveCopy: 'Save a copy', open: 'Open', new: 'New document', find: 'Find', replace: 'Replace', preferences: 'Settings', focus: 'Focus view', snapshot: 'Save version' };
+export const HOTKEY_LABELS = { complete: 'Suggest / rephrase selection', accept: 'Accept suggestion', acceptCharacter: 'Accept next character', acceptWord: 'Accept next word', dismiss: 'Dismiss / cancel', toggleAI: 'Toggle AI assistance', toggleContinuous: 'Toggle continuous suggestions', correct: 'Correct selection', rewrite: 'Rephrase selection', save: 'Save', saveCopy: 'Save as', open: 'Open', new: 'New document', find: 'Find', replace: 'Replace', preferences: 'Settings', focus: 'Focus view', snapshot: 'Save version' };
 export function shortcutFromEvent(event) {
   if (['Control', 'Alt', 'Shift', 'Meta', 'AltGraph', 'Dead', 'Process'].includes(event.key) || event.isComposing) return '';
   const key = event.key === ' ' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : event.key;

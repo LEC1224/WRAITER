@@ -1,25 +1,27 @@
 # WRAITER
 
-Windows desktop writing with integrated AI assistance. Version 0.2 adds a conventional native menu bar, document formatting, LibreCompleteAI-style keyboard behaviour, task-specific models, saved Codex account reuse, and Git version history.
+Windows desktop writing with integrated AI assistance. Version 0.3 adds direct ODT/DOCX/text-format saving, an assistant that edits the manuscript, persistent atomic undo/redo, document layouts, font previews, and scoped publication exports. It retains the native menus, customizable LibreCompleteAI-style keyboard behaviour, task-specific models, saved Codex connection, and Git checkpoints from 0.2.
 
 ## Run
 
-Open `release/WRAITER-0.2.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, and **Export**. New documents start blank.
+Open `release/WRAITER-0.3.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, **Save as**, and **Export**. New documents start blank.
 
 ## Writing and formatting
 
 - Chapter outline, titles, ordering, status, and word counts; optional notes, references, history, and assistant panels.
-- Direct controls for installed fonts, point sizes, text colour, bold/italic/underline, highlighting, alignment, lists, images, links, and tables.
+- A searchable installed-font picker renders every font name in its own font. Direct controls cover point sizes, text colour, bold/italic/underline, highlighting, alignment, lists, images, links, and tables.
 - Paragraph spacing and first-line indentation; document default font/size/line spacing. Document formatting is saved and carried into supported exports.
 - Light, Dark, and High contrast themes, document zoom, continuous/page-width views, and focus mode.
 - Find/replace, undo/redo, local spellchecking, and a content-language selector on the status bar.
-- Automatic recovery, native `.wraiter` JSON documents, preceding-save `.bak` backups, and Git versions. External edits are detected before overwriting a named document.
+- Automatic recovery, preceding-save `.bak` backups, and Git versions. External edits are detected before overwriting a named document.
+
+Choose **Story**, **Article**, **Submission manuscript**, **Report**, or **Notes** from the status bar. Story is the default and hides reading statistics beneath the chapter title. Article shows them. Layouts set document typography and spacing; the paragraph settings dialog also provides an independent reading-statistics checkbox. Word counts remain available in the outline and status bar.
 
 Use the paragraph settings button at the right of the formatting toolbar for document defaults. A toolbar font change affects selected text or newly typed text, like a conventional word processor. Zoom changes only the view.
 
 ## AI behaviour
 
-Enable AI using the toolbar or Ctrl+Shift+Space. All AI output is a preview until accepted.
+Enable AI using the toolbar or Ctrl+Shift+Space. Inline suggestions and selection revisions remain previews until accepted. A direct editing request in the side chat applies the completed batch automatically, with an **Undo assistant edit** button and a single persistent undo entry.
 
 | Action | Default shortcut |
 |---|---|
@@ -33,7 +35,7 @@ Enable AI using the toolbar or Ctrl+Shift+Space. All AI output is a preview unti
 | Rephrase selected text | Ctrl+Alt+R |
 | Enable/disable AI | Ctrl+Shift+Space |
 | Enable/disable automatic suggestions | Ctrl+Alt+Space |
-| Save / save a copy | Ctrl+S / Ctrl+Shift+S |
+| Save / save as | Ctrl+S / Ctrl+Shift+S |
 | New / open | Ctrl+N / Ctrl+O |
 | Find / replace | Ctrl+F / Ctrl+H |
 | Settings / focus view | Ctrl+, / F11 |
@@ -46,6 +48,8 @@ Autocomplete receives only text before the cursor. Its configurable context budg
 A three-dot indicator marks a pending request. When text typed during generation matches the start of a continuation, only its untyped remainder is shown. Incompatible edits invalidate the pending result. Typing over a displayed revision resumes after the original selected text. Previews do not affect word counts, saved files, or exports. Accepted revisions preserve unchanged marks where possible and can be undone.
 
 Set the document's content language on the status bar. In **Settings → Language**, optionally select a native language; it starts unset. Selecting a native-language word or phrase and requesting a rephrase asks the model to translate it into the document language. No local language-detection claim is made: the selected model interprets the phrase in context.
+
+The side chat can inspect chapters, search text, replace exact passages, normalize repeated spaces, rewrite passages, and rename chapters. For example, ask “Remove double spaces throughout the manuscript.” Selecting text limits chat edits to that selection. Tool activity and the resulting changes appear in the panel. If the document changes while an editing request runs, its stale edits are discarded. Cancellation applies no partial batch. Ordinary questions can be answered without editing. The agent has document tools only; it cannot operate your filesystem or run shell commands. Complex tasks are bounded to eight model turns and twelve tool calls.
 
 ## Connections and task models
 
@@ -61,25 +65,37 @@ API keys are encrypted in per-user application settings and scoped to the provid
 
 Private notes are excluded from AI requests. Writing-voice instructions and enabled references are included. Reference attachments support Markdown and plain text, up to 20 files and 48,000 combined context characters. Linked files refresh saved edits; older embedded-only references continue to work. Missing or untrusted imported links are skipped with a notice instead of silently using stale content.
 
-## Git versions
+## Editing history and Git versions
+
+**View → Revision history → Every edit** lists text, formatting, chapter, and document-setting actions with timestamps and before/after details. Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z work across chapter switches and application restarts. Typing transactions stay separate; a multi-step replacement or assistant batch is one undo operation. New typing after undo starts a new branch, while abandoned edits remain visible in the audit trail. History begins with edits made in 0.3; earlier keystrokes cannot be reconstructed.
+
+The journal appends immutable events and flushes them before a recovery snapshot can reference them. If an interruption occurs between those writes, startup replays the complete later events. A corrupt or mismatched journal is preserved alongside a document snapshot before a fresh undo chain begins; the app reports this instead of replaying unrelated edits. Atomic history does not depend on Git.
 
 Source history is stored in this application's repository. Manuscript history is separate: each document receives a local Git repository beneath WRAITER's application-data directory. It records structured text, marks, chapter order, notes, and references without adding manuscript folders to the application's source repository.
 
-Named saves, document switches, and editing checkpoints create versions. Automatic checkpoints occur after 20 seconds idle or two minutes of continuous editing. **View → Git version history** lists them; **Save version** creates a labelled checkpoint. Restore saves the current version first and creates a new revision, preserving the intervening history. Git must be installed; ordinary saving and recovery still work if it is unavailable. Git history is local and is not a remote backup.
+Named saves, document switches, and editing checkpoints create versions. Automatic checkpoints occur after 20 seconds idle or two minutes of continuous editing. The **Checkpoints** tab lists them; **Save version** creates a labelled checkpoint. Restore saves the current version first and creates a new revision, preserving the intervening history. It is also undoable. Git must be installed for checkpoints; atomic editing history, ordinary saving, and recovery still work if it is unavailable.
+
+History and native-file companion state live in WRAITER's per-user application-data directory, rather than inside office/text files. Copying a document alone to another computer does not carry its local undo history or private notes. These local records are not a remote backup.
 
 ## Formats and present limits
 
 | Format | Support |
 |---|---|
 | WRAITER | Native editing, saving, recovery, reference links, metadata and formatting |
-| ODT | Import as a copy; basic manuscript structure and formatting |
-| DOCX | Basic import/export, including document typography and paragraph layout |
-| PDF | A4 export, paginated separately from the writing view |
-| HTML | Basic import; styled export with embedded images |
-| Plain text / Markdown | Import/export; limited Markdown import |
+| ODT / DOCX | Open, edit, and save to the same file; Save as converts between supported formats |
+| PDF | Standard A4, desktop-reading and mobile-reading exports; light or dark pages |
+| EPUB | Reflowable EPUB 3 export with chapter navigation and embedded supported images |
+| HTML | Open/save; styled output with embedded images |
+| Plain text / Markdown | Open/save; CommonMark parsing, supported UTF-8/UTF-16 encoding and line-ending preservation |
 | BBCode | Export |
 
-Imports never write back to source ODT/DOCX files. Full office-format round trips, live print pagination, comments, tracked changes, footnotes/endnotes, EPUB, and direct Claude Code/Grok Build agent connections remain future work. Page view is a writing surface, not an exact print preview. Review publication exports, particularly imported complex office documents.
+Opening an office/text document keeps it attached to its original format. Save and autosave write that format directly; private notes, references and editing state are kept separately. Opening alone or changing private notes does not rewrite the source. WRAITER-generated office files carry non-private chapter boundary metadata, validated against their actual package content before reuse.
+
+Unsupported office features are detected where possible and described on opening. Until the first compatibility review, changed content is staged safely in recovery. Saving after review preserves the complete original under **Format originals** in application data, plus the preceding-save `.bak` beside the document. New unsupported formatting in a text format also prompts for review before writing. This is direct file-format support, not lossless preservation of every Word/Writer feature: page sections, named styles, headers/footers, comments, tracked changes, footnotes/endnotes, fields, floating objects and advanced layouts may be simplified or omitted. Unrecognized office features can still require manual comparison.
+
+**File → Export** offers full manuscript, one chapter, or selected text, with title/chapter-heading options. Formats include DOCX, ODT, all three PDFs, EPUB, plain text, BBCode `.txt`, Markdown and HTML. Exports exclude private notes, AI context and editing history. PDF export performs pagination; page view is a writing surface, not an exact print preview.
+
+Live print pagination, editing comments/tracked changes/footnotes, and direct Claude Code/Grok Build connections remain future work. macOS and Linux are not yet packaged or validated.
 
 ## Development
 
@@ -92,7 +108,11 @@ npm start
 npm test
 npm run test:io
 npm run test:app
+npm run test:v03
+npm run test:history-recovery
+npm run test:pdf
+npm run test:office
 npm run package
 ```
 
-Rebuild before starting Electron after renderer changes. `npm run dev` serves the frontend only; native file and AI features need the Electron shell. Tests use isolated application data and local mock services; an additional recorded smoke test verifies actual Codex with synthetic prose. Windows is packaged and exercised; macOS/Linux compatibility is not yet validated.
+Rebuild before starting Electron after renderer changes. `npm run dev` serves the frontend only; native file and AI features need the Electron shell. Tests use isolated application data and local mock services; an additional recorded smoke test verifies actual Codex with synthetic prose. PDF QA needs PyMuPDF; independent office QA also needs LibreOffice. Desktop suites accept `WRAITER_EXECUTABLE` to test the packaged application.

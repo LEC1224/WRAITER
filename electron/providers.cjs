@@ -81,6 +81,9 @@ function spawnAndWait(executable, args, options, input, signal) {
 const guidedUnavailable = new Map();
 const bounded = (value, fallback, min, max) => Number.isFinite(Number(value)) && value !== '' && value != null ? Math.min(max, Math.max(min, Number(value))) : fallback;
 function outputLimit(settings, request) {
+  // Agent replies contain a small action envelope, not a prose prediction. A
+  // short autocomplete cap must not truncate a valid document-editing plan.
+  if (request.mode === 'agent') return Math.trunc(bounded(settings.agentTokenCap, 6000, 2048, 32768));
   const estimated = request.mode === 'chat' ? 2400 : request.mode === 'continue' ? Math.ceil((request.words || settings.predictionWords || 35) * 3 + 100) : Math.ceil(String(request.selection || '').length / 2 + 256);
   return Math.trunc(bounded(settings.tokenCap, Math.max(256, estimated), 64, 32768));
 }
@@ -116,7 +119,7 @@ async function runOllama(settings, prompt, request, signal) {
   if (mode === 'raw' || (mode === 'auto' && guidedUnavailable.has(guidedKey))) return raw();
   try {
     const guided = mode === 'auto' || mode === 'guided';
-    const chatMessages = guided ? [{ ...messages[0], content: `${messages[0].content}\nReturn JSON with exactly one string field named completion containing the requested prose, with no commentary.` }, messages[1]] : messages;
+    const chatMessages = guided ? [{ ...messages[0], content: `${messages[0].content}\nReturn JSON with exactly one string field named completion containing ${request.mode === 'agent' ? 'the requested action envelope serialized as a JSON string' : 'the requested prose'}, with no commentary.` }, messages[1]] : messages;
     const data = await requestJSON(endpoint(settings.baseUrl, 'api/chat'), { method: 'POST', headers, body: JSON.stringify({ ...common, messages: chatMessages, options, ...(guided ? { format: COMPLETION_SCHEMA } : {}) }) }, signal);
     if (data.done_reason === 'length' && request.mode !== 'continue') throw new Error('The model reached the output limit. Increase the token limit before accepting a partial revision.');
     if (!guided) return data.message?.content;
@@ -131,8 +134,8 @@ async function runOllama(settings, prompt, request, signal) {
     guidedUnavailable.set(guidedKey, true); return raw();
   }
 }
-async function generate(settings, key, request, signal) {
-  const prompt = buildPrompt(settings.provider === 'codex' ? { ...request, references: [] } : request);
+async function generate(settings, key, request, signal, suppliedPrompt) {
+  const prompt = suppliedPrompt || buildPrompt(settings.provider === 'codex' ? { ...request, references: [] } : request);
   if (settings.provider === 'codex' && request.references?.length) prompt.user = prompt.user.replace('REFERENCE MATERIAL:\n(none)', 'REFERENCE MATERIAL:\nUse the reference material already supplied in this writing session.');
   const headers = { 'Content-Type': 'application/json' };
   const model = settings.model?.trim();
@@ -162,7 +165,12 @@ async function generate(settings, key, request, signal) {
   } else throw new Error('Choose a provider in Connections.');
   if (typeof result !== 'string' || !result.trim()) throw new Error('The provider returned no usable text. Try another model or request.');
   signal?.throwIfAborted();
-  return cleanResult(result, request.mode, request.words, request);
+  return request.mode === 'agent' ? result.trim() : cleanResult(result, request.mode, request.words, request);
+}
+// Only the local writing-agent module supplies this prompt. Renderer IPC never
+// accepts arbitrary system instructions or machine-tool definitions.
+async function generateStructured(settings, key, prompt, signal) {
+  return generate(settings, key, { mode: 'agent', references: [], history: [] }, signal, prompt);
 }
 async function probe(settings, key) {
   const signal = AbortSignal.timeout(12000);
@@ -201,4 +209,4 @@ async function login(settings) {
   return (await getBridge(settings)).login();
 }
 async function shutdown() { await Promise.allSettled([disconnect(), stopOwnedOllama()]); }
-module.exports = { generate, probe, connect, connectionStatus, login, disconnect, shutdown, endpoint, requestJSON, resolveCodex, codexArgs, codexEnvironment, spawnAndWait, outputLimit, ollamaContextWindow, runOllama };
+module.exports = { generate, generateStructured, probe, connect, connectionStatus, login, disconnect, shutdown, endpoint, requestJSON, resolveCodex, codexArgs, codexEnvironment, spawnAndWait, outputLimit, ollamaContextWindow, runOllama };

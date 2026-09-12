@@ -17,7 +17,7 @@ function textOf(node) {
   return (node.content || []).map(textOf).join(['doc', 'blockquote', 'listItem', 'bulletList', 'orderedList'].includes(node.type) ? '\n' : '');
 }
 function contentFingerprint(project) {
-  const { updatedAt, snapshots, ...content } = project;
+  const { updatedAt, snapshots, historySequence, binding, fileBinding, nativeBinding, ...content } = project;
   return hash(JSON.stringify(content));
 }
 class GitHistory {
