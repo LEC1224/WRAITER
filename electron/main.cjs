@@ -10,12 +10,13 @@ const { ReferenceLibrary } = require('./references.cjs');
 const { DocumentFiles, FORMATS, formatOf } = require('./document-files.cjs');
 const { EditJournal } = require('./edit-journal.cjs');
 const { runWritingAgent } = require('./writing-agent.cjs');
+const { LocalModels } = require('./local-models.cjs');
 
 if (process.env.WRAITER_USER_DATA) app.setPath('userData', path.resolve(process.env.WRAITER_USER_DATA));
 app.setName('WRAITER');
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
-let win, closing = false, closePending = false, closeFinishing = false, closeTimer, store, bootResult, gitHistory, fontList, referenceLibrary, documentFiles, editJournal, lastReferenceWarnings = '';
+let win, closing = false, closePending = false, closeFinishing = false, closeTimer, store, bootResult, gitHistory, fontList, referenceLibrary, documentFiles, editJournal, localModels, lastReferenceWarnings = '';
 let writeQueue = Promise.resolve();
 let prefs = {};
 const activeRequests = new Map();
@@ -126,6 +127,8 @@ app.whenReady().then(async () => {
   bootResult = await store.boot();
   documentFiles = new DocumentFiles(store, app.getPath('userData')); await documentFiles.recover();
   editJournal = new EditJournal(app.getPath('userData'));
+  localModels = new LocalModels(app.getPath('userData'), { notify: value => win?.webContents.send('local-progress', value) });
+  providers.configureLocalModels(localModels);
   gitHistory = new GitHistory(app.getPath('userData'));
   if (store.project) gitHistory.record(store.project, 'Recovered manuscript').catch(error => console.error('Git history:', error.message));
   updateMenu();
@@ -288,6 +291,33 @@ app.whenReady().then(async () => {
     return result;
   });
   ipcMain.handle('fonts:list', () => fontList ||= listFonts());
+  const localIdle = () => { if (activeRequests.size) throw new Error('Finish or cancel the current AI request before changing local models.'); };
+  const ggufFiles = new Map();
+  ipcMain.handle('local:status', () => localModels.status());
+  ipcMain.handle('local:configure', (_event, update) => { localIdle(); if (update?.modelDirectory !== undefined) throw new Error('Use the model folder chooser.'); return localModels.configure(update); });
+  ipcMain.handle('local:folder', async (_event, location) => {
+    localIdle(); await localModels.init(); let directory;
+    if (location === 'detected') directory = '';
+    else if (location === 'wraiter') directory = path.join(localModels.root, 'models');
+    else if (location === 'browse') { const result = await dialog.showOpenDialog(win, { title: 'Choose an Ollama model folder (contains manifests and blobs)', defaultPath: localModels.directory, properties: ['openDirectory'] }); if (result.canceled) return null; directory = result.filePaths[0]; }
+    else throw new Error('Choose a model folder source.');
+    return localModels.configure({ modelDirectory: directory });
+  });
+  ipcMain.handle('local:start', async () => { localIdle(); await localModels.start(); return localModels.status(); });
+  ipcMain.handle('local:stop', async () => { localIdle(); if (localModels.job) throw new Error('Cancel the local-model operation first.'); await localModels.stop(); return localModels.status(); });
+  ipcMain.handle('local:unload', (_event, name) => { localIdle(); return localModels.unload(name); });
+  ipcMain.handle('local:release', (_event, flavor) => localModels.runtimeRelease(flavor));
+  ipcMain.handle('local:install', (_event, flavor) => { localIdle(); return localModels.install(flavor); });
+  ipcMain.handle('local:cancel', () => localModels.cancel());
+  ipcMain.handle('local:catalog-info', (_event, name) => localModels.catalogInfo(name));
+  ipcMain.handle('local:pull', (_event, name) => { localIdle(); return localModels.pull(name); });
+  ipcMain.handle('local:choose-gguf', async () => {
+    const result = await dialog.showOpenDialog(win, { title: 'Add a GGUF model', properties: ['openFile'], filters: [{ name: 'GGUF model', extensions: ['gguf'] }] });
+    if (result.canceled) return null;
+    const source = await localModels.inspectGGUF(result.filePaths[0]), token = require('node:crypto').randomUUID();
+    ggufFiles.clear(); ggufFiles.set(token, source.path); return { token, name: source.name, bytes: source.bytes };
+  });
+  ipcMain.handle('local:import', (_event, token, name) => { localIdle(); const file = ggufFiles.get(token); if (!file) throw new Error('Choose the GGUF file again.'); return localModels.importGGUF(file, name); });
   ipcMain.handle('shortcuts:capture', (_event, capturing) => { win?.webContents.setIgnoreMenuShortcuts(capturing === true); return true; });
   ipcMain.handle('document:language', (_e, language) => setDocumentLanguage(language));
   ipcMain.handle('git:list', () => store.project ? gitHistory.list(store.project.id) : { available: true, entries: [] });

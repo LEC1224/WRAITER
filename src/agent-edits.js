@@ -33,7 +33,7 @@ export async function applyAgentResult(project, result, schema) {
   const chapterMap = new Map(project.chapters.map(chapter => [chapter.id, chapter]));
   const content = new Map(); const titles = new Map(); const editsByChapter = new Map();
   for (const edit of result.edits) {
-    if (!chapterMap.has(edit.chapterId) || !Number.isInteger(edit.from) || !Number.isInteger(edit.to) || edit.from < 1 || edit.to < edit.from || typeof edit.before !== 'string' || typeof edit.after !== 'string' || edit.after.length > 2000000) throw new Error('The assistant returned an invalid text range. No changes were applied.');
+    if (!chapterMap.has(edit.chapterId) || !Number.isInteger(edit.from) || !Number.isInteger(edit.to) || edit.from < (edit.kind === 'delete_paragraph' ? 0 : 1) || edit.to < edit.from || typeof edit.before !== 'string' || typeof edit.after !== 'string' || edit.after.length > 2000000 || (edit.kind && edit.kind !== 'delete_paragraph')) throw new Error('The assistant returned an invalid text range. No changes were applied.');
     if (!editsByChapter.has(edit.chapterId)) editsByChapter.set(edit.chapterId, []);
     editsByChapter.get(edit.chapterId).push(edit);
   }
@@ -46,13 +46,23 @@ export async function applyAgentResult(project, result, schema) {
     const state = EditorState.create({ schema, doc: schema.nodeFromJSON(chapterMap.get(chapterId).content) });
     const sorted = [...edits].sort((a, b) => a.from - b.from); let previousEnd = -1;
     for (const edit of sorted) {
-      if (edit.from <= previousEnd || edit.to > state.doc.content.size) throw new Error('The assistant returned overlapping document edits. No changes were applied.');
+      if (edit.from < previousEnd || edit.to > state.doc.content.size) throw new Error('The assistant returned overlapping document edits. No changes were applied.');
+      if (edit.kind === 'delete_paragraph') {
+        const node = state.doc.nodeAt(edit.from);
+        if (node?.type.name !== 'paragraph' || node.nodeSize !== edit.to - edit.from || !edit.beforeNode || !node.eq(schema.nodeFromJSON(edit.beforeNode)) || edit.after !== '') throw new Error('The paragraph to remove no longer matches. No changes were applied.');
+        previousEnd = edit.to; continue;
+      }
       const $from = state.doc.resolve(edit.from), $to = state.doc.resolve(edit.to);
       if (!$from.sameParent($to) || !$from.parent.isTextblock || $from.parentOffset !== 0 || $to.parentOffset !== $to.parent.content.size || state.doc.textBetween(edit.from, edit.to, '', '\n') !== edit.before) throw new Error('The source passage changed or is not a complete text block. No changes were applied.');
       previousEnd = edit.to;
     }
     let transaction = state.tr;
     for (const block of sorted.reverse()) {
+      if (block.kind === 'delete_paragraph') {
+        const $from = transaction.doc.resolve(block.from), index = $from.index();
+        if (!$from.parent.canReplace(index, index + 1)) throw new Error('This paragraph is required by its container. No changes were applied.');
+        transaction.delete(block.from, block.to); continue;
+      }
       for (const edit of textEdits(block.before, block.after, block.from).reverse()) {
         if (!edit.text.includes('\n')) transaction.insertText(edit.text, edit.from, edit.to);
         else {

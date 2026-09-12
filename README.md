@@ -1,10 +1,10 @@
 # WRAITER
 
-Windows desktop writing with integrated AI assistance. Version 0.3 adds direct ODT/DOCX/text-format saving, an assistant that edits the manuscript, persistent atomic undo/redo, document layouts, font previews, and scoped publication exports. It retains the native menus, customizable LibreCompleteAI-style keyboard behaviour, task-specific models, saved Codex connection, and Git checkpoints from 0.2.
+Windows desktop writing with integrated AI assistance. Version 0.4 adds managed local inference, optional portable Ollama, offline model discovery, GGUF registration, model downloads, and agent tools that remove actual paragraph blocks. It retains direct ODT/DOCX/text-format saving, persistent atomic undo/redo, document layouts, font previews, scoped exports, native menus, customizable keyboard behaviour, task-specific models, saved Codex connections, and Git checkpoints.
 
 ## Run
 
-Open `release/WRAITER-0.3.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, **Save as**, and **Export**. New documents start blank.
+Open `release/WRAITER-0.4.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, **Save as**, and **Export**. New documents start blank.
 
 ## Writing and formatting
 
@@ -49,13 +49,14 @@ A three-dot indicator marks a pending request. When text typed during generation
 
 Set the document's content language on the status bar. In **Settings → Language**, optionally select a native language; it starts unset. Selecting a native-language word or phrase and requesting a rephrase asks the model to translate it into the document language. No local language-detection claim is made: the selected model interprets the phrase in context.
 
-The side chat can inspect chapters, search text, replace exact passages, normalize repeated spaces, rewrite passages, and rename chapters. For example, ask “Remove double spaces throughout the manuscript.” Selecting text limits chat edits to that selection. Tool activity and the resulting changes appear in the panel. If the document changes while an editing request runs, its stale edits are discarded. Cancellation applies no partial batch. Ordinary questions can be answered without editing. The agent has document tools only; it cannot operate your filesystem or run shell commands. Complex tasks are bounded to eight model turns and twelve tool calls.
+The side chat can inspect chapters, search text, replace exact passages, normalize repeated spaces, rewrite passages, remove empty paragraphs, delete a requested complete paragraph, and rename chapters. For example, ask “Remove double spaces throughout the manuscript” or “Remove empty lines.” Empty-line cleanup removes the paragraph blocks themselves, preserving nonempty text and formatting. Required document, table-cell and list-item structure remains editable. Selecting text limits chat edits to that selection, including when the model requests a wider scope. Tool activity and the resulting changes appear in the panel. If the document changes while an editing request runs, its stale edits are discarded. Cancellation applies no partial batch. Ordinary questions can be answered without editing. The agent has document tools only; it cannot operate your filesystem or run shell commands. Complex tasks are bounded to eight model turns and twelve tool calls.
 
 ## Connections and task models
 
 **Settings → AI connections** assigns a separate provider and model to autocomplete, correction, rephrasing/translation, and writing chat.
 
 - **Codex:** detects installed Codex, reuses its saved account, and starts a persistent hidden connection. No terminal or repeated login is needed when an account is already available. Model discovery is automatic. Browser sign-in is offered only when an account is missing. Reference context is cached and each request gets an isolated fork.
+- **Local models (managed):** WRAITER starts its own hidden engine when needed, using either an optional portable download or an installed Ollama executable. Reuses downloaded models and supports individual task assignments. No separate Ollama app or manually started service is required.
 - **Ollama:** discovers installed models. Connect can start an installed local service automatically. Auto mode tries structured output and falls back to raw generation for unsupported models; Guided and Raw can be chosen explicitly. Context sizing, keepalive, temperature, token limit, and reasoning controls are supported.
 - **OpenAI:** Responses API with an API key and model discovery.
 - **Claude API:** Anthropic Messages API with an API key; this does not connect a Claude Code subscription.
@@ -64,6 +65,20 @@ The side chat can inspect chapters, search text, replace exact passages, normali
 API keys are encrypted in per-user application settings and scoped to the provider endpoint; they are never stored in manuscripts. Connection checks discover availability without generating prose. Actual cloud requests use the selected account's allowance or billing. Codex offers reasoning effort, but its app-server does not expose temperature or token caps; the requested suggestion-word limit still applies. Some API providers/models do not implement reasoning controls.
 
 Private notes are excluded from AI requests. Writing-voice instructions and enabled references are included. Reference attachments support Markdown and plain text, up to 20 files and 48,000 combined context characters. Linked files refresh saved edits; older embedded-only references continue to work. Missing or untrusted imported links are skipped with a notice instead of silently using stale content.
+
+## Local models
+
+Open **Settings → Local models**. Existing Ollama models are listed directly from their manifests and blobs, without starting the engine. WRAITER detects `OLLAMA_MODELS` from the process and Windows user/machine environment, then falls back to `%USERPROFILE%\.ollama\models`. Use the detected folder, WRAITER's own folder, or a folder selected through the native chooser. Switching folders does not move or delete files.
+
+- **Engine and model storage:** automatic selection prefers a WRAITER portable runtime, then installed Ollama. Check the official engine's version and download size, then install it if desired. The standard Windows x64 v0.34.0 archive tested for this release is about 1.4 GiB; AMD ROCm libraries are an optional additional package. Runtime size is separate from model sizes. Downloads are streamed, checked against the official SHA-256 digest, and validated before ZIP extraction. A failed or cancelled installation preserves the previous active engine and removes only its newly created staging folder.
+- **On this computer:** search downloaded models, inspect completeness and loaded GPU memory, unload a model, and assign it to autocomplete, correction, rephrase/translation, chat, or all tasks. Save Settings keeps task assignments; storage and resource changes apply immediately.
+- **Download models:** choose a small starting model or enter a public Ollama model name. Check its current size before downloading. Progress and cancellation are available. Downloads do not overwrite an already registered model name.
+- **Add GGUF file:** choose a GGUF v2/v3 file and give it a model name. WRAITER hashes and registers it with the local engine, reusing identical blobs when available. Registration may require another on-disk copy; the selected original is preserved. The model architecture must be supported by the selected Ollama version. Arbitrary PyTorch/Safetensors files and multi-file GGUF sets are not supported by this chooser.
+- **Memory and acceleration:** automatic GPU selection, a detected NVIDIA GPU, or CPU only; context size; idle unload delay; and one to three loaded models. Larger contexts need additional memory beyond the file size. Loading, generation and out-of-memory messages appear in the UI. Small models can be less reliable at structured agent actions.
+
+The owned engine listens on a private loopback port, with cloud execution disabled. WRAITER stops that engine and its runners on normal exit without shutting down unrelated Ollama services. Models remain on disk. Once the engine and models are present, inference works offline; checking catalogs and downloading requires internet access. The existing **Ollama** connection remains available for independently managed or remote servers.
+
+Runtime downloads come from [Ollama's official Windows releases](https://github.com/ollama/ollama/releases). See the official [Windows runtime documentation](https://docs.ollama.com/windows), [model storage FAQ](https://docs.ollama.com/faq), and [GGUF import documentation](https://docs.ollama.com/import). Ollama and its runtime dependencies retain their own licenses; model publishers set their model licenses. Windows x64 NVIDIA inference was tested here; AMD and ARM64 packages have not been tested on hardware, and WRAITER currently ships only a Windows x64 build.
 
 ## Editing history and Git versions
 
@@ -109,10 +124,11 @@ npm test
 npm run test:io
 npm run test:app
 npm run test:v03
+npm run test:v04
 npm run test:history-recovery
 npm run test:pdf
 npm run test:office
 npm run package
 ```
 
-Rebuild before starting Electron after renderer changes. `npm run dev` serves the frontend only; native file and AI features need the Electron shell. Tests use isolated application data and local mock services; an additional recorded smoke test verifies actual Codex with synthetic prose. PDF QA needs PyMuPDF; independent office QA also needs LibreOffice. Desktop suites accept `WRAITER_EXECUTABLE` to test the packaged application.
+Rebuild before starting Electron after renderer changes. `npm run dev` serves the frontend only; native file and AI features need the Electron shell. Tests use isolated application data and local mock services; recorded smoke tests verify actual Codex and local inference with synthetic prose. `npm run test:local-live` is optional: it needs installed Ollama and an already downloaded `llama3.2:1b`, copies blobs into isolated QA storage, registers a standalone GGUF copy, generates text, and unloads the model. Set `WRAITER_TEST_RUNTIME_ROOT` to a tested Local AI runtime directory to exercise a portable engine. PDF QA needs PyMuPDF; independent office QA also needs LibreOffice. Desktop suites accept `WRAITER_EXECUTABLE` to test the packaged application.

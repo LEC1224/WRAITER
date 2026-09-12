@@ -1,6 +1,6 @@
 {
   "name": "wraiter",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Desktop writing with integrated AI assistance.",
   "author": "WRAITER",
@@ -19,7 +19,9 @@
     "test:office": "node tests/formats-interoperability.cjs",
     "test:io": "node tests/io-browser.cjs",
     "test:settings": "node tests/settings-ui.cjs",
-    "test:desktop": "node tests/desktop-ipc.cjs"
+    "test:desktop": "node tests/desktop-ipc.cjs",
+    "test:v04": "node tests/v04-app.cjs",
+    "test:local-live": "node tests/local-live.cjs"
   },
   "devDependencies": {
     "@tiptap/core": "3.31.3",

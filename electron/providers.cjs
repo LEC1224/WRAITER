@@ -3,6 +3,8 @@ const path = require('node:path');
 const { buildPrompt, cleanResult } = require('./core.cjs');
 const { getBridge, disconnect, resolveCodex, codexEnvironment, COMPLETION_SCHEMA } = require('./codex-bridge.cjs');
 const { isLocalOllama, startOllama, stopOwnedOllama } = require('./ollama-service.cjs');
+let localModels;
+function configureLocalModels(manager) { localModels = manager; }
 
 function endpoint(base, suffix) {
   let url; try { url = new URL(base); } catch { throw new Error('Enter a complete provider address, including http:// or https://.'); }
@@ -103,13 +105,13 @@ async function runOllama(settings, prompt, request, signal) {
   const messages = [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }];
   if (!settings.allowReasoning && /qwen3/i.test(model)) messages[1].content += '\n/no_think';
   const common = { model, stream: false, think: ollamaThink(settings), keep_alive: settings.ollamaKeepAlive || '30m' };
-  const options = { temperature, num_predict: tokens, num_ctx: ollamaContextWindow(messages.map(item => item.content).join('\n'), tokens) };
+  const options = { temperature, num_predict: tokens, num_ctx: settings.localContextLength || ollamaContextWindow(messages.map(item => item.content).join('\n'), tokens), ...(settings.localCPU ? { num_gpu: 0 } : {}) };
   const headers = { 'Content-Type': 'application/json' };
   const mode = settings.ollamaMode || 'chat'; // legacy callers; current preferences default to auto.
   const raw = async () => {
     const plainContinuation = request.mode === 'continue' && !request.references?.length && !request.style && !request.history?.length && !request.language;
     const rawPrompt = plainContinuation ? String(request.before || '') : `${prompt.system}\n\n${prompt.user}\n\n${request.mode === 'continue' ? 'Continuation' : request.mode === 'chat' ? 'Answer' : 'Replacement'}:\n`;
-    const rawOptions = { ...options, num_ctx: ollamaContextWindow(rawPrompt, tokens) };
+    const rawOptions = { ...options, num_ctx: settings.localContextLength || ollamaContextWindow(rawPrompt, tokens) };
     if (!settings.allowReasoning) rawOptions.stop = ['<think>', '</think>', 'Okay, let me', 'Hmm,', 'The user', 'I need to', 'Possible continuation:'];
     const data = await requestJSON(endpoint(settings.baseUrl, 'api/generate'), { method: 'POST', headers, body: JSON.stringify({ ...common, raw: true, prompt: rawPrompt, options: rawOptions }) }, signal);
     if (data.done_reason === 'length' && request.mode !== 'continue') throw new Error('The model reached the output limit. Increase the token limit before accepting a partial revision.');
@@ -135,6 +137,10 @@ async function runOllama(settings, prompt, request, signal) {
   }
 }
 async function generate(settings, key, request, signal, suppliedPrompt) {
+  if (settings.provider === 'local') {
+    if (!localModels) throw new Error('Local models are unavailable in this application session.');
+    return localModels.withModel(settings, signal, mapped => generate(mapped, '', request, signal, suppliedPrompt));
+  }
   const prompt = suppliedPrompt || buildPrompt(settings.provider === 'codex' ? { ...request, references: [] } : request);
   if (settings.provider === 'codex' && request.references?.length) prompt.user = prompt.user.replace('REFERENCE MATERIAL:\n(none)', 'REFERENCE MATERIAL:\nUse the reference material already supplied in this writing session.');
   const headers = { 'Content-Type': 'application/json' };
@@ -173,6 +179,11 @@ async function generateStructured(settings, key, prompt, signal) {
   return generate(settings, key, { mode: 'agent', references: [], history: [] }, signal, prompt);
 }
 async function probe(settings, key) {
+  if (settings.provider === 'local') {
+    if (!localModels) throw new Error('Open Settings → Local models to set up the engine.');
+    const status = await localModels.status(), models = status.models.filter(item => item.complete).map(item => item.name);
+    return { connected: status.runtime.available, provider: 'local', models, message: status.runtime.available ? `${models.length} local models found. The engine starts when needed.` : 'Install the portable engine in Local models to run these models.' };
+  }
   const signal = AbortSignal.timeout(12000);
   if (settings.provider === 'codex') {
     const bridge = await getBridge(settings); const status = await bridge.accountStatus();
@@ -192,6 +203,7 @@ async function probe(settings, key) {
 }
 async function connectionStatus(settings, key) { return settings.provider === 'codex' ? (await getBridge(settings)).accountStatus() : probe(settings, key); }
 async function connect(settings, key) {
+  if (settings.provider === 'local') { if (!localModels) throw new Error('Local models are unavailable.'); await localModels.start(); return probe(settings, ''); }
   try { return await probe(settings, key); }
   catch (error) {
     const connectionError = error.cause?.code === 'ECONNREFUSED' || error.cause?.errors?.some(item => item.code === 'ECONNREFUSED');
@@ -208,5 +220,5 @@ async function login(settings) {
   if (settings.provider !== 'codex') throw new Error('This provider uses an API key or a local connection. Configure it in AI connections.');
   return (await getBridge(settings)).login();
 }
-async function shutdown() { await Promise.allSettled([disconnect(), stopOwnedOllama()]); }
-module.exports = { generate, generateStructured, probe, connect, connectionStatus, login, disconnect, shutdown, endpoint, requestJSON, resolveCodex, codexArgs, codexEnvironment, spawnAndWait, outputLimit, ollamaContextWindow, runOllama };
+async function shutdown() { await Promise.allSettled([disconnect(), stopOwnedOllama(), localModels?.shutdown()]); }
+module.exports = { generate, generateStructured, probe, connect, connectionStatus, login, disconnect, shutdown, endpoint, requestJSON, resolveCodex, codexArgs, codexEnvironment, spawnAndWait, outputLimit, ollamaContextWindow, runOllama, configureLocalModels };

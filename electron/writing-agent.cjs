@@ -21,10 +21,11 @@ function collectBlocks(project, selection) {
     function walk(node, pos, path) {
       if (textblockTypes.has(node.type)) {
         const text = blockText(node);
-        const item = { id: `c${chapterIndex}.b${blockIndex++}`, chapterId: chapter.id, kind: node.type, path, from: pos + 1, to: pos + nodeSize(node) - 1, before: text, text };
+        const item = { id: `c${chapterIndex}.b${blockIndex++}`, chapterId: chapter.id, kind: node.type, path, node: structuredClone(node), from: pos + 1, to: pos + nodeSize(node) - 1, before: text, text };
         if (selection?.chapterId === chapter.id && Number.isInteger(selection.from) && Number.isInteger(selection.to)) {
           const from = Math.max(item.from, selection.from), to = Math.min(item.to, selection.to);
-          if (from < to) item.selection = { from: from - item.from, to: to - item.from };
+          item.fullySelected = selection.from <= item.from && selection.to >= item.to;
+          if (from < to || (from === to && item.fullySelected)) item.selection = { from: from - item.from, to: to - item.from };
         }
         blocks.push(item); return;
       }
@@ -86,16 +87,16 @@ function applyReplacements(block, replacements) {
 function createDocumentTools(project, { activeChapterId, selection } = {}) {
   const blocks = collectBlocks(project, selection);
   const titles = new Map(project.chapters.map(chapter => [chapter.id, { before: chapter.title, after: chapter.title }]));
-  const defaultScope = blocks.some(block => block.selection) ? 'selection' : 'all';
+  const defaultScope = selection && project.chapters.some(chapter => chapter.id === selection.chapterId) && Number.isInteger(selection.from) && Number.isInteger(selection.to) && selection.from < selection.to ? 'selection' : 'all';
   const activeId = project.chapters.some(chapter => chapter.id === activeChapterId) ? activeChapterId : project.chapters[0].id;
   let textGrowth = 0;
   function scopeOf(args) {
     const scope = args.scope || defaultScope;
-    if (scope === 'selection') return blocks.filter(block => block.selection);
-    if (scope === 'all') return blocks;
+    if (scope === 'selection') return blocks.filter(block => !block.deleted && block.selection);
+    if (scope === 'all') return blocks.filter(block => !block.deleted);
     const id = scope === 'active' ? activeId : scope;
     if (!titles.has(id)) throw new Error('This chapter scope does not exist. Use all, active, selection, or a listed chapter ID.');
-    return blocks.filter(block => block.chapterId === id);
+    return blocks.filter(block => !block.deleted && block.chapterId === id);
   }
   function rangeFor(block, args) { return (args.scope || defaultScope) === 'selection' ? block.selection : { from: 0, to: block.text.length }; }
   function selectedBlocks(args) {
@@ -105,13 +106,23 @@ function createDocumentTools(project, { activeChapterId, selection } = {}) {
     if (!block) throw new Error('The block does not exist in the requested scope. Read or search the document first.');
     return [block];
   }
-  function content(args) { return selectedBlocks(args).map(block => { const range = rangeFor(block, args); return { block, range, text: block.text.slice(range.from, range.to) }; }); }
+  function content(args, editing = false) { return selectedBlocks(args).filter(block => !editing || defaultScope !== 'selection' || block.selection).map(block => { const range = editing && defaultScope === 'selection' ? block.selection : rangeFor(block, args); return { block, range, text: block.text.slice(range.from, range.to) }; }); }
+  function removeBlock(block) {
+    if (block.kind !== 'paragraph' || block.text.includes('\uFFFC')) throw new Error('Only ordinary paragraphs without embedded objects can be removed.');
+    if (defaultScope === 'selection' && !block.fullySelected) throw new Error('Select the complete paragraph before removing its block.');
+    const parentPath = block.path.slice(0, -1), chapter = project.chapters.find(chapter => chapter.id === block.chapterId);
+    const parent = parentPath.reduce((node, index) => node.content[index], chapter.content);
+    const deleted = new Set(blocks.filter(item => item.deleted && item.chapterId === block.chapterId && JSON.stringify(item.path.slice(0, -1)) === JSON.stringify(parentPath)).map(item => item.path.at(-1)));
+    const remaining = parent.content.filter((_node, index) => index !== block.path.at(-1) && !deleted.has(index));
+    if (!remaining.length || (parent.type === 'listItem' && remaining[0].type !== 'paragraph')) return false;
+    block.deleted = true; return true;
+  }
   function validateCount(args, actual) {
     if (!Number.isInteger(args.expectedCount) || args.expectedCount < 1 || args.expectedCount !== actual) throw new Error(`Expected match count did not agree with the current document. Found ${actual} matches; search and try again with expectedCount=${actual}.`);
   }
   function replace(args) {
     const find = requiredText(args.find, 'search text'), replacement = requiredText(args.replace, 'replacement text', { empty: true });
-    const targets = content(args).map(item => ({ ...item, matches: occurrences(item.text, find, args.caseSensitive !== false) }));
+    const targets = content(args, true).map(item => ({ ...item, matches: occurrences(item.text, find, args.caseSensitive !== false) }));
     const count = targets.reduce((sum, item) => sum + item.matches.length, 0); validateCount(args, count);
     const growth = count * (replacement.length - find.length);
     if (textGrowth + growth > MAX_TEXT_GROWTH) throw new Error('This replacement would add more than 4 MB of generated text. Use a narrower scope or shorter replacement.');
@@ -147,7 +158,7 @@ function createDocumentTools(project, { activeChapterId, selection } = {}) {
     rewrite_passage(args) {
       requiredText(args.blockId, 'block identifier', { limit: 100 });
       const before = requiredText(args.before, 'original passage', { empty: true }); const after = requiredText(args.after, 'new passage', { empty: true });
-      const [item] = content(args); if (item.text !== before) throw new Error('The original passage did not exactly match. Read the passage and try again.');
+      const [item] = content(args, true); if (!item || item.text !== before) throw new Error('The original passage did not exactly match or is outside the selection. Read the passage and try again.');
       if (textGrowth + after.length - before.length > MAX_TEXT_GROWTH) throw new Error('This rewrite would add more than 4 MB of generated text. Use a shorter replacement.');
       // One block stays one block. Newlines are explicit soft line breaks, so
       // a prose edit cannot silently collapse tables, lists, or paragraphs.
@@ -157,14 +168,30 @@ function createDocumentTools(project, { activeChapterId, selection } = {}) {
     },
     normalize_spaces(args) {
       let count = 0, changedBlocks = 0;
-      for (const item of content(args)) {
+      for (const item of content(args, true)) {
         if (item.block.kind === 'codeBlock') continue;
         const edits = [...item.text.matchAll(/ {2,}/g)].map(match => ({ from: item.range.from + match.index, to: item.range.from + match.index + match[0].length, text: ' ' }));
         if (edits.length) changedBlocks++; count += edits.length; applyReplacements(item.block, edits);
       }
       return { count, changedBlocks, label: `Removed ${count} repeated-space run${count === 1 ? '' : 's'}` };
     },
+    remove_empty_paragraphs(args) {
+      let count = 0, retained = 0;
+      for (const { block } of content(args, true)) {
+        if (block.kind !== 'paragraph' || !/^\s*$/.test(block.text) || (defaultScope === 'selection' && !block.fullySelected)) continue;
+        if (removeBlock(block)) count++; else retained++;
+      }
+      return { count, retained, label: `Removed ${count} empty paragraph${count === 1 ? '' : 's'}`, ...(retained ? { note: `${retained} empty paragraph(s) retained because their document, list or table container needs one.` } : {}) };
+    },
+    delete_paragraph(args) {
+      requiredText(args.blockId, 'block identifier', { limit: 100 });
+      const [item] = content(args, true);
+      if (!item || typeof args.before !== 'string' || item.block.text !== args.before) throw new Error('Read the paragraph and supply its exact original text before deleting it.');
+      if (!removeBlock(item.block)) throw new Error('This container must retain an editable paragraph.');
+      return { count: 1, label: 'Removed paragraph' };
+    },
     rename_chapter(args) {
+      if (defaultScope === 'selection') throw new Error('Chapter titles are outside the selected text. Clear the selection to rename a chapter.');
       const item = titles.get(args.chapterId); if (!item) throw new Error('This chapter does not exist.');
       const title = requiredText(args.title, 'chapter title', { empty: true, limit: 2000 });
       if (args.before !== item.after) throw new Error('The original chapter title did not match.');
@@ -181,7 +208,7 @@ function createDocumentTools(project, { activeChapterId, selection } = {}) {
     },
     changes() {
       return {
-        edits: blocks.filter(block => block.before !== block.text).map(block => ({ chapterId: block.chapterId, blockId: block.id, from: block.from, to: block.to, before: block.before, after: block.text })),
+        edits: blocks.filter(block => block.deleted || block.before !== block.text).map(block => ({ chapterId: block.chapterId, blockId: block.id, from: block.deleted ? block.from - 1 : block.from, to: block.deleted ? block.to + 1 : block.to, before: block.before, after: block.deleted ? '' : block.text, ...(block.deleted ? { kind: 'delete_paragraph', beforeNode: block.node } : {}) })),
         chapterTitles: [...titles].filter(([, value]) => value.before !== value.after).map(([chapterId, value]) => ({ chapterId, ...value }))
       };
     }
@@ -194,12 +221,14 @@ Reply as a JSON object with exactly these fields: {"message":"short status or fi
 Every tool except rename_chapter accepts optional scope: "all", "active", "selection", or a chapter ID. Omitted scope uses the supplied default scope. Use the author's named scope; otherwise apply edits to the selection when present, or the whole manuscript. Never limit a manuscript-wide cleanup to the active chapter. A blockId can narrow read/search/replace operations. Text positions returned by search are descriptive; tools operate on exact strings.
 Tools:
 read_document({scope?,blockId?,cursor?:0,offset?:0,limitChars?:24000}): read passages, with block IDs. Continue using nextCursor if present. A long block has nextOffset; read that blockId with offset:nextOffset to see its remainder. complete:false means the passage was truncated; do not rewrite a truncated passage.
-search_document({find:string,scope?,blockId?,caseSensitive?:true}): literal search with match count and excerpts. Search or read before changing prose, except deterministic normalize_spaces.
+search_document({find:string,scope?,blockId?,caseSensitive?:true}): literal search with match count and excerpts. Search or read before changing prose, except deterministic normalize_spaces and remove_empty_paragraphs.
 replace_all({find:string,replace:string,expectedCount:integer,scope?,caseSensitive?:true}): replace all exact matches in scope. The expectedCount must exactly match the current virtual document. Use an empty replacement to remove text. No regular expressions.
 replace_text({blockId:string,find:string,replace:string,expectedCount:integer,scope?,caseSensitive?:true}): same replacement inside one passage.
 rewrite_passage({blockId:string,before:string,after:string,scope?}): revise one read passage, requiring an exact original match. It preserves that paragraph's structure. Newlines are soft breaks; use this only when requested, never to merge separate paragraphs.
 normalize_spaces({scope?}): replace repeated ordinary spaces with one in every passage in scope, with no generated replacement prose.
-rename_chapter({chapterId:string,before:string,title:string}): change a chapter title, requiring the exact old title.
+remove_empty_paragraphs({scope?}): remove actual empty or whitespace-only paragraph blocks, including their blank lines. Use this when asked to remove empty lines/paragraphs; do not tell the author to use the UI. Keeps the last required paragraph in an otherwise empty document, list item or table cell. Preserves nonempty paragraphs and their formatting.
+delete_paragraph({blockId:string,before:string,scope?}): remove one complete paragraph block after reading its exact text. Only use when its deletion was requested. Cannot remove embedded objects or required container structure.
+rename_chapter({chapterId:string,before:string,title:string}): change a chapter title, requiring the exact old title. Unavailable while a text selection is active.
 Use concise plain language in the final message. State actual changes and counts from the tool results. If no matches were found, say so. Do not suggest extra work after completing a small edit.`;
 
 async function runWritingAgent(options, generate = generateStructured) {

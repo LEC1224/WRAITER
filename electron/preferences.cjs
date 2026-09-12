@@ -1,6 +1,6 @@
 const { hash } = require('./core.cjs');
 const TASKS = ['continue', 'correct', 'rewrite', 'chat'];
-const PROVIDERS = ['ollama', 'openai', 'anthropic', 'compatible', 'codex'];
+const PROVIDERS = ['ollama', 'openai', 'anthropic', 'compatible', 'codex', 'local'];
 const DEFAULT_HOTKEYS = { complete: 'Tab', accept: 'Tab', acceptCharacter: 'ArrowRight', acceptWord: 'Ctrl+ArrowRight', dismiss: 'Escape', toggleAI: 'Ctrl+Shift+Space', toggleContinuous: 'Ctrl+Alt+Space', correct: 'Ctrl+Alt+G', rewrite: 'Ctrl+Alt+R', save: 'Ctrl+S', saveCopy: 'Ctrl+Shift+S', open: 'Ctrl+O', new: 'Ctrl+N', find: 'Ctrl+F', replace: 'Ctrl+H', preferences: 'Ctrl+,', focus: 'F11', snapshot: 'Ctrl+Alt+S' };
 const defaults = { provider: 'codex', baseUrl: 'http://localhost:11434', model: '', codexPath: '', enabled: false, continuous: false, predictionWords: 35, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', theme: 'paper', font: 'Georgia', fontSize: 19, lineHeight: 1.8, measure: 720, zoom: 100, spellcheck: true, goal: 500, language: 'en-US', nativeLanguage: '', taskProfiles: {}, hotkeys: DEFAULT_HOTKEYS };
 const object = value => value && typeof value === 'object' && !Array.isArray(value);

@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sun, Moon, Contrast, Keyboard, Globe2, SlidersHorizontal, Plug, Check, RotateCcw, X, LoaderCircle, CheckCircle2, Info, ExternalLink } from 'lucide-react';
+import { Sun, Moon, Contrast, Keyboard, Globe2, SlidersHorizontal, Plug, Check, RotateCcw, X, LoaderCircle, CheckCircle2, Info, ExternalLink, Download } from 'lucide-react';
 import { DEFAULT_HOTKEYS, HOTKEY_LABELS, shortcutFromEvent, shortcutConflicts, formatShortcut } from './hotkeys.js';
 import { LANGUAGES } from './languages.js';
+import LocalModels from './LocalModels.jsx';
 
 const api = window.wraiter;
 const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['chat', 'Project assistant']];
-const PROVIDERS = { codex: 'Codex account', ollama: 'Ollama (local)', openai: 'OpenAI API', anthropic: 'Claude API', compatible: 'Compatible API / xAI' };
-const PRESETS = { codex: { baseUrl: '', model: '', codexPath: '' }, ollama: { baseUrl: 'http://localhost:11434', model: '' }, openai: { baseUrl: 'https://api.openai.com/v1', model: '' }, anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: '' }, compatible: { baseUrl: 'https://api.x.ai/v1', model: '' } };
+const PROVIDERS = { local: 'Local models (managed)', codex: 'Codex account', ollama: 'Ollama (local)', openai: 'OpenAI API', anthropic: 'Claude API', compatible: 'Compatible API / xAI' };
+const PRESETS = { local: { baseUrl: '', model: '' }, codex: { baseUrl: '', model: '', codexPath: '' }, ollama: { baseUrl: 'http://localhost:11434', model: '' }, openai: { baseUrl: 'https://api.openai.com/v1', model: '' }, anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: '' }, compatible: { baseUrl: 'https://api.x.ai/v1', model: '' } };
 const errorText = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 const profileFor = (settings, task) => ({ provider: settings.provider || 'codex', baseUrl: settings.baseUrl || '', model: settings.model || '', codexPath: settings.codexPath || '', ...(settings.taskProfiles?.[task] || {}) });
 const connectionKey = profile => [profile.provider, profile.baseUrl.replace(/\/+$/, ''), profile.codexPath || ''].join('|');
@@ -16,7 +17,7 @@ function NumberField({ label, value, min, max, step = 1, onChange, help }) {
 }
 
 export default function Settings({ initialTab, prefs, updatePrefs, onClose, notify, fonts = [], Modal }) {
-  const [tab, setTab] = useState(['appearance', 'language', 'connections', 'ai', 'hotkeys'].includes(initialTab) ? initialTab : 'appearance');
+  const [tab, setTab] = useState(['appearance', 'language', 'connections', 'local', 'ai', 'hotkeys'].includes(initialTab) ? initialTab : 'appearance');
   const [draft, setDraft] = useState(() => ({ ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
   const [task, setTask] = useState('continue');
   const [keyEdits, setKeyEdits] = useState({});
@@ -93,10 +94,11 @@ export default function Settings({ initialTab, prefs, updatePrefs, onClose, noti
     finally { if (mounted.current) setSaving(false); }
   }
 
-  const tabs = [['appearance', 'Appearance', Sun], ['language', 'Languages', Globe2], ['connections', 'Connections', Plug], ['ai', 'Writing AI', SlidersHorizontal], ['hotkeys', 'Shortcuts', Keyboard]];
+  const tabs = [['appearance', 'Appearance', Sun], ['language', 'Languages', Globe2], ['connections', 'Connections', Plug], ['local', 'Local models', Download], ['ai', 'Writing AI', SlidersHorizontal], ['hotkeys', 'Shortcuts', Keyboard]];
   return <Modal title="Settings" onClose={saving ? () => {} : onClose} wide>
     <div className="settings-tabs" role="tablist" aria-label="Settings categories">{tabs.map(([id, label, Icon]) => <button type="button" key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'selected' : ''} onClick={() => { setCapturing(''); setTab(id); }}><Icon size={15} />{label}</button>)}</div>
     <div className="settings-content" role="tabpanel" aria-label={tabs.find(([id]) => id === tab)?.[1]}>
+      {tab === 'local' && <LocalModels notify={notify} onAssign={(which, model) => setProfile(which, { provider: 'local', baseUrl: '', model })} />}
       {tab === 'appearance' && <>
         <label className="field-label">Interface theme</label>
         <div className="theme-options">{[['paper', 'Light', Sun], ['dark', 'Dark', Moon], ['contrast', 'High contrast', Contrast]].map(([value, label, Icon]) => <button key={value} type="button" className={'theme-option ' + value + (draft.theme === value ? ' selected' : '')} aria-pressed={draft.theme === value} onClick={() => set('theme', value)}><div aria-hidden="true"><span /><span /><span /></div><label><Icon size={14} />{label}{draft.theme === value && <Check size={14} />}</label></button>)}</div>
@@ -131,7 +133,7 @@ export default function Settings({ initialTab, prefs, updatePrefs, onClose, noti
         </div>
         <div className="connection-editor">
           <h3>{TASKS.find(([which]) => which === task)?.[1]} — {PROVIDERS[profile.provider]}</h3>
-          {profile.provider === 'codex' ? <>
+          {profile.provider === 'local' ? <><p className="small-muted">WRAITER manages this engine and starts the selected model automatically. Processing stays on this computer.</p><button className="secondary-button" type="button" onClick={() => setTab('local')}>Manage local models</button></> : profile.provider === 'codex' ? <>
             <p className="small-muted">WRAITER connects to the account already saved by Codex. You do not need to open a terminal or keep a CLI window running.</p>
             {connection?.needsLogin && !connection.error && <button type="button" className="primary-button spaced-button" disabled={pending === identity} onClick={() => check('login')}><ExternalLink size={14} />Sign in with ChatGPT</button>}
           </> : <>
@@ -148,7 +150,7 @@ export default function Settings({ initialTab, prefs, updatePrefs, onClose, noti
           {pending === identity && <div className="connection-status" role="status"><LoaderCircle size={14} className="spin" />Checking connection…</div>}
           {connection && pending !== identity && <div className={'connection-status ' + (connection.error ? 'error' : connection.needsLogin ? '' : 'success')} role="status">{connection.error ? <Info size={15} /> : <CheckCircle2 size={15} />}<span>{connection.message || (connection.connected ? 'Connected.' : 'Connection checked.')}{connection.models?.length && !/models? available/i.test(connection.message || '') ? ' ' + connection.models.length + ' models available.' : ''}</span></div>}
           {profile.provider === 'codex' && <details><summary>Advanced: executable location</summary><p className="small-muted">Detected automatically from your Codex installation. Override only if you use a custom installation.</p><div className="input-with-button"><input className="field-input" aria-label="Codex executable path" value={profile.codexPath || ''} placeholder="Automatic detection" onChange={event => setProfile(task, { codexPath: event.target.value })} /><button className="secondary-button" type="button" onClick={async () => { try { const chosen = await api.chooseCodex(); if (chosen) setProfile(task, { codexPath: chosen }); } catch (error) { setSaveError(errorText(error)); } }}>Browse</button></div></details>}
-          <p className="small-muted">{profile.provider === 'ollama' ? 'Text is sent to this Ollama address. A localhost address keeps model processing on this computer.' : 'Selected text, surrounding context, and enabled references are sent to the chosen provider when assistance runs.'}</p>
+          <p className="small-muted">{profile.provider === 'local' ? 'Local processing uses the selected model folder and memory controls.' : profile.provider === 'ollama' ? 'Text is sent to this Ollama address. A localhost address keeps model processing on this computer.' : 'Selected text, surrounding context, and enabled references are sent to the chosen provider when assistance runs.'}</p>
         </div>
       </>}
       {tab === 'ai' && <>
