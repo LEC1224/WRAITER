@@ -5,6 +5,9 @@ contextBridge.exposeInMainWorld('wraiter', {
   autosave: invoke('autosave'), newProject: invoke('new-project'), exportFile: invoke('export'),
   reference: invoke('reference'), image: invoke('image'), settings: invoke('settings'),
   generate: invoke('generate'), cancel: invoke('cancel'), probe: invoke('probe'),
+  connectionStatus: invoke('provider:status'), connectProvider: invoke('provider:connect'), reconnectProvider: invoke('provider:reconnect'), loginProvider: invoke('provider:login'), listModels: invoke('provider:models'),
+  listFonts: invoke('fonts:list'), setDocumentLanguage: invoke('document:language'), setShortcutCapture: invoke('shortcuts:capture'),
+  listGitHistory: invoke('git:list'), getGitRevision: invoke('git:revision'), commitGitSnapshot: invoke('git:snapshot'),
   chooseCodex: invoke('choose-codex'), reveal: invoke('reveal'), finishClose: invoke('finish-close'),
   window: action => ipcRenderer.send('window', action),
   onCommand: callback => { const listener = (_event, command) => callback(command); ipcRenderer.on('command', listener); return () => ipcRenderer.removeListener('command', listener); }

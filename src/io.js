@@ -6,6 +6,18 @@ import { newProject, uid, paragraph, exportText, blockMarkup, inlineMarkup } fro
 const escape = text => String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const RASTER_DATA = /^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i;
 const MAX_XML = 30 * 1024 * 1024;
+const DEFAULT_DOCUMENT_STYLE = { fontFamily: 'Cambria', fontSize: 12, lineHeight: 1.5 };
+function documentStyle(project) { return { ...DEFAULT_DOCUMENT_STYLE, ...(project.documentStyle || {}) }; }
+function points(value) {
+  const match = String(value ?? '').trim().match(/^(-?[\d.]+)(pt|px|in|cm|mm|pc)?$/i);
+  if (!match || !Number.isFinite(Number(match[1]))) return null;
+  return Number(match[1]) * ({ pt: 1, px: 0.75, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, pc: 12 }[match[2]?.toLowerCase() || 'pt']);
+}
+function lineRatio(value, fallback = 1.5) {
+  const match = String(value ?? '').match(/^([\d.]+)(%)?$/);
+  return match && Number(match[1]) > 0 ? Number(match[1]) / (match[2] ? 100 : 1) : fallback;
+}
+const cssString = value => String(value).replace(/[\\"<>\x00-\x1f]/g, character => `\\${character.charCodeAt(0).toString(16)} `);
 
 // Imports are self-contained; opening one must not fetch external image URLs.
 export function safeHTML(html) {
@@ -15,7 +27,7 @@ export function safeHTML(html) {
     else img.setAttribute('src', img.getAttribute('src').replace(/^data:image\/jpg;/i, 'data:image/jpeg;'));
   }
   for (const link of fragment.querySelectorAll('a[href]')) if (!/^(https?:|mailto:)/i.test(link.getAttribute('href'))) link.removeAttribute('href');
-  const allowed = new Set(['font-family', 'font-size', 'font-weight', 'font-style', 'color', 'background-color', 'text-align', 'text-decoration', 'text-decoration-line', 'white-space', 'line-height']);
+  const allowed = new Set(['font-family', 'font-size', 'font-weight', 'font-style', 'color', 'background-color', 'text-align', 'text-decoration', 'text-decoration-line', 'white-space', 'line-height', 'margin-bottom', 'text-indent']);
   for (const element of fragment.querySelectorAll('[style]')) {
     for (const property of [...element.style]) {
       const value = element.style.getPropertyValue(property);
@@ -70,6 +82,12 @@ async function importODT(bytes) {
     if (underline || strike) result['text-decoration'] = [underline && underline !== 'none' ? 'underline' : '', strike && strike !== 'none' ? 'line-through' : ''].filter(Boolean).join(' ') || 'none';
     const align = attr(para, 'fo:text-align');
     if (align) result['text-align'] = ({ start: 'left', end: 'right' })[align] || align;
+    const line = attr(para, 'fo:line-height');
+    if (line && line !== 'normal') result['line-height'] = line;
+    for (const name of ['margin-bottom', 'text-indent']) {
+      const value = points(attr(para, `fo:${name}`));
+      if (value != null) result[name] = `${Number(value.toFixed(4))}pt`;
+    }
     return result;
   }
   function resolvedStyle(name, family, seen = new Set()) {
@@ -108,9 +126,11 @@ async function importODT(bytes) {
     if (tag === 'table:covered-table-cell') return '';
     let inner = [...node.childNodes].map(child => convert(child, tag === 'text:list' ? listDepth + 1 : listDepth)).join('');
     const family = ['text:p', 'text:h'].includes(tag) ? 'paragraph' : 'text', properties = resolvedStyle(attr(node, 'text:style-name'), family);
-    const css = Object.entries(properties).filter(([name]) => name !== 'text-align').map(([name, value]) => `${name}:${value}`).join(';');
+    const paragraphProperties = new Set(['text-align', 'line-height', 'margin-bottom', 'text-indent']);
+    const css = Object.entries(properties).filter(([name]) => !paragraphProperties.has(name)).map(([name, value]) => `${name}:${value}`).join(';');
     if (css && ['text:p', 'text:h', 'text:span'].includes(tag)) inner = `<span style="${escape(css)}">${inner}</span>`;
-    const alignment = ` style="white-space:pre-wrap${properties['text-align'] ? ';text-align:' + escape(properties['text-align']) : ''}"`;
+    const paragraphCSS = Object.entries(properties).filter(([name]) => paragraphProperties.has(name)).map(([name, value]) => `${name}:${value}`).join(';');
+    const alignment = ` style="white-space:pre-wrap;${escape(paragraphCSS)}"`;
     if (tag === 'text:p') return `<p${alignment}>${inner}</p>`;
     if (tag === 'text:h') { const level = Math.min(3, Math.max(1, Number(attr(node, 'text:outline-level')) || 1)); return `<h${level}${alignment}>${inner}</h${level}>`; }
     if (tag === 'text:list') {
@@ -135,7 +155,79 @@ async function importODT(bytes) {
   const body = elements(xml, 'office', 'text')[0];
   if (!body) throw new Error('No manuscript text was found in this ODT.');
   const html = convert(body);
-  return { html, notes: notes.join('\n\n'), warning: 'Imported an ODT copy. Basic text, headings, emphasis, links, embedded raster images, lists, and simple tables are supported. Page layout, tabs, advanced styles, and fields need review. Your original ODT is unchanged. ' + [...losses].join(' ') };
+  const defaultParagraph = defaults.get('paragraph'), defaultProperties = styleProperties(defaultParagraph);
+  const runProperties = defaultParagraph && elements(defaultParagraph, 'style', 'text-properties')[0];
+  const languageCode = attr(runProperties, 'fo:language'), country = attr(runProperties, 'fo:country');
+  const language = languageCode && languageCode !== 'none' ? `${languageCode}${country && country !== 'none' ? '-' + country : ''}` : undefined;
+  return { html, language, documentStyle: { fontFamily: defaultProperties['font-family'] || DEFAULT_DOCUMENT_STYLE.fontFamily, fontSize: points(defaultProperties['font-size']) || DEFAULT_DOCUMENT_STYLE.fontSize, lineHeight: lineRatio(defaultProperties['line-height']) }, notes: notes.join('\n\n'), warning: 'Imported an ODT copy. Basic text, headings, emphasis, paragraph spacing and indents, links, embedded raster images, lists, and simple tables are supported. Page layout, tabs, advanced styles, and fields need review. Your original ODT is unchanged. ' + [...losses].join(' ') };
+}
+
+// Mammoth retains document structure. Enrich matching paragraphs with their OOXML layout,
+// rather than rebuilding lists, hyperlinks, notes, tables, and images a second time.
+async function docxTypography(bytes, html) {
+  const zip = await JSZip.loadAsync(bytes), word = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const source = zip.file('word/document.xml');
+  if (!source) return { html };
+  const xml = parseXML(await source.async('string'));
+  const styles = zip.file('word/styles.xml') ? parseXML(await zip.file('word/styles.xml').async('string')) : null;
+  const children = (node, name) => node ? [...node.children].filter(child => child.namespaceURI === word && child.localName === name) : [];
+  const child = (node, name) => children(node, name)[0];
+  const property = (node, name) => node?.getAttributeNS(word, name) || '';
+  const runStyle = node => {
+    const fontFamily = property(child(node, 'rFonts'), 'ascii') || property(child(node, 'rFonts'), 'hAnsi');
+    const size = Number(property(child(node, 'sz'), 'val')) / 2;
+    return { ...(fontFamily ? { fontFamily } : {}), ...(size > 0 ? { fontSize: size } : {}), ...(property(child(node, 'lang'), 'val') ? { language: property(child(node, 'lang'), 'val') } : {}) };
+  };
+  const paragraphStyle = node => {
+    const spacing = child(node, 'spacing'), indent = child(node, 'ind'), result = {};
+    const after = property(spacing, 'after'), line = property(spacing, 'line'), rule = property(spacing, 'lineRule');
+    if (after !== '' && Number.isFinite(Number(after))) result.spaceAfter = Number(after) / 20;
+    if (line && Number(line) > 0) result.lineHeight = rule && rule !== 'auto' ? `${Number(line) / 20}pt` : Number(line) / 240;
+    const first = property(indent, 'firstLine'), hanging = property(indent, 'hanging');
+    if (first !== '' && Number.isFinite(Number(first))) result.firstLineIndent = Number(first) / 20;
+    else if (hanging !== '' && Number.isFinite(Number(hanging))) result.firstLineIndent = -Number(hanging) / 20;
+    const alignment = property(child(node, 'jc'), 'val');
+    if (alignment) result.textAlign = ({ both: 'justify', start: 'left', end: 'right' })[alignment] || alignment;
+    return result;
+  };
+  const styleMap = new Map(styles ? [...styles.getElementsByTagNameNS(word, 'style')].map(style => [property(style, 'styleId'), style]) : []);
+  const defaultNode = styles?.getElementsByTagNameNS(word, 'docDefaults')[0];
+  const runDefaults = runStyle(child(child(defaultNode, 'rPrDefault'), 'rPr'));
+  const paraDefaults = paragraphStyle(child(child(defaultNode, 'pPrDefault'), 'pPr'));
+  const normal = [...styleMap.values()].find(style => property(style, 'type') === 'paragraph' && property(style, 'default') === '1');
+  function resolved(id, seen = new Set()) {
+    const style = styleMap.get(id);
+    if (!style || seen.has(id)) return {};
+    seen.add(id);
+    return { ...resolved(property(child(style, 'basedOn'), 'val'), seen), ...runStyle(child(style, 'rPr')), ...paragraphStyle(child(style, 'pPr')) };
+  }
+  const base = { ...runDefaults, ...paraDefaults, ...resolved(property(normal, 'styleId')) };
+  const rawParagraphs = [...xml.getElementsByTagNameNS(word, 'p')].map(paragraph => {
+    const properties = child(paragraph, 'pPr');
+    const value = [...paragraph.getElementsByTagNameNS(word, 't')].map(node => node.textContent).join('');
+    return { text: value.replace(/\s+/g, ' ').trim(), style: { ...base, ...resolved(property(child(properties, 'pStyle'), 'val')), ...paragraphStyle(properties) } };
+  });
+  const container = document.createElement('div'); container.innerHTML = html;
+  let cursor = 0;
+  for (const paragraph of container.querySelectorAll('p,h1,h2,h3,h4,h5,h6')) {
+    const text = paragraph.textContent.replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    const index = rawParagraphs.findIndex((candidate, position) => position >= cursor && candidate.text === text);
+    if (index < 0) continue;
+    cursor = index + 1; const style = rawParagraphs[index].style;
+    if (style.lineHeight != null) paragraph.style.lineHeight = String(style.lineHeight);
+    if (style.spaceAfter != null) paragraph.style.marginBottom = `${style.spaceAfter}pt`;
+    if (style.firstLineIndent != null) paragraph.style.textIndent = `${style.firstLineIndent}pt`;
+    if (['left', 'center', 'right', 'justify'].includes(style.textAlign)) paragraph.style.textAlign = style.textAlign;
+    if (style.fontFamily || style.fontSize) {
+      const span = document.createElement('span');
+      if (style.fontFamily) span.style.fontFamily = style.fontFamily;
+      if (style.fontSize) span.style.fontSize = `${style.fontSize}pt`;
+      while (paragraph.firstChild) span.append(paragraph.firstChild);
+      paragraph.append(span);
+    }
+  }
+  return { html: container.innerHTML, language: base.language, documentStyle: { fontFamily: base.fontFamily || DEFAULT_DOCUMENT_STYLE.fontFamily, fontSize: base.fontSize || DEFAULT_DOCUMENT_STYLE.fontSize, lineHeight: lineRatio(base.lineHeight) } };
 }
 
 export async function importDocument(payload, extensions) {
@@ -145,12 +237,17 @@ export async function importDocument(payload, extensions) {
   if (extension === '.docx') {
     const mammoth = await import('mammoth/mammoth.browser');
     const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer }, { styleMap: ['u => u', 'strike => s'] });
-    content = generateJSON(safeHTML(result.value), extensions);
-    warning = 'Imported a DOCX copy. Basic text, emphasis, headings, lists, images, external links, and tables are supported. Page layout, fonts, comments, tracked changes, and advanced fields may not transfer; footnotes become ordinary text. Your original file is unchanged.';
+    const typography = await docxTypography(bytes, safeHTML(result.value));
+    content = generateJSON(safeHTML(typography.html), extensions);
+    if (typography.documentStyle) project.documentStyle = typography.documentStyle;
+    if (typography.language) project.language = typography.language;
+    warning = 'Imported a DOCX copy. Basic text, emphasis, document font, paragraph spacing and indents, headings, lists, images, external links, and tables are supported. Page layout, individual run fonts, comments, tracked changes, and advanced fields may not transfer; footnotes become ordinary text. Your original file is unchanged.';
     if (result.messages.length) warning += ` The converter reported ${result.messages.length} item(s) to review: ${result.messages.slice(0, 4).map(item => item.message).join(' ')}`;
   } else if (extension === '.odt') {
     const result = await importODT(bytes);
     content = generateJSON(safeHTML(result.html), extensions); warning = result.warning; project.notes = result.notes;
+    project.documentStyle = result.documentStyle;
+    if (result.language) project.language = result.language;
   } else {
     let text;
     if (bytes[0] === 0xff && bytes[1] === 0xfe) text = new TextDecoder('utf-16le').decode(bytes);
@@ -176,7 +273,8 @@ export async function importDocument(payload, extensions) {
 
 export function publicationHTML(project, extensions) {
   const body = project.chapters.map(c => `<section><h1>${escape(c.title)}</h1>${safeHTML(generateHTML(c.content, extensions))}</section>`).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${escape(project.title)}</title><style>@page{size:A4;margin:22mm}body{font:12pt/1.65 Georgia,serif;color:#222;background:white;max-width:720px;margin:0 auto}h1,h2,h3{line-height:1.3;break-after:avoid}h1{font-size:25pt;margin:0 0 1em}.book-title{font-size:32pt;margin:1em 0 2em}p{orphans:3;widows:3;white-space:pre-wrap;margin:0 0 0.8em}section+section{break-before:page}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%;margin:1em 0}td,th{border:1px solid #aaa;padding:6px}blockquote{border-left:2px solid #aaa;margin-left:0;padding-left:1em}a{color:inherit}hr{border:0;text-align:center}hr:after{content:'*   *   *'}pre{white-space:pre-wrap}ul,ol{padding-left:2em}</style></head><body><h1 class="book-title">${escape(project.title)}</h1>${body}</body></html>`;
+  const style = documentStyle(project);
+  return `<!doctype html><html lang="${escape(project.language || 'en-US')}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${escape(project.title)}</title><style>@page{size:A4;margin:22mm}body{font-family:"${cssString(style.fontFamily)}",serif;font-size:${style.fontSize}pt;line-height:${style.lineHeight};color:#222;background:white;max-width:720px;margin:0 auto}h1,h2,h3{line-height:1.3;break-after:avoid}h1{font-size:25pt;margin:0 0 1em}.book-title{font-size:32pt;margin:1em 0 2em}p{orphans:3;widows:3;white-space:pre-wrap;margin:0 0 0.8em}section+section{break-before:page}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%;margin:1em 0}td,th{border:1px solid #aaa;padding:6px}blockquote{border-left:2px solid #aaa;margin-left:0;padding-left:1em}a{color:inherit}hr{border:0;text-align:center}hr:after{content:'*   *   *'}pre{white-space:pre-wrap}ul,ol{padding-left:2em}</style></head><body><h1 class="book-title">${escape(project.title)}</h1>${body}</body></html>`;
 }
 
 function colour(value) {
@@ -206,7 +304,8 @@ async function imageForDocx(node) {
   return { type: match[1].toLowerCase().startsWith('jp') ? 'jpg' : match[1].toLowerCase(), data: Uint8Array.from(atob(match[2]), c => c.charCodeAt(0)), transformation: { width: Math.round(width * scale), height: Math.round(width * image.naturalHeight / image.naturalWidth * scale) }, altText: { title: node.attrs?.title || '', description: node.attrs?.alt || '', name: node.attrs?.alt || 'Image' } };
 }
 async function toDocx(project) {
-  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, ImageRun, ExternalHyperlink, LevelFormat, WidthType, ShadingType } = await import('docx');
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, ImageRun, ExternalHyperlink, LevelFormat, WidthType, ShadingType, LineRuleType } = await import('docx');
+  const defaults = documentStyle(project), language = project.language || 'en-US';
   const numbering = [], warnings = new Set(), imageOptions = new Map();
   const collectImages = async node => { if (node.type === 'image') imageOptions.set(node, await imageForDocx(node)); for (const child of node.content || []) await collectImages(child); };
   for (const chapter of project.chapters) await collectImages(chapter.content);
@@ -224,7 +323,15 @@ async function toDocx(project) {
     });
   }
   function paragraphOptions(node, quote) {
-    return { children: inlines(node.content), heading: node.type === 'heading' ? HeadingLevel[`HEADING_${Math.min(6, node.attrs?.level || 1)}`] : undefined, alignment: ({ center: AlignmentType.CENTER, right: AlignmentType.RIGHT, justify: AlignmentType.JUSTIFIED })[node.attrs?.textAlign], indent: quote ? { left: 360, right: 360 } : undefined, spacing: { after: 160, line: 320 }, widowControl: true };
+    const attrs = node.attrs || {}, indent = quote ? { left: 360, right: 360 } : {};
+    if (attrs.firstLineIndent != null) {
+      const value = Math.round(Number(attrs.firstLineIndent) * 20);
+      if (value < 0) indent.hanging = Math.abs(value); else indent.firstLine = value;
+    }
+    const line = attrs.lineHeight || defaults.lineHeight;
+    const absoluteLine = /(?:pt|px|in|cm|mm|pc)$/i.test(String(line)) ? points(line) : null;
+    const spacing = { after: Math.round(Number(attrs.spaceAfter ?? defaults.fontSize * 0.8) * 20), line: Math.round(absoluteLine != null ? absoluteLine * 20 : lineRatio(line, defaults.lineHeight) * 240), lineRule: absoluteLine != null ? LineRuleType.EXACT : LineRuleType.AUTO };
+    return { children: inlines(node.content), heading: node.type === 'heading' ? HeadingLevel[`HEADING_${Math.min(6, attrs.level || 1)}`] : undefined, alignment: ({ left: AlignmentType.LEFT, center: AlignmentType.CENTER, right: AlignmentType.RIGHT, justify: AlignmentType.JUSTIFIED })[attrs.textAlign], indent: Object.keys(indent).length ? indent : undefined, spacing, widowControl: true };
   }
   function blocks(nodes = [], depth = 0, quote = false) {
     return nodes.flatMap(node => {
@@ -258,7 +365,7 @@ async function toDocx(project) {
     });
   }
   const children = [new Paragraph({ text: project.title, heading: HeadingLevel.TITLE }), ...project.chapters.flatMap((c, index) => [new Paragraph({ text: c.title, heading: HeadingLevel.HEADING_1, pageBreakBefore: index > 0 }), ...blocks(c.content.content)])];
-  const document = new Document({ creator: 'WRAITER', title: project.title, numbering: { config: numbering }, styles: { default: { document: { run: { font: 'Georgia', size: 24 } } } }, sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1247, right: 1247, bottom: 1247, left: 1247 } } }, children }] });
+  const document = new Document({ creator: 'WRAITER', title: project.title, numbering: { config: numbering }, styles: { default: { document: { run: { font: defaults.fontFamily, size: Math.round(defaults.fontSize * 2), language: { value: language } }, paragraph: { spacing: { line: Math.round(defaults.lineHeight * 240), lineRule: LineRuleType.AUTO, after: Math.round(defaults.fontSize * 16) } } } } }, sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1247, right: 1247, bottom: 1247, left: 1247 } } }, children }] });
   return { data: new Uint8Array(await (await Packer.toBlob(document)).arrayBuffer()), warning: [...warnings].join(' ') };
 }
 export async function exportPayload(project, format, extensions) {

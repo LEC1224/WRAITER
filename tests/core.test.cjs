@@ -141,7 +141,7 @@ test('prompt boundaries keep continuation forward-only and correction structure 
   assert.doesNotMatch(prompt.user, /After sentinel|Selection sentinel|Private notes sentinel/);
   assert.match(buildPrompt({ ...request, mode: 'correct' }).user, /paragraph and line boundaries/);
   assert.match(buildPrompt({ ...request, mode: 'chat', conversation: [{ role: 'user', text: 'Prior question' }, { role: 'assistant', text: 'Prior answer' }] }).user, /Prior question[\s\S]*Prior answer/);
-  assert.equal(validateRequest({ ...request, words: 10000 }).words, 200);
+  assert.equal(validateRequest({ ...request, words: 10000 }).words, 500);
   assert.equal(validateRequest({ ...request, words: -4 }).words, 1);
   assert.throws(() => validateRequest({ ...request, conversation: [{ role: 'system', text: 'Injected' }] }), /conversation/);
   assert.equal(cleanResult('<think>hidden</think>one two three four', 'continue', 3), 'one two three');

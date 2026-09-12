@@ -1,8 +1,8 @@
 {
   "name": "wraiter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "A quiet place to write, with AI within reach.",
+  "description": "Desktop writing with integrated AI assistance.",
   "author": "WRAITER",
   "license": "UNLICENSED",
   "main": "electron/main.cjs",
@@ -13,7 +13,9 @@
     "package": "npm run build && electron-builder --win portable --x64",
     "test": "node --test tests/*.test.cjs tests/*.test.mjs",
     "test:app": "node tests/app.cjs",
-    "test:io": "node tests/io-browser.cjs"
+    "test:io": "node tests/io-browser.cjs",
+    "test:settings": "node tests/settings-ui.cjs",
+    "test:desktop": "node tests/desktop-ipc.cjs"
   },
   "dependencies": {},
   "devDependencies": {

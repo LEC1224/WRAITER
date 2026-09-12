@@ -1,0 +1,3 @@
+const names = { 'en-US': 'English (US)', 'en-GB': 'English (UK)', 'sv-SE': 'Swedish', 'da-DK': 'Danish', 'nb-NO': 'Norwegian', 'fi-FI': 'Finnish', 'de-DE': 'German', 'fr-FR': 'French', 'es-ES': 'Spanish', 'it-IT': 'Italian', 'pt-BR': 'Portuguese (Brazil)', 'pt-PT': 'Portuguese (Portugal)', 'nl-NL': 'Dutch', 'pl-PL': 'Polish', 'uk-UA': 'Ukrainian', 'ru-RU': 'Russian', 'ja-JP': 'Japanese', 'ko-KR': 'Korean', 'zh-CN': 'Chinese (Simplified)', 'ar': 'Arabic', 'hi-IN': 'Hindi', 'tr-TR': 'Turkish' };
+export const LANGUAGES = Object.entries(names);
+export function languageName(code) { try { return names[code] || new Intl.DisplayNames(['en'], { type: 'language' }).of(code); } catch { return code; } }

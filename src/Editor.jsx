@@ -7,31 +7,46 @@ import { TextStyleKit } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
 import { TableKit } from '@tiptap/extension-table';
-import { GhostText, SearchHighlight, ghostKey } from './extensions.js';
+import { GhostText, SearchHighlight, ParagraphFormat, ghostKey } from './extensions.js';
+import { DEFAULT_HOTKEYS, shortcutFromEvent } from './hotkeys.js';
 
 export const extensions = [
   StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: false } }),
   TextStyleKit, TextAlign.configure({ types: ['heading', 'paragraph'] }),
   Highlight.configure({ multicolor: true }), Image.configure({ allowBase64: true }), TableKit.configure({ table: { resizable: true } }),
-  Placeholder.configure({ placeholder: 'Every story begins somewhere…' }), GhostText, SearchHighlight
+  Placeholder.configure({ placeholder: 'Start writing…' }), ParagraphFormat, GhostText, SearchHighlight
 ];
 export default function ManuscriptEditor({ chapter, prefs, onReady, onChange, onSelection, onAction }) {
-  const callbacks = useRef({ onReady, onChange, onSelection, onAction });
-  callbacks.current = { onReady, onChange, onSelection, onAction };
+  const callbacks = useRef({ onReady, onChange, onSelection, onAction, prefs });
+  callbacks.current = { onReady, onChange, onSelection, onAction, prefs };
   const editor = useEditor({
     extensions, content: chapter.content,
     editorProps: {
       attributes: { class: 'manuscript', 'aria-label': 'Manuscript editor', role: 'textbox', 'aria-multiline': 'true', spellcheck: String(prefs.spellcheck), lang: prefs.language },
       handleKeyDown(view, event) {
         const ghost = ghostKey.getState(view.state);
-        if (ghost && event.key === 'Tab') { event.preventDefault(); callbacks.current.onAction('accept'); return true; }
-        if (ghost && event.key === 'ArrowRight' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); callbacks.current.onAction('accept-word'); return true; }
-        if (event.key === 'Escape') { callbacks.current.onAction('dismiss'); return Boolean(ghost); }
-        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); callbacks.current.onAction('continue'); return true; }
+        const keys = { ...DEFAULT_HOTKEYS, ...callbacks.current.prefs.hotkeys }, pressed = shortcutFromEvent(event);
+        if (!pressed) return false;
+        let action;
+        if (ghost?.text && pressed === keys.accept) action = 'accept';
+        else if (ghost?.text && ghost.kind !== 'revision' && pressed === keys.acceptCharacter) action = 'accept-character';
+        else if (ghost?.text && ghost.kind !== 'revision' && pressed === keys.acceptWord) action = 'accept-word';
+        else if (ghost && pressed === keys.dismiss) action = 'dismiss';
+        else if (callbacks.current.prefs.enabled && pressed === keys.complete) action = view.state.selection.empty ? 'continue' : 'rewrite';
+        else if (callbacks.current.prefs.enabled && pressed === keys.correct) action = 'correct';
+        else if (callbacks.current.prefs.enabled && pressed === keys.rewrite) action = 'rewrite';
+        if (action) { event.preventDefault(); callbacks.current.onAction(action); return true; }
         return false;
+      },
+      handleTextInput(view, from, to, text) {
+        const item = ghostKey.getState(view.state);
+        // A revision is only a preview. Typing resumes after the untouched selection.
+        if (item?.kind !== 'revision') return false;
+        view.dispatch(view.state.tr.insertText(text, item.to, item.to).setMeta(ghostKey, null));
+        return true;
       }
     },
-    onUpdate: ({ editor }) => callbacks.current.onChange(editor.getJSON()),
+    onUpdate: ({ editor, transaction }) => callbacks.current.onChange(editor.getJSON(), editor, transaction),
     onSelectionUpdate: ({ editor }) => callbacks.current.onSelection(editor.state.selection),
     onTransaction: () => callbacks.current.onAction('toolbar-refresh')
   });

@@ -4,7 +4,7 @@ export const blankContent = () => ({ type: 'doc', content: [paragraph('')] });
 export function newProject(demo = false) {
   return {
     format: 'wraiter', version: 1, id: uid(), title: demo ? 'The quiet hours' : 'Untitled manuscript',
-    subtitle: demo ? 'A little room for a new beginning' : '',
+    subtitle: '', language: 'en-US', documentStyle: { fontFamily: 'Cambria', fontSize: 12, lineHeight: 1.5 },
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     chapters: demo ? [
       { id: uid(), title: 'An open window', status: 'Draft', content: { type: 'doc', content: [
@@ -29,7 +29,7 @@ export function nodeText(node, separator = '\n', includeImages = false) {
 export const wordCount = text => (String(text || '').trim().match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu) || []).length;
 export const projectWords = project => project.chapters.reduce((sum, c) => sum + wordCount(nodeText(c.content)), 0);
 export function snapshot(project, name) {
-  return { id: uid(), name: name || `Revision ${new Date().toLocaleString()}`, createdAt: new Date().toISOString(), title: project.title, chapters: structuredClone(project.chapters), notes: project.notes, style: project.style, references: structuredClone(project.references || []) };
+  return { id: uid(), name: name || `Revision ${new Date().toLocaleString()}`, createdAt: new Date().toISOString(), title: project.title, chapters: structuredClone(project.chapters), notes: project.notes, style: project.style, language: project.language, documentStyle: structuredClone(project.documentStyle), references: structuredClone(project.references || []) };
 }
 export function exportText(project) { return [project.title, ...project.chapters.flatMap(c => [c.title, nodeText(c.content, '\n', true)])].join('\n\n'); }
 export function inlineMarkup(node, format = 'md') {
