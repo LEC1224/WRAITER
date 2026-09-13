@@ -11,12 +11,13 @@ const { DocumentFiles, FORMATS, formatOf } = require('./document-files.cjs');
 const { EditJournal } = require('./edit-journal.cjs');
 const { runWritingAgent } = require('./writing-agent.cjs');
 const { LocalModels } = require('./local-models.cjs');
+const { WorkspaceSession } = require('./workspace-session.cjs');
 
 if (process.env.WRAITER_USER_DATA) app.setPath('userData', path.resolve(process.env.WRAITER_USER_DATA));
 app.setName('WRAITER');
 const primaryInstance = app.requestSingleInstanceLock();
 if (!primaryInstance) app.quit();
-let win, closing = false, closePending = false, closeFinishing = false, closeTimer, store, bootResult, gitHistory, fontList, referenceLibrary, documentFiles, editJournal, localModels, lastReferenceWarnings = '';
+let win, closing = false, closePending = false, closeFinishing = false, closeTimer, store, bootResult, gitHistory, fontList, referenceLibrary, documentFiles, editJournal, localModels, workspace, lastReferenceWarnings = '';
 let writeQueue = Promise.resolve();
 let prefs = {};
 const activeRequests = new Map();
@@ -26,7 +27,8 @@ const cancelAll = async () => {
   await Promise.all(controllers.map(controller => controller.finished));
 };
 const file = name => path.join(app.getPath('userData'), name);
-const serial = fn => { const result = writeQueue.then(fn); writeQueue = result.catch(() => {}); return result; };
+const serial = fn => { const result = writeQueue.then(async () => { try { return await fn(); } finally { await workspace?.checkpoint(); } }); writeQueue = result.catch(() => {}); return result; };
+function syncWorkspace() { store = workspace.active.store; documentFiles = workspace.active.files; }
 const tryRead = async (name, fallback) => { try { return JSON.parse(await fs.readFile(file(name), 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error(`Could not load ${name}:`, e.message); return fallback; } };
 function publicPrefs() {
   const { keys, ...rest } = prefs;
@@ -42,9 +44,10 @@ async function rememberPath(target) {
   prefs.recent = [target, ...(prefs.recent || []).filter(x => !samePath(x, target))].slice(0, 12);
   // Opening has already committed its recovery. A preferences error must not leave the renderer on the preceding document.
   await atomicWrite(file('settings.json'), JSON.stringify(prefs)).catch(error => console.error('Could not save recent documents:', error.message));
+  updateMenu();
 }
 async function openPath(target) {
-  const result = await documentFiles.open(target);
+  const result = await workspace.open(target); syncWorkspace();
   if (result.project) {
     gitHistory.record(result.project, 'Opened manuscript').catch(error => console.error('Git history:', error.message));
     if (result.recoveredPath) await rememberPath(result.recoveredPath);
@@ -62,7 +65,7 @@ async function persistDocument(project, payload, events, options) {
   return documentFiles.persist(project, payload, options);
 }
 function updateMenu() {
-  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys)));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys, prefs.recent)));
 }
 function setDocumentLanguage(language) {
   const session = win.webContents.session;
@@ -122,10 +125,10 @@ app.whenReady().then(async () => {
     if (prefs.keys?.[provider]) { prefs.keys[`legacy:${provider}`] = prefs.keys[provider]; delete prefs.keys[provider]; }
   }
   prefs.recent = Array.isArray(prefs.recent) ? prefs.recent.filter(x => typeof x === 'string' && path.isAbsolute(x)).slice(0, 12) : [];
-  store = new DocumentStore(app.getPath('userData'));
   referenceLibrary = new ReferenceLibrary(file('linked-references.json'));
-  bootResult = await store.boot();
-  documentFiles = new DocumentFiles(store, app.getPath('userData')); await documentFiles.recover();
+  workspace = new WorkspaceSession(app.getPath('userData'));
+  bootResult = await workspace.boot(prefs.startup); syncWorkspace();
+  for (const target of bootResult.archivedPaths || []) await rememberPath(target);
   editJournal = new EditJournal(app.getPath('userData'));
   localModels = new LocalModels(app.getPath('userData'), { notify: value => win?.webContents.send('local-progress', value) });
   providers.configureLocalModels(localModels);
@@ -133,8 +136,12 @@ app.whenReady().then(async () => {
   if (store.project) gitHistory.record(store.project, 'Recovered manuscript').catch(error => console.error('Git history:', error.message));
   updateMenu();
   createWindow();
-  ipcMain.handle('boot', () => ({ ...bootResult, project: store.project, path: store.currentPath, binding: documentFiles.binding, prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
+  ipcMain.handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
+  ipcMain.handle('workspace:view', (_e, view) => serial(async () => { workspace.rememberView(view); return true; }));
+  ipcMain.handle('workspace:activate', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.activate(id); syncWorkspace(); return result; }));
+  ipcMain.handle('workspace:close', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.close(id); syncWorkspace(); if (result.archivedPath) await rememberPath(result.archivedPath); return result; }));
   ipcMain.handle('recent:list', () => [...(prefs.recent || [])]);
+  ipcMain.handle('recent:clear', () => serial(async () => { const next = { ...prefs, recent: [] }; await atomicWrite(file('settings.json'), JSON.stringify(next)); prefs = next; updateMenu(); return []; }));
   ipcMain.handle('autosave', (_e, project, payload, events) => serial(async () => { const result = await persistDocument(project, payload, events); gitHistory.schedule(project); return result; }));
   ipcMain.handle('history:load', (_e, projectId) => serial(() => editJournal.read(projectId)));
   ipcMain.handle('history:append', (_e, projectId, events) => serial(() => editJournal.append(projectId, events)));
@@ -146,13 +153,14 @@ app.whenReady().then(async () => {
     await documentFiles.saveSidecar(store.project);
     return result;
   }));
-  ipcMain.handle('native:bind', (_e, project, source) => serial(async () => { const result = await documentFiles.bind(project, source); if (result.recoveredPath) await rememberPath(result.recoveredPath); await rememberPath(result.path); return result; }));
+  ipcMain.handle('native:bind', (_e, project, source) => serial(async () => { const result = await workspace.bind(project, source); syncWorkspace(); await rememberPath(result.path); return result; }));
   ipcMain.handle('save:choose', async (_e, { title, format = documentFiles.binding?.format || 'wraiter', copy = true } = {}) => {
     if (typeof title !== 'string' || title.length > 2000 || !FORMATS.includes(format)) throw new Error('Invalid save format.');
     const filters = [format, ...FORMATS.filter(item => item !== format)].map(item => ({ name: ({ wraiter: 'WRAITER manuscript', odt: 'OpenDocument Text', docx: 'Word document', txt: 'Plain text', md: 'Markdown', html: 'HTML document' })[item], extensions: [item] }));
     const chosen = await dialog.showSaveDialog(win, { title: copy ? 'Save as' : 'Save document', defaultPath: `${safeFilename(title)}.${format}`, filters });
     if (chosen.canceled) return null;
     const target = path.extname(chosen.filePath) ? chosen.filePath : `${chosen.filePath}.${format}`;
+    workspace.assertSaveTarget(target);
     return documentFiles.authorizeTarget(target);
   });
   ipcMain.handle('save:encoded', (_e, project, payload, options = {}, events = []) => serial(async () => {
@@ -169,8 +177,8 @@ app.whenReady().then(async () => {
     await gitHistory.record(project, 'Saved document'); return result;
   }));
   ipcMain.handle('new-project', (_e, project) => serial(async () => {
-    const result = await store.replace(project);
-    documentFiles.binding = null;
+    validateProject(project);
+    const result = await workspace.create(project); syncWorkspace();
     gitHistory.record(project, 'New manuscript').catch(error => console.error('Git history:', error.message));
     if (result.recoveredPath) await rememberPath(result.recoveredPath);
     return result;
@@ -185,6 +193,7 @@ app.whenReady().then(async () => {
       if (!target.toLowerCase().endsWith('.wraiter')) target += '.wraiter';
     }
     if (documentFiles.binding && !copy) throw new Error('This document needs its native format encoder to save.');
+    workspace.assertSaveTarget(target);
     const result = await store.persist(project, target, !samePath(target, store.currentPath));
     documentFiles.binding = null;
     await rememberPath(target);
@@ -341,7 +350,7 @@ app.whenReady().then(async () => {
     const result = await dialog.showSaveDialog(win, { title: `Export ${format.toUpperCase()}`, defaultPath: `${safeFilename(title)}.${extension}`, filters: [{ name: format.toUpperCase(), extensions: [extension] }] });
     if (result.canceled) return null;
     const target = result.filePath.toLowerCase().endsWith(`.${extension}`) ? result.filePath : `${result.filePath}.${extension}`;
-    if (samePath(target, store.currentPath) || path.extname(target).toLowerCase() === '.wraiter') throw new Error('Choose an export filename separate from the manuscript.');
+    if (workspace.findPath(target) || path.extname(target).toLowerCase() === '.wraiter') throw new Error('Choose an export filename separate from all open manuscripts.');
     if (format === 'pdf') {
       const print = new BrowserWindow({ show: false, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true, javascript: false, partition: `wraiter-print-${Date.now()}` } });
       print.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

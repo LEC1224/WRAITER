@@ -1,10 +1,25 @@
 # WRAITER
 
-Windows desktop writing with integrated AI assistance. Version 0.5 adds room to scroll below the document, optional divided pages, persistent manual page breaks, and ranked rephrasing/translation alternatives. It retains managed local inference, portable Ollama, GGUF registration, document-editing agents, direct ODT/DOCX/text saving, persistent undo/redo, scoped exports, native menus, customizable keyboard behaviour, task-specific models, saved Codex connections, and Git checkpoints.
+Windows desktop writing with integrated AI assistance. Version 0.6 adds project tabs, a native Open Recent submenu, and a choice of restoring all tabs or starting a clean project. It retains continuous/divided pages, manual page breaks, ranked rephrasing alternatives, managed local inference, portable Ollama, GGUF registration, document-editing agents, direct ODT/DOCX/text saving, persistent undo/redo, scoped exports, customizable keyboard behaviour, task-specific models, saved Codex connections, and Git checkpoints.
 
 ## Run
 
-Open `release/WRAITER-0.5.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, **Save as**, and **Export**. New documents start blank.
+Open `release/WRAITER-0.6.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, **Save as**, and **Export**. New documents start blank.
+
+## Projects and startup
+
+**File → Open recent** lists the last 12 opened or saved documents, including preserved unnamed drafts. Selecting a file that is already open activates its tab. Clear recent list removes the list entries without deleting files.
+
+**New**, **Open**, and the **+** beside the tabs add a project in the same window. Each tab has independent chapters, formatting, notes, file format, recovery and editing history. The assistant conversation stays with its tab while the app is open. Switching projects cancels unfinished AI requests and saves current edits first. Save As and Export cannot overwrite another tab's open file.
+
+Use **Ctrl+Tab** / **Ctrl+Shift+Tab** to cycle projects, and **Ctrl+W** or a tab's **×** to close it. These shortcuts can be changed in Settings. Closing an unnamed draft preserves it in Open Recent; named files remain on disk. Closing the last tab leaves a blank project.
+
+**Settings → General → When WRAITER starts** offers:
+
+- **Restore all open project tabs** (default): restores the tab order, last active project, chapter and reading position, including unnamed drafts. Each project's atomic undo history remains available.
+- **Open a clean new project**: starts with one blank tab. Named documents remain saved, and unnamed drafts or unreviewed native edits are preserved in Open Recent.
+
+Each tab has a separate recovery file in application data. Restoring projects does not require Git. A copied WRAITER document opened alongside its original receives an independent project identity so its future undo history cannot mix with the original's.
 
 ## Writing and formatting
 
@@ -135,6 +150,7 @@ npm run test:app
 npm run test:v03
 npm run test:v04
 npm run test:v05
+npm run test:v06
 npm run test:history-recovery
 npm run test:pdf
 npm run test:office

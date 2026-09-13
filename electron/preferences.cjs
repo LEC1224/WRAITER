@@ -1,8 +1,8 @@
 const { hash } = require('./core.cjs');
 const TASKS = ['continue', 'correct', 'rewrite', 'chat'];
 const PROVIDERS = ['ollama', 'openai', 'anthropic', 'compatible', 'codex', 'local'];
-const DEFAULT_HOTKEYS = { complete: 'Tab', accept: 'Tab', acceptCharacter: 'ArrowRight', acceptWord: 'Ctrl+ArrowRight', dismiss: 'Escape', toggleAI: 'Ctrl+Shift+Space', toggleContinuous: 'Ctrl+Alt+Space', correct: 'Ctrl+Alt+G', rewrite: 'Ctrl+Alt+R', save: 'Ctrl+S', saveCopy: 'Ctrl+Shift+S', open: 'Ctrl+O', new: 'Ctrl+N', find: 'Ctrl+F', replace: 'Ctrl+H', preferences: 'Ctrl+,', focus: 'F11', snapshot: 'Ctrl+Alt+S', pageBreak: 'Ctrl+Enter' };
-const defaults = { provider: 'codex', baseUrl: 'http://localhost:11434', model: '', codexPath: '', enabled: false, continuous: false, predictionWords: 35, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', pageMode: 'continuous', theme: 'paper', font: 'Georgia', fontSize: 19, lineHeight: 1.8, measure: 720, zoom: 100, spellcheck: true, goal: 500, language: 'en-US', nativeLanguage: '', taskProfiles: {}, hotkeys: DEFAULT_HOTKEYS };
+const DEFAULT_HOTKEYS = { complete: 'Tab', accept: 'Tab', acceptCharacter: 'ArrowRight', acceptWord: 'Ctrl+ArrowRight', dismiss: 'Escape', toggleAI: 'Ctrl+Shift+Space', toggleContinuous: 'Ctrl+Alt+Space', correct: 'Ctrl+Alt+G', rewrite: 'Ctrl+Alt+R', save: 'Ctrl+S', saveCopy: 'Ctrl+Shift+S', open: 'Ctrl+O', new: 'Ctrl+N', find: 'Ctrl+F', replace: 'Ctrl+H', preferences: 'Ctrl+,', focus: 'F11', snapshot: 'Ctrl+Alt+S', pageBreak: 'Ctrl+Enter', closeTab: 'Ctrl+W', nextTab: 'Ctrl+Tab', previousTab: 'Ctrl+Shift+Tab' };
+const defaults = { provider: 'codex', baseUrl: 'http://localhost:11434', model: '', codexPath: '', enabled: false, continuous: false, predictionWords: 35, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', startup: 'restore', pageMode: 'continuous', theme: 'paper', font: 'Georgia', fontSize: 19, lineHeight: 1.8, measure: 720, zoom: 100, spellcheck: true, goal: 500, language: 'en-US', nativeLanguage: '', taskProfiles: {}, hotkeys: DEFAULT_HOTKEYS };
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const profileKeys = ['provider', 'baseUrl', 'model', 'codexPath'];
 function validateProfile(profile) {
@@ -27,6 +27,7 @@ function validateSettings(update) {
   if (!object(update)) throw new Error('Invalid preferences.');
   const allowed = Object.fromEntries(Object.entries(update).filter(([key]) => Object.hasOwn(defaults, key)));
   if ('pageMode' in allowed && !['continuous', 'pages'].includes(allowed.pageMode)) throw new Error('Choose continuous view or divided pages.');
+  if ('startup' in allowed && !['restore', 'new'].includes(allowed.startup)) throw new Error('Choose whether to restore projects or start a new project.');
   const strings = ['provider', 'baseUrl', 'model', 'codexPath', 'theme', 'font', 'language', 'nativeLanguage', 'ollamaMode', 'pageMode'];
   for (const key of strings) if (key in allowed && (typeof allowed[key] !== 'string' || allowed[key].length > 4000)) throw new Error(`Invalid ${key} preference.`);
   for (const key of ['enabled', 'continuous', 'spellcheck', 'allowReasoning']) if (key in allowed && typeof allowed[key] !== 'boolean') throw new Error(`Invalid ${key} preference.`);
@@ -58,6 +59,7 @@ function mergeSettings(previous, update) {
   const hotkeys = { ...DEFAULT_HOTKEYS, ...(previous.hotkeys || {}), ...(allowed.hotkeys || {}) };
   // An added default must not take over an author's existing Ctrl+Enter action.
   if (!Object.hasOwn(allowed.hotkeys || {}, 'pageBreak') && hotkeys.pageBreak === DEFAULT_HOTKEYS.pageBreak && Object.entries(hotkeys).some(([key, value]) => key !== 'pageBreak' && value === hotkeys.pageBreak)) hotkeys.pageBreak = '';
+  for (const command of ['closeTab', 'nextTab', 'previousTab']) if (!Object.hasOwn(allowed.hotkeys || {}, command) && hotkeys[command] === DEFAULT_HOTKEYS[command] && Object.entries(hotkeys).some(([key, value]) => key !== command && value === hotkeys[command])) hotkeys[command] = '';
   return { ...previous, ...allowed, taskProfiles, hotkeys };
 }
 module.exports = { defaults, DEFAULT_HOTKEYS, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, mergeSettings };

@@ -882,6 +882,17 @@ select.field-input { padding:5px 7px; }
 /* A screen of workspace below the manuscript keeps the last line reachable. */
 .writing-scroll { overflow-anchor:none; }
 .writing-scroll::after { content:''; display:block; height:max(400px,calc(100vh - 230px)); pointer-events:none; }
+.project-tabs-bar { display:flex; flex:0 0 35px; min-height:35px; align-items:stretch; background:var(--workspace); border-bottom:1px solid var(--line); padding:0 8px; gap:4px; }
+.project-tabs { display:flex; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; align-items:stretch; }
+.project-tab { display:flex; flex:0 0 auto; max-width:250px; min-width:130px; align-items:center; border-right:1px solid var(--line); border-top:2px solid transparent; color:var(--muted); }
+.project-tab.selected { background:var(--panel); border-top-color:var(--accent); color:var(--ink); }
+.project-tab > [role=tab] { display:flex; align-items:center; gap:7px; min-width:0; text-align:left; flex:1; padding:7px 8px 7px 11px; font-size:12px; }
+.project-tab > [role=tab] > span:first-of-type { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.project-tab .icon-button { width:24px; height:24px; margin-right:4px; flex-shrink:0; }
+.project-tab .icon-button svg { width:13px; height:13px; }
+.project-tabs-bar > .icon-button { align-self:center; flex-shrink:0; }
+.tab-save-dot { font-size:8px; color:var(--muted); }.tab-save-dot.error { color:var(--danger); }
+.workspace[inert] { cursor:progress; opacity:.8; }
 .writing-sheet { position:relative; isolation:isolate; }
 .divided-pages .writing-sheet { border:0; background:transparent; box-shadow:none; }
 .page-furniture { position:absolute; inset:0; z-index:-1; pointer-events:none; user-select:none; }

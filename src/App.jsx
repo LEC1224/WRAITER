@@ -59,6 +59,9 @@ function Modal({ title, subtitle, children, onClose, wide = false }) {
 }
 
 export default function App() {
+  const [workspace, setWorkspace] = useState({ tabs: [], activeId: null }), [switching, setSwitching] = useState(false), [savingNamed, setSavingNamed] = useState(false);
+  const workspaceRef = useRef(workspace), tabCache = useRef(new Map()), transition = useRef(null), namedSave = useRef(false), namedSaveCompletion = useRef(Promise.resolve()), restoreScroll = useRef(null);
+  workspaceRef.current = workspace;
   const [project, setProject] = useState(null), [prefs, setPrefs] = useState(DEFAULTS), [activeId, setActiveId] = useState(null);
   const [path, setPath] = useState(null), [saveState, setSaveState] = useState('saved'), [saveError, setSaveError] = useState('');
   const [panel, setPanel] = useState(null), [leftOpen, setLeftOpen] = useState(true), [focus, setFocus] = useState(false);
@@ -86,15 +89,14 @@ export default function App() {
   useEffect(() => api?.onLocalProgress(setLocalProgress), []);
   useEffect(() => { api?.listFonts().then(setFonts).catch(() => {}); }, []);
   useEffect(() => { if (panel === 'history' && project) loadGitHistory(); }, [panel, project?.id]);
+  useEffect(() => { document.getElementById(`project-tab-${workspace.activeId}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [workspace.activeId, focus]);
 
   useEffect(() => {
     if (!api) return;
     api.boot().then(async result => {
-      let initial = normalizeHistoryProject(result.project || { ...newProject(false), language: result.prefs.language || 'en-US' }, schema);
-      const history = await loadHistory(initial); initial = history.project;
-      setPrefs({ ...DEFAULTS, ...result.prefs }); setPath(result.path); setBinding(result.binding); bindingRef.current = result.binding; projectRef.current = initial; setProject(initial); setActiveId(initial.chapters[0].id);
+      prefsRef.current = { ...DEFAULTS, ...result.prefs }; setPrefs(prefsRef.current);
+      await installWorkspace(result);
       setRecents(result.prefs.recent || []);
-      sessionStart.current = projectWords(initial);
       if (result.warning) notify(result.warning);
     }).catch(error => notify(errorText(error)));
   }, []);
@@ -181,6 +183,9 @@ export default function App() {
     return cancellation.current;
   }, []);
   async function saveNamed(copy = false) {
+    if (transition.current || namedSave.current) return;
+    namedSave.current = true; setSavingNamed(true);
+    let finished; namedSaveCompletion.current = new Promise(resolve => { finished = resolve; });
     clearTimeout(autosaveTimer.current);
     await pendingSave.current;
     try {
@@ -191,42 +196,75 @@ export default function App() {
       const work = pendingSave.current.then(async () => api.saveEncoded(captured, await encodeNative(captured, target?.format || bindingRef.current?.format), target ? { token: target.token } : {}, history.events.slice(persistedHistory.current.get(captured.id) || 0)));
       pendingSave.current = work.catch(() => {});
       const result = await work;
-      if (result?.chooseCopy) { await saveNamed(true); return; }
+      if (result?.chooseCopy) { namedSave.current = false; await saveNamed(true); return; }
       if (result) { setPath(result.path); setBinding(result.binding); bindingRef.current = result.binding; setSaveState('saved'); setSaveError(''); notify(copy ? 'Document saved as a new file.' : 'Document saved.'); }
     }
     catch (error) { setSaveState('error'); setSaveError(errorText(error)); notify(errorText(error)); }
+    finally { namedSave.current = false; setSavingNamed(false); finished(); }
   }
-  async function installProject(next, nextPath = null, resetStorage = false, nextBinding = null) {
-    dismiss(); opening.current = true; clearTimeout(autosaveTimer.current); await pendingSave.current;
-    try {
-      next = normalizeHistoryProject(next, schema);
-      if (resetStorage) {
-        const result = await api.newProject(next);
-        if (result.recoveredPath) notify('Your previous unnamed manuscript is preserved in Recent manuscripts.');
-      }
-      const history = await loadHistory(next); next = history.project;
-      projectRef.current = next; setProject(next); setPath(nextPath); bindingRef.current = nextBinding; setBinding(nextBinding); setActiveId(next.chapters[0].id); setEpoch(x => x + 1); setMessages([]); setQuery(''); setSearchOpen(false); setSaveError(''); setSaveState('saved'); sessionStart.current = projectWords(next);
-    } finally { opening.current = false; }
+  async function rememberTab() {
+    if (!workspaceRef.current.activeId || !projectRef.current) return;
+    const current = editorRef.current;
+    const view = { chapterId: activeId, selection: current && !current.isDestroyed ? { from: current.state.selection.from, to: current.state.selection.to } : undefined, scrollTop: document.querySelector('.writing-scroll')?.scrollTop || 0 };
+    tabCache.current.set(workspaceRef.current.activeId, { view, messages, instruction, panel, query, replacement, searchOpen, sessionStart: sessionStart.current, agentActivity });
+    await api.rememberProjectView(view);
+  }
+  async function installWorkspace(result) {
+    const nextWorkspace = result.workspace, cached = tabCache.current.get(nextWorkspace.activeId);
+    let next = normalizeHistoryProject(result.project || { ...newProject(), language: prefsRef.current.language }, schema);
+    const history = await loadHistory(next); next = history.project;
+    const view = cached?.view || nextWorkspace.tabs.find(tab => tab.id === nextWorkspace.activeId)?.view || {};
+    const chapterId = next.chapters.some(chapter => chapter.id === view.chapterId) ? view.chapterId : next.chapters[0].id;
+    restoreSelection.current = view.selection ? { type: 'text', anchor: view.selection.from, head: view.selection.to } : null;
+    restoreScroll.current = view.scrollTop || 0;
+    workspaceRef.current = nextWorkspace; setWorkspace(nextWorkspace);
+    projectRef.current = next; setProject(next); setPath(result.path); bindingRef.current = result.binding; setBinding(result.binding); setActiveId(chapterId); setEpoch(x => x + 1);
+    setMessages(cached?.messages || []); setInstruction(cached?.instruction || ''); setPanel(cached?.panel || null); setQuery(cached?.query || ''); setReplacement(cached?.replacement || ''); setSearchOpen(cached?.searchOpen || false); setAgentActivity(cached?.agentActivity || []);
+    setSaveError(''); setSaveState('saved'); setAiError(''); setRenameId(null); rejected.current = []; lastRequest.current = null; sessionStart.current = cached?.sessionStart ?? projectWords(next);
+  }
+  function projectTransition(action) {
+    if (transition.current) return;
+    if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action));
+    setSwitching(true);
+    // Block editor input immediately; all pending edits and AI cancellation must
+    // finish before changing the backend's active document store.
+    document.querySelector('.workspace')?.setAttribute('inert', '');
+    const work = (async () => {
+      try { await dismiss(); await saveLocal(); await pendingSave.current; await rememberTab(); opening.current = true; await action(); }
+      catch (error) { notify(errorText(error)); }
+      finally { opening.current = false; transition.current = null; setSwitching(false); document.querySelector('.workspace')?.removeAttribute('inert'); }
+    })();
+    transition.current = work; return work;
+  }
+  function switchProject(id) {
+    if (id === workspaceRef.current.activeId) return;
+    return projectTransition(async () => installWorkspace(await api.activateProject(id)));
+  }
+  function closeProject(id = workspaceRef.current.activeId) {
+    return projectTransition(async () => { const result = await api.closeProject(id); tabCache.current.delete(id); await installWorkspace(result); if (result.archivedPath) notify('Draft preserved in File → Open recent.'); });
+  }
+  function cycleProject(direction, focusTab = false) {
+    const current = workspaceRef.current, index = current.tabs.findIndex(tab => tab.id === current.activeId);
+    if (current.tabs.length > 1) {
+      const id = current.tabs[(index + direction + current.tabs.length) % current.tabs.length].id;
+      Promise.resolve(switchProject(id)).then(() => { if (focusTab) document.getElementById(`project-tab-${id}`)?.focus(); });
+    }
   }
   async function openDocument(recent) {
     setMenu(false);
-    try {
-      await saveLocal(); await pendingSave.current;
-      opening.current = true;
+    return projectTransition(async () => {
       const result = recent ? await api.openRecent(recent) : await api.open();
       if (!result) return;
       if (result.import) {
         const imported = await importDocument(result, extensions), normalized = normalizeHistoryProject(imported.project, schema);
         const attached = await api.bindNative(normalized, { openToken: result.openToken, fidelity: imported.fidelity || { requiresReview: !!imported.warning, warnings: imported.warning ? [imported.warning] : [] } });
-        await installProject(attached.project, attached.path, false, attached.binding);
+        await installWorkspace(attached);
         if (imported.warning) setModal({ type: 'notice', title: 'Document compatibility', text: imported.warning + '\n\nThe file remains attached in its original format. The first save will let you review these differences.' });
-      } else await installProject(result.project, result.path, false, result.binding);
-    } catch (error) { notify(errorText(error)); }
-    finally { opening.current = false; }
+      } else await installWorkspace(result);
+    });
   }
   async function createNew() {
-    try { await saveLocal(); await installProject({ ...newProject(), language: prefsRef.current.language }, null, true); setModal(null); notify('New manuscript created.'); }
-    catch (error) { notify(errorText(error)); }
+    return projectTransition(async () => { await installWorkspace(await api.newProject({ ...newProject(), language: prefsRef.current.language })); setModal(null); });
   }
   function changeChapter(id) { dismiss(); setActiveId(id); setQuery(''); setRenameId(null); }
   function addChapter() {
@@ -240,7 +278,9 @@ export default function App() {
     [chapters[index], chapters[target]] = [chapters[target], chapters[index]]; updateProject({ chapters });
   }
   async function loadGitHistory() {
-    try { await saveLocal(); setGitHistory(await api.listGitHistory()); } catch (error) { setGitHistory({ available: false, entries: [], error: errorText(error) }); }
+    const projectId = projectRef.current?.id;
+    try { await saveLocal(); if (projectRef.current?.id !== projectId) return; const result = await api.listGitHistory(); if (projectRef.current?.id === projectId) setGitHistory(result); }
+    catch (error) { if (projectRef.current?.id === projectId) setGitHistory({ available: false, entries: [], error: errorText(error) }); }
   }
   async function createSnapshot(label) {
     if (typeof label !== 'string') { setModal({ type: 'snapshot' }); return; }
@@ -286,6 +326,10 @@ export default function App() {
       const selection = restoreSelection.current; restoreSelection.current = null;
       try { current.view.dispatch(current.state.tr.setSelection(Selection.fromJSON(current.state.doc, selection)).scrollIntoView()); } catch {}
       current.view.focus();
+    }
+    if (current && restoreScroll.current !== null) {
+      const top = restoreScroll.current; restoreScroll.current = null;
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (editorRef.current === current) { const scroller = current.view.dom.closest('.writing-scroll'); if (scroller) scroller.scrollTop = top; } }));
     }
   }
   function travelHistory(direction) {
@@ -426,7 +470,7 @@ export default function App() {
     }, 1200);
   }
   const actionRef = useRef();
-  actionRef.current = { askAI, acceptGhost, dismiss, rejectSuggestion, saveNamed, saveLocal, command: handleCommand, updatePrefs, travelHistory, encodeNative, chooseOption };
+  actionRef.current = { askAI, acceptGhost, dismiss, rejectSuggestion, saveNamed, saveLocal, command: handleCommand, updatePrefs, travelHistory, encodeNative, chooseOption, rememberTab };
   const onEditorAction = useCallback(action => {
     if (action === 'toolbar-refresh') { refreshToolbar(x => x + 1); return; }
     if (action === 'undo' || action === 'redo') { actionRef.current.travelHistory(action); return; }
@@ -465,10 +509,15 @@ export default function App() {
       return;
     }
     if (command.startsWith('reference-warning:')) { notify(command.slice(18)); return; }
+    if (transition.current) return;
+    if (document.querySelector('[role="dialog"]') && (command.startsWith('open-recent:') || ['new', 'open', 'close-tab', 'next-tab', 'previous-tab', 'save', 'save-copy', 'export'].includes(command))) return;
+    if (command.startsWith('open-recent:')) { openDocument(command.slice(12)); return; }
     if (command.startsWith('settings-')) { setModal({ type: 'settings', tab: command.slice(9) }); return; }
     const current = editorRef.current;
     const actions = {
-      new: () => setModal({ type: 'new' }), open: () => openDocument(), save: () => saveNamed(), 'save-copy': () => saveNamed(true), export: () => openExport(),
+      new: createNew, open: () => openDocument(), save: () => saveNamed(), 'save-copy': () => saveNamed(true), export: () => openExport(),
+      'close-tab': () => closeProject(), 'next-tab': () => cycleProject(1), 'previous-tab': () => cycleProject(-1),
+      'clear-recents': async () => { try { setRecents(await api.clearRecents()); } catch (error) { notify(errorText(error)); } },
       recent: async () => { setRecents(await api.getRecents()); setModal({ type: 'recent' }); }, reveal: () => api.reveal(),
       undo: () => travelHistory('undo'), redo: () => travelHistory('redo'), 'select-all': () => current?.chain().focus().selectAll().run(),
       find: () => setSearchOpen(true), replace: () => setSearchOpen(true), focus: () => setFocus(value => !value), 'toggle-outline': () => { setFocus(false); setLeftOpen(value => !value); },
@@ -489,9 +538,12 @@ export default function App() {
     document.addEventListener('keydown', onKey);
     const stop = api?.onCommand(async command => {
       if (command === 'close-request') {
+        await namedSaveCompletion.current;
+        await transition.current;
         clearTimeout(autosaveTimer.current); actionRef.current.dismiss();
         try { await actionRef.current.saveLocal(); } catch {}
         await pendingSave.current;
+        await actionRef.current.rememberTab().catch(error => notify(errorText(error)));
         const captured = projectRef.current;
         api.finishClose(captured, await actionRef.current.encodeNative(captured), historyRef.current?.events.slice(persistedHistory.current.get(captured?.id) || 0) || []);
       }
@@ -526,7 +578,14 @@ export default function App() {
   const titleStyle = editor?.isActive('heading', { level: 1 }) ? 'heading1' : editor?.isActive('heading', { level: 2 }) ? 'heading2' : editor?.isActive('heading', { level: 3 }) ? 'heading3' : 'paragraph';
 
   return <div className={`app layout-${project.layout || 'story'} ${focus ? 'focus-mode' : ''}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight, '--writing-measure': `${prefs.measure}px`, '--document-zoom': (prefs.zoom || 100) / 100 }}>
-    <div className="workspace">
+    {!focus && <div className="project-tabs-bar"><div className="project-tabs" role="tablist" aria-label="Open projects">{workspace.tabs.map(tab => {
+      const active = tab.id === workspace.activeId, title = active ? project.title : tab.title;
+      return <div className={'project-tab' + (active ? ' selected' : '')} key={tab.id}>
+        <button role="tab" id={`project-tab-${tab.id}`} aria-selected={active} aria-controls="project-workspace" tabIndex={active ? 0 : -1} disabled={switching || savingNamed} title={(active ? path : tab.path) || 'Unnamed draft — saved in recovery'} onClick={() => switchProject(tab.id)} onKeyDown={event => { if (['ArrowLeft', 'ArrowRight'].includes(event.key)) { event.preventDefault(); cycleProject(event.key === 'ArrowRight' ? 1 : -1, true); } }}><FileText size={14} /><span>{title}</span>{active && ['pending', 'saving', 'error'].includes(saveState) && <span className={'tab-save-dot ' + saveState} aria-label={saveState === 'error' ? 'Save needs attention' : 'Saving changes'}>●</span>}</button>
+        <IconButton icon={X} title={`Close project ${title}`} disabled={switching || savingNamed} onClick={() => closeProject(tab.id)} />
+      </div>;
+    })}</div><IconButton icon={Plus} title="New project tab" disabled={switching || savingNamed} onClick={createNew} /></div>}
+    <div className="workspace" id="project-workspace" role="tabpanel" aria-labelledby={`project-tab-${workspace.activeId}`} inert={switching ? true : undefined}>
       {!focus && leftOpen && <aside className="sidebar">
         <div className="project-switcher"><div className="project-avatar"><BookOpen size={21} /></div><div className="project-switcher-text"><small>YOUR MANUSCRIPT</small><button className="project-title-button" onClick={() => setModal({ type: 'rename' })}>{project.title}<PenLine size={12} /></button></div></div>
         <button className="sidebar-search" onClick={() => setSearchOpen(x => !x)}><Search size={15} />Find in chapter<kbd>{formatShortcut(prefs.hotkeys?.find)}</kbd></button>
@@ -545,7 +604,7 @@ export default function App() {
       <main className="main-panel">
         <div className="document-topbar"><div className="document-location"><IconButton icon={leftOpen && !focus ? PanelLeftClose : PanelLeftOpen} title="Toggle manuscript sidebar" onClick={() => { setFocus(false); setLeftOpen(!leftOpen); }} /><button className="document-name" onClick={() => setModal({ type: 'rename' })}>{project.title}</button><ChevronRight size={13} /><span>{chapter.title}</span></div><div className="document-actions"><button className={'save-indicator ' + (saveState === 'error' ? 'error' : '')} title={saveError || path || 'Saved in recovery. Use File → Save to choose a file.'} onClick={() => saveNamed()}>{saveState === 'saving' || saveState === 'pending' ? <LoaderCircle size={13} className="spin" /> : saveState === 'error' ? <Info size={13} /> : <Check size={13} />}<span>{saveState === 'error' ? 'Save needs attention' : saveState === 'recovery' ? 'Recovery saved' : saveState === 'saved' ? path ? 'Saved' : 'Autosaved' : 'Saving'}</span></button><IconButton icon={Focus} title="Focus view" active={focus} onClick={() => setFocus(!focus)} /><IconButton icon={PanelRightOpen} title="Toggle writing assistant" active={panel === 'assist'} onClick={() => setPanel(panel === 'assist' ? null : 'assist')} /></div></div>
         {!focus && <div className="writer-toolbar formatbar" role="toolbar" aria-label="Text formatting">
-          <div className="native-toolbar-group"><IconButton icon={FilePlus2} title="New manuscript" onClick={() => setModal({ type: 'new' })} /><IconButton icon={FolderOpen} title="Open manuscript" onClick={() => openDocument()} /><IconButton icon={Save} title="Save manuscript" onClick={() => saveNamed()} /><IconButton icon={Undo2} title="Undo (Ctrl Z)" disabled={!undoInfo.canUndo} onClick={() => travelHistory('undo')} /><IconButton icon={Redo2} title="Redo (Ctrl Shift Z)" disabled={!undoInfo.canRedo} onClick={() => travelHistory('redo')} /></div>
+          <div className="native-toolbar-group"><IconButton icon={FilePlus2} title="New manuscript" onClick={createNew} /><IconButton icon={FolderOpen} title="Open manuscript" onClick={() => openDocument()} /><IconButton icon={Save} title="Save manuscript" onClick={() => saveNamed()} /><IconButton icon={Undo2} title="Undo (Ctrl Z)" disabled={!undoInfo.canUndo} onClick={() => travelHistory('undo')} /><IconButton icon={Redo2} title="Redo (Ctrl Shift Z)" disabled={!undoInfo.canRedo} onClick={() => travelHistory('redo')} /></div>
           <div className="native-toolbar-group"><select className="paragraph-style-select" aria-label="Paragraph style" value={titleStyle} onChange={e => editorCommand(c => e.target.value === 'paragraph' ? c.setParagraph() : c.setHeading({ level: Number(e.target.value.at(-1)) }))}><option value="paragraph">Normal</option><option value="heading1">Heading 1</option><option value="heading2">Heading 2</option><option value="heading3">Heading 3</option></select><FontPicker value={editor?.getAttributes('textStyle').fontFamily || docStyle.fontFamily} fonts={fonts} onChange={font => editorCommand(c => c.setFontFamily(font))} /><FontSizeInput value={parseFloat(editor?.getAttributes('textStyle').fontSize || docStyle.fontSize)} onApply={size => editorCommand(c => c.setFontSize(size + 'pt'))} /></div>
           <div className="native-toolbar-group"><IconButton icon={Bold} title="Bold (Ctrl B)" active={editor?.isActive('bold')} onClick={() => editorCommand(c => c.toggleBold())} /><IconButton icon={Italic} title="Italic (Ctrl I)" active={editor?.isActive('italic')} onClick={() => editorCommand(c => c.toggleItalic())} /><IconButton icon={Underline} title="Underline (Ctrl U)" active={editor?.isActive('underline')} onClick={() => editorCommand(c => c.toggleUnderline())} /><label className="font-color" title="Text colour"><Type size={17} /><input type="color" aria-label="Text colour" value={editor?.getAttributes('textStyle').color || '#222222'} onChange={e => editorCommand(c => c.setColor(e.target.value))} /></label><IconButton icon={Highlighter} title="Highlight" active={editor?.isActive('highlight')} onClick={() => editorCommand(c => c.toggleHighlight({ color: '#fff29b' }))} /></div>
           <div className="native-toolbar-group"><IconButton icon={AlignLeft} title="Align left" active={editor?.isActive({ textAlign: 'left' })} onClick={() => editorCommand(c => c.setTextAlign('left'))} /><IconButton icon={AlignCenter} title="Align centre" active={editor?.isActive({ textAlign: 'center' })} onClick={() => editorCommand(c => c.setTextAlign('center'))} /><IconButton icon={AlignRight} title="Align right" active={editor?.isActive({ textAlign: 'right' })} onClick={() => editorCommand(c => c.setTextAlign('right'))} /><IconButton icon={List} title="Bullet list" active={editor?.isActive('bulletList')} onClick={() => editorCommand(c => c.toggleBulletList())} /><IconButton icon={ListOrdered} title="Numbered list" active={editor?.isActive('orderedList')} onClick={() => editorCommand(c => c.toggleOrderedList())} /></div>
@@ -587,7 +646,6 @@ export default function App() {
     {proposal?.alternatives && editor && <RephraseOptions editor={editor} proposal={proposal} onChoose={chooseOption} onAccept={index => { chooseOption(index); acceptProposal(); }} onDismiss={rejectSuggestion} onRetry={retryAI} />}
     {modal?.type === 'settings' && <Settings Modal={Modal} fonts={fonts} initialTab={modal.tab} prefs={prefs} updatePrefs={updatePrefs} onClose={() => setModal(null)} notify={notify} />}
     {modal?.type === 'rename' && <Modal title="Document title" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); setModal(null); }}><label className="field-label">TITLE</label><input className="field-input" aria-label="Manuscript title" value={project.title} onChange={e => updateProject({ title: e.target.value })} /><div className="modal-footer"><button className="primary-button">Done</button></div></form></Modal>}
-    {modal?.type === 'new' && <Modal title="New manuscript" subtitle="Your current manuscript will be preserved. Unnamed drafts remain available through Recent manuscripts." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={async () => { await saveNamed(); }}>Save current manuscript</button><button className="primary-button" onClick={createNew}>Create manuscript</button></div></Modal>}
     {modal?.type === 'export' && <ExportDialog Modal={Modal} project={project} chapterId={activeId} hasSelection={Boolean(modal.selectionDoc)} onExport={exportDocument} onClose={() => setModal(null)} />}
     {modal?.type === 'link' && <Modal title="Link to something" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); const href = new FormData(e.currentTarget).get('href'); if (!/^(https?:\/\/|mailto:)/i.test(href)) { notify('Use a full https://, http://, or mailto: address.'); return; } editorCommand(c => c.extendMarkRange('link').setLink({ href })); setModal(null); }}><input className="field-input" name="href" aria-label="Link address" placeholder="https://" defaultValue={modal.value} /><div className="modal-footer"><button type="button" className="secondary-button" onClick={() => { editorCommand(c => c.unsetLink()); setModal(null); }}>Remove link</button><button className="primary-button">Apply link</button></div></form></Modal>}
     {modal?.type === 'table' && <Modal title="Table tools" onClose={() => setModal(null)}><div className="button-grid">{[['Insert 3 × 3 table', c => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }), false], ['Add row below', c => c.addRowAfter(), true], ['Add column', c => c.addColumnAfter(), true], ['Delete row', c => c.deleteRow(), true], ['Delete column', c => c.deleteColumn(), true], ['Remove table', c => c.deleteTable(), true]].map(([label, command, needsTable]) => <button className="secondary-button" key={label} disabled={needsTable && !editor?.isActive('table')} onClick={() => { editorCommand(command); setModal(null); }}>{label}</button>)}</div></Modal>}
@@ -599,6 +657,6 @@ export default function App() {
     {modal?.type === 'restore' && <Modal title="Return to this revision?" subtitle="We’ll capture your current version first, so you can return to it later." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep writing</button><button className="primary-button" onClick={() => { const item = modal.item; dismiss(); updateProject({ title: item.title, chapters: structuredClone(item.chapters), notes: item.notes || '', style: item.style || '', language: item.language || project.language, documentStyle: item.documentStyle || project.documentStyle, references: structuredClone(item.references || []), snapshots: [snapshot(project, 'Before restoring a revision'), ...project.snapshots].slice(0, 20) }); setActiveId(item.chapters[0].id); setEpoch(x => x + 1); setModal(null); notify('Revision restored.'); }}>Restore revision</button></div></Modal>}
     {modal?.type === 'reference' && <Modal title={modal.reference.name} subtitle="Attached copy. Linked files refresh separately before each AI request." onClose={() => setModal(null)} wide><pre className="reference-reader">{modal.reference.text}</pre></Modal>}
     {modal?.type === 'notice' && <Modal title={modal.title} onClose={() => setModal(null)}><p className="notice-copy">{modal.text}</p><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Continue writing</button></div></Modal>}
-    {modal?.type === 'about' && <Modal title="WRAITER · 0.5.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Write in continuous view with room to scroll past the end, or switch to divided pages. Ctrl+Enter inserts a saved page break. Selection rephrasing offers rated alternatives, navigable with arrow keys and accepted with Enter or Tab.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Claude Code / Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
+    {modal?.type === 'about' && <Modal title="WRAITER · 0.6.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Keep multiple projects in tabs, reopen recent files from the File menu, and choose whether to restore all tabs or start a clean project. Every project retains its own editing history. Continuous and divided pages, manual page breaks, and rated selection rephrasing remain available.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Claude Code / Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
   </div>;
 }

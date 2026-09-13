@@ -56,7 +56,7 @@ const envelope = (tools = [], message = 'Removed 3 repeated-space runs across bo
     await page.getByRole('dialog').getByRole('button', { name: 'Export', exact: true }).click(); await waitFor(async () => (await fs.stat(target)).size > 0, `${format} ${scope} export`);
     // Informational format-fidelity notices are allowed, and must be dismissed
     // before the next real native-menu workflow.
-    const closeNotice = page.getByRole('dialog').getByRole('button', { name: /^(Close|OK|Got it)$/ }); if (await closeNotice.count()) await closeNotice.first().click();
+    const closeNotice = page.getByRole('dialog').getByRole('button', { name: /^(Close(?: dialog)?|OK|Got it|Continue writing)$/ }); if (await closeNotice.count()) await closeNotice.first().click();
     return target;
   };
   try {

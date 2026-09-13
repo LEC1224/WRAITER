@@ -1,9 +1,9 @@
 export const DEFAULT_HOTKEYS = {
   complete: 'Tab', accept: 'Tab', acceptCharacter: 'ArrowRight', acceptWord: 'Ctrl+ArrowRight', dismiss: 'Escape',
   toggleAI: 'Ctrl+Shift+Space', toggleContinuous: 'Ctrl+Alt+Space', correct: 'Ctrl+Alt+G', rewrite: 'Ctrl+Alt+R',
-  save: 'Ctrl+S', saveCopy: 'Ctrl+Shift+S', open: 'Ctrl+O', new: 'Ctrl+N', find: 'Ctrl+F', replace: 'Ctrl+H', preferences: 'Ctrl+,', focus: 'F11', snapshot: 'Ctrl+Alt+S', pageBreak: 'Ctrl+Enter'
+  save: 'Ctrl+S', saveCopy: 'Ctrl+Shift+S', open: 'Ctrl+O', new: 'Ctrl+N', find: 'Ctrl+F', replace: 'Ctrl+H', preferences: 'Ctrl+,', focus: 'F11', snapshot: 'Ctrl+Alt+S', pageBreak: 'Ctrl+Enter', closeTab: 'Ctrl+W', nextTab: 'Ctrl+Tab', previousTab: 'Ctrl+Shift+Tab'
 };
-export const HOTKEY_LABELS = { complete: 'Suggest / rephrase selection', accept: 'Accept suggestion', acceptCharacter: 'Accept next character', acceptWord: 'Accept next word', dismiss: 'Dismiss / cancel', toggleAI: 'Toggle AI assistance', toggleContinuous: 'Toggle continuous suggestions', correct: 'Correct selection', rewrite: 'Rephrase selection', save: 'Save', saveCopy: 'Save as', open: 'Open', new: 'New document', find: 'Find', replace: 'Replace', preferences: 'Settings', focus: 'Focus view', snapshot: 'Save version', pageBreak: 'Insert page break' };
+export const HOTKEY_LABELS = { complete: 'Suggest / rephrase selection', accept: 'Accept suggestion', acceptCharacter: 'Accept next character', acceptWord: 'Accept next word', dismiss: 'Dismiss / cancel', toggleAI: 'Toggle AI assistance', toggleContinuous: 'Toggle continuous suggestions', correct: 'Correct selection', rewrite: 'Rephrase selection', save: 'Save', saveCopy: 'Save as', open: 'Open', new: 'New document', find: 'Find', replace: 'Replace', preferences: 'Settings', focus: 'Focus view', snapshot: 'Save version', pageBreak: 'Insert page break', closeTab: 'Close project tab', nextTab: 'Next project tab', previousTab: 'Previous project tab' };
 export function shortcutFromEvent(event) {
   if (['Control', 'Alt', 'Shift', 'Meta', 'AltGraph', 'Dead', 'Process'].includes(event.key) || event.isComposing) return '';
   const key = event.key === ' ' ? 'Space' : event.key.length === 1 ? event.key.toUpperCase() : event.key;

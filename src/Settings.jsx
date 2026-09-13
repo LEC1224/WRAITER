@@ -17,7 +17,7 @@ function NumberField({ label, value, min, max, step = 1, onChange, help }) {
 }
 
 export default function Settings({ initialTab, prefs, updatePrefs, onClose, notify, fonts = [], Modal }) {
-  const [tab, setTab] = useState(['appearance', 'language', 'connections', 'local', 'ai', 'hotkeys'].includes(initialTab) ? initialTab : 'appearance');
+  const [tab, setTab] = useState(['general', 'appearance', 'language', 'connections', 'local', 'ai', 'hotkeys'].includes(initialTab) ? initialTab : 'appearance');
   const [draft, setDraft] = useState(() => ({ ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
   const [task, setTask] = useState('continue');
   const [keyEdits, setKeyEdits] = useState({});
@@ -94,10 +94,11 @@ export default function Settings({ initialTab, prefs, updatePrefs, onClose, noti
     finally { if (mounted.current) setSaving(false); }
   }
 
-  const tabs = [['appearance', 'Appearance', Sun], ['language', 'Languages', Globe2], ['connections', 'Connections', Plug], ['local', 'Local models', Download], ['ai', 'Writing AI', SlidersHorizontal], ['hotkeys', 'Shortcuts', Keyboard]];
+  const tabs = [['general', 'General', SlidersHorizontal], ['appearance', 'Appearance', Sun], ['language', 'Languages', Globe2], ['connections', 'Connections', Plug], ['local', 'Local models', Download], ['ai', 'Writing AI', SlidersHorizontal], ['hotkeys', 'Shortcuts', Keyboard]];
   return <Modal title="Settings" onClose={saving ? () => {} : onClose} wide>
     <div className="settings-tabs" role="tablist" aria-label="Settings categories">{tabs.map(([id, label, Icon]) => <button type="button" key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'selected' : ''} onClick={() => { setCapturing(''); setTab(id); }}><Icon size={15} />{label}</button>)}</div>
     <div className="settings-content" role="tabpanel" aria-label={tabs.find(([id]) => id === tab)?.[1]}>
+      {tab === 'general' && <><h3>Projects and startup</h3><label className="field-label" htmlFor="startup-projects">When WRAITER starts</label><select id="startup-projects" className="field-input" aria-label="When WRAITER starts" value={draft.startup || 'restore'} onChange={event => set('startup', event.target.value)}><option value="restore">Restore all open project tabs</option><option value="new">Open a clean new project</option></select><p className="small-muted">Restoring includes unnamed drafts and the last active tab. Each project keeps its own editing history. Starting clean preserves unnamed drafts in File → Open recent.</p><p className="small-muted">New and Open add a project tab. Closing a tab keeps its saved file; unnamed drafts remain available in Open recent. This setting takes effect the next time you launch WRAITER.</p></>}
       {tab === 'local' && <LocalModels notify={notify} onAssign={(which, model) => setProfile(which, { provider: 'local', baseUrl: '', model })} />}
       {tab === 'appearance' && <>
         <label className="field-label" htmlFor="document-page-view">Document view</label><select id="document-page-view" className="field-input" aria-label="Document view" value={draft.pageMode || 'continuous'} onChange={event => set('pageMode', event.target.value)}><option value="continuous">Continuous — infinite page (default)</option><option value="pages">Divided pages</option></select><p className="small-muted">Both views let you scroll almost one screen below the document. Divided pages flow with your font and column width. Insert a manual page break from Edit → Insert page break{draft.hotkeys.pageBreak ? ` or ${formatShortcut(draft.hotkeys.pageBreak)}` : ''}; Backspace at the start of that paragraph removes it.</p>
