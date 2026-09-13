@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const { hash, atomicWrite, readLimited, validateProject, samePath } = require('./core.cjs');
 const FORMATS = ['wraiter', 'odt', 'docx', 'txt', 'md', 'html'];
 const formatOf = target => ({ htm: 'html', markdown: 'md' }[path.extname(target).slice(1).toLowerCase()] || path.extname(target).slice(1).toLowerCase());
-const contentHash = project => hash(JSON.stringify({ title: project.title, chapters: project.chapters, documentStyle: project.documentStyle, language: project.language, layout: project.layout }));
+const contentHash = project => hash(JSON.stringify({ title: project.title, chapters: project.chapters, documentStyle: project.documentStyle, language: project.language, layout: project.layout }, (key, value) => key === 'pageBreakBefore' && value == null ? undefined : value));
 class DocumentFiles {
   constructor(store, directory) { this.store = store; this.directory = directory; this.binding = null; this.openings = new Map(); this.targets = new Map(); }
   sidecar(target) { return path.join(this.directory, 'Format state', `${hash(process.platform === 'win32' ? path.resolve(target).toLowerCase() : path.resolve(target))}.json`); }

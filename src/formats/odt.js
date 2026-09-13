@@ -76,6 +76,7 @@ export async function toODT(project, options = {}) {
     if (['paragraph', 'heading'].includes(node.type)) {
       const props = {};
       if (attrs.textAlign) props['fo:text-align'] = attrs.textAlign;
+      if (attrs.pageBreakBefore) props['fo:break-before'] = 'page';
       if (attrs.spaceAfter != null) props['fo:margin-bottom'] = `${Number(attrs.spaceAfter)}pt`;
       if (attrs.firstLineIndent != null) props['fo:text-indent'] = `${Number(attrs.firstLineIndent)}pt`;
       if (attrs.lineHeight) props['fo:line-height'] = /^[\d.]+$/.test(String(attrs.lineHeight)) ? `${Number(attrs.lineHeight) * 100}%` : attrs.lineHeight;

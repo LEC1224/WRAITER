@@ -67,6 +67,17 @@ if (process.versions.electron) {
         console.log(`PASS ${payload.pdfPreset} actual PDF ${width} × ${height} pt; ${pageCount} pages`);
       }
       assert(results[2].pageCount > results[0].pageCount, 'Mobile preset did not reflow into more pages');
+      const manual = await page.evaluate(async () => {
+        const { exportPayload } = await import('/src/io.js'), { newProject, paragraph } = await import('/src/document.js'), { extensions } = await import('/src/Editor.jsx');
+        const project=newProject();project.chapters[0].content={type:'doc',content:[paragraph('First manual page.'),{...paragraph('Second manual page.'),attrs:{pageBreakBefore:true}}]};
+        return exportPayload(project,'pdf',extensions,{includeTitle:false,includeChapterTitles:false});
+      });
+      const manualBytes=await application.evaluate(async({BrowserWindow},html)=>{
+        const window=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});
+        try{await window.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(html));await window.webContents.executeJavaScript('document.fonts.ready');return Array.from(await window.webContents.printToPDF({preferCSSPageSize:true,printBackground:true}))}finally{window.destroy()}
+      },manual.html);
+      const manualPDF=Buffer.from(manualBytes);assert.equal((manualPDF.toString('latin1').match(/\/Type\s*\/Page\b/g)||[]).length,2,'Manual break did not create a second printed page');
+      await fs.writeFile(path.join(output,'manual-break.pdf'),manualPDF);console.log('PASS manual paragraph break produces exactly two PDF pages');
       console.log(`PASS PDF presets render without clipping manuscript endpoints; saved in ${output}`);
     } finally { await application?.close(); await server.close(); }
   })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -6,6 +6,7 @@ export function formatLosses(project, format) {
   const name = plain ? 'Plain text' : 'Markdown';
   const visit = node => {
     const attrs = node.attrs || {}, marks = node.marks || [];
+    if ((plain || markdown) && attrs.pageBreakBefore) warnings.add(`${name} does not retain manual page breaks.`);
     if (format === 'html') {
       if (node.type === 'image' && !/^data:image\/(png|jpe?g|gif|webp);base64,/i.test(attrs.src || '')) warnings.add('An external or unsupported image is replaced with a labelled placeholder.');
     } else {

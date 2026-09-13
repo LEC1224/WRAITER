@@ -215,5 +215,17 @@ export async function runIOTests() {
     assert(mobile.html.includes('#1b1d20') && mobile.pdfOptions.printBackground && mobile.pdfOptions.preferCSSPageSize, 'Dark mobile PDF print settings missing');
     assert(!mobile.html.includes('Exact') && mobile.html.includes('Second chapter: Så'), 'PDF scope includes another chapter');
   });
+  await test('Manual page breaks survive ODT, DOCX and HTML saveback and enter PDF print CSS', async () => {
+    const project=newProject();project.chapters[0].content={type:'doc',content:[paragraph('Before the manual break.'),{...paragraph('After the manual break.'),attrs:{pageBreakBefore:true}}]};
+    for(const format of ['odt','docx','html']) {
+      const payload=await exportPayload(project,format,extensions,{includeTitle:false,includeChapterTitles:false});
+      const bytes=typeof payload.data==='string'?new TextEncoder().encode(payload.data):payload.data;
+      const imported=await importDocument({name:'Manual break',extension:'.'+format,bytes:Array.from(bytes)},extensions);
+      assert(all(imported.project.chapters[0].content).some(node=>node.attrs?.pageBreakBefore&&nodeText(node)==='After the manual break.'),format+' lost manual page break');
+      importedProjects.push(imported.project);
+    }
+    const pdf=await exportPayload(project,'pdf',extensions);assert(/break-before:\s*page/.test(pdf.html),'PDF lost page-break CSS');
+    const plain=await exportPayload(project,'txt',extensions);assert(plain.lossWarnings.some(message=>message.includes('page breaks')),'Text format did not disclose page-break loss');
+  });
   return { passed, docxBytes: docx.data.length, importedProjects };
 }

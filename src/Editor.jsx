@@ -10,14 +10,15 @@ import { TableKit } from '@tiptap/extension-table';
 import { GhostText, SearchHighlight, ParagraphFormat, ghostKey } from './extensions.js';
 import { DEFAULT_HOTKEYS, shortcutFromEvent } from './hotkeys.js';
 import { HISTORY_SELECTION_META } from './history.js';
+import { Pagination, paginationKey, removePageBreakAtCursor } from './pagination.js';
 
 export const extensions = [
   StarterKit.configure({ undoRedo: false, heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: false } }),
   TextStyleKit, TextAlign.configure({ types: ['heading', 'paragraph'] }),
   Highlight.configure({ multicolor: true }), Image.configure({ allowBase64: true }), TableKit.configure({ table: { resizable: true } }),
-  Placeholder.configure({ placeholder: 'Start writing…' }), ParagraphFormat, GhostText, SearchHighlight
+  Placeholder.configure({ placeholder: 'Start writing…' }), ParagraphFormat, GhostText, SearchHighlight, Pagination
 ];
-export default function ManuscriptEditor({ chapter, prefs, onReady, onChange, onSelection, onAction }) {
+export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onReady, onChange, onSelection, onAction }) {
   const callbacks = useRef({ onReady, onChange, onSelection, onAction, prefs });
   callbacks.current = { onReady, onChange, onSelection, onAction, prefs };
   const editor = useEditor({
@@ -28,9 +29,12 @@ export default function ManuscriptEditor({ chapter, prefs, onReady, onChange, on
         const ghost = ghostKey.getState(view.state);
         const keys = { ...DEFAULT_HOTKEYS, ...callbacks.current.prefs.hotkeys }, pressed = shortcutFromEvent(event);
         if (!pressed) return false;
+        if (pressed === 'Backspace' && removePageBreakAtCursor(view)) { event.preventDefault(); return true; }
         let action;
         if (['Ctrl+Z', 'Meta+Z'].includes(pressed)) action = 'undo';
         else if (['Ctrl+Y', 'Ctrl+Shift+Z', 'Shift+Meta+Z'].includes(pressed)) action = 'redo';
+        else if (ghost?.alternatives && ['ArrowDown', 'ArrowUp'].includes(pressed)) action = pressed === 'ArrowDown' ? 'option-next' : 'option-previous';
+        else if (ghost?.alternatives && ['Enter', 'Tab'].includes(pressed)) action = 'accept';
         else if (ghost?.text && pressed === keys.accept) action = 'accept';
         else if (ghost?.text && ghost.kind !== 'revision' && pressed === keys.acceptCharacter) action = 'accept-character';
         else if (ghost?.text && ghost.kind !== 'revision' && pressed === keys.acceptWord) action = 'accept-word';
@@ -38,6 +42,7 @@ export default function ManuscriptEditor({ chapter, prefs, onReady, onChange, on
         else if (callbacks.current.prefs.enabled && pressed === keys.complete) action = view.state.selection.empty ? 'continue' : 'rewrite';
         else if (callbacks.current.prefs.enabled && pressed === keys.correct) action = 'correct';
         else if (callbacks.current.prefs.enabled && pressed === keys.rewrite) action = 'rewrite';
+        else if (pressed === keys.pageBreak) action = 'page-break';
         if (action) { event.preventDefault(); callbacks.current.onAction(action); return true; }
         return false;
       },
@@ -69,5 +74,6 @@ export default function ManuscriptEditor({ chapter, prefs, onReady, onChange, on
     return () => { editor.off('beforeTransaction', captureSelection); callbacks.current.onReady(null); };
   }, [editor]);
   useEffect(() => { editor?.setOptions({ editorProps: { ...editor.options.editorProps, attributes: { ...editor.options.editorProps.attributes, spellcheck: String(prefs.spellcheck), lang: prefs.language } } }); }, [editor, prefs.spellcheck, prefs.language]);
+  useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(paginationKey, { enabled: prefs.pageMode === 'pages', revision: JSON.stringify([prefs.zoom, prefs.measure, layoutSignature]) }).setMeta('addToHistory', false)); }, [editor, prefs.pageMode, prefs.zoom, prefs.measure, layoutSignature]);
   return <EditorContent editor={editor} />;
 }

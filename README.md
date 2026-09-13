@@ -1,23 +1,27 @@
 # WRAITER
 
-Windows desktop writing with integrated AI assistance. Version 0.4 adds managed local inference, optional portable Ollama, offline model discovery, GGUF registration, model downloads, and agent tools that remove actual paragraph blocks. It retains direct ODT/DOCX/text-format saving, persistent atomic undo/redo, document layouts, font previews, scoped exports, native menus, customizable keyboard behaviour, task-specific models, saved Codex connections, and Git checkpoints.
+Windows desktop writing with integrated AI assistance. Version 0.5 adds room to scroll below the document, optional divided pages, persistent manual page breaks, and ranked rephrasing/translation alternatives. It retains managed local inference, portable Ollama, GGUF registration, document-editing agents, direct ODT/DOCX/text saving, persistent undo/redo, scoped exports, native menus, customizable keyboard behaviour, task-specific models, saved Codex connections, and Git checkpoints.
 
 ## Run
 
-Open `release/WRAITER-0.4.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, **Save as**, and **Export**. New documents start blank.
+Open `release/WRAITER-0.5.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, **Save as**, and **Export**. New documents start blank.
 
 ## Writing and formatting
 
 - Chapter outline, titles, ordering, status, and word counts; optional notes, references, history, and assistant panels.
 - A searchable installed-font picker renders every font name in its own font. Direct controls cover point sizes, text colour, bold/italic/underline, highlighting, alignment, lists, images, links, and tables.
 - Paragraph spacing and first-line indentation; document default font/size/line spacing. Document formatting is saved and carried into supported exports.
-- Light, Dark, and High contrast themes, document zoom, continuous/page-width views, and focus mode.
+- Light, Dark, and High contrast themes, document zoom, continuous/divided-page views, and focus mode.
 - Find/replace, undo/redo, local spellchecking, and a content-language selector on the status bar.
 - Automatic recovery, preceding-save `.bak` backups, and Git versions. External edits are detected before overwriting a named document.
 
 Choose **Story**, **Article**, **Submission manuscript**, **Report**, or **Notes** from the status bar. Story is the default and hides reading statistics beneath the chapter title. Article shows them. Layouts set document typography and spacing; the paragraph settings dialog also provides an independent reading-statistics checkbox. Word counts remain available in the outline and status bar.
 
 Use the paragraph settings button at the right of the formatting toolbar for document defaults. A toolbar font change affects selected text or newly typed text, like a conventional word processor. Zoom changes only the view.
+
+**Settings → Appearance → Document view** chooses Continuous (the default infinite page) or Divided pages. Both provide almost one viewport of workspace below the document, so the last line can sit higher on screen. The status-bar view button and View menu also switch modes; the choice survives restart. Divided pages use A4 proportions at the current column width and flow wrapped paragraphs automatically. Page gaps and numbers are view decorations, so switching views does not add text, paragraph breaks or undo actions. Oversized tables/objects stay intact on an expanded sheet. Export pagination follows its selected paper preset and can differ from the editing view.
+
+**Ctrl+Enter** inserts a manual page break at the cursor, also available under **Edit → Insert page break**. It splits the current paragraph and starts the following paragraph on a new page. Backspace at that paragraph's start removes the break. Manual breaks remain visible as markers in Continuous view and persist through save, restart, undo/redo, ODT, DOCX, HTML and PDF. Plain text and Markdown disclose the formatting loss before native save. Page-break insertion has a customizable shortcut; an existing Ctrl+Enter binding is preserved during upgrade instead of being reassigned.
 
 ## AI behaviour
 
@@ -27,6 +31,8 @@ Enable AI using the toolbar or Ctrl+Shift+Space. Inline suggestions and selectio
 |---|---|
 | Request autocomplete at the cursor | Tab |
 | Rephrase only selected text | Select text, then Tab |
+| Choose a rephrasing alternative | Up / Down arrow |
+| Accept the highlighted alternative | Enter / Tab |
 | Accept the displayed suggestion/revision | Tab |
 | Accept next suggested character | Right arrow |
 | Accept next suggested word | Ctrl+Right |
@@ -40,10 +46,13 @@ Enable AI using the toolbar or Ctrl+Shift+Space. Inline suggestions and selectio
 | Find / replace | Ctrl+F / Ctrl+H |
 | Settings / focus view | Ctrl+, / F11 |
 | Save a version | Ctrl+Alt+S |
+| Insert a manual page break | Ctrl+Enter |
 
 Change these in **Settings → Keyboard shortcuts**. Suggest and Accept deliberately share Tab because they operate in different states. Standard rich-text shortcuts such as Ctrl+B and Ctrl+Z remain available.
 
-Autocomplete receives only text before the cursor. Its configurable context budget retains an opening excerpt and recent prose. Selection edits receive the selected text and up to ten nearby words on each side. Bracketed instructions within a selection are treated as editing guidance and excluded from the requested replacement. Escape retains the selection; requesting again discourages repetition of rejected alternatives without reducing suggestion length.
+Autocomplete receives only text before the cursor. Its configurable context budget retains an opening excerpt and recent prose. Correction receives the selected text and up to ten nearby words on each side; ranked rephrasing/translation receives up to eighty on each side to judge the surrounding sentence. Bracketed instructions within a selection are treated as editing guidance and excluded from the requested replacement. Escape retains the selection; requesting again discourages repetition of rejected alternatives without reducing suggestion length.
+
+Selection rephrasing presents up to three distinct alternatives in a dropdown beside the selection. **Up/Down** changes the highlighted option, **Enter or Tab** accepts it, **Escape** dismisses the list, and clicking an option accepts it. **More alternatives** requests another set. One to three stars represent the model's editorial judgment of contextual fit, with ties allowed; they are not confidence probabilities. Models that return only a single plain replacement are shown as Unrated. Ratings and unaccepted alternatives never enter the manuscript. Acceptance replaces only the selected text and remains one undo action.
 
 A three-dot indicator marks a pending request. When text typed during generation matches the start of a continuation, only its untyped remainder is shown. Incompatible edits invalidate the pending result. Typing over a displayed revision resumes after the original selected text. Previews do not affect word counts, saved files, or exports. Accepted revisions preserve unchanged marks where possible and can be undone.
 
@@ -125,6 +134,7 @@ npm run test:io
 npm run test:app
 npm run test:v03
 npm run test:v04
+npm run test:v05
 npm run test:history-recovery
 npm run test:pdf
 npm run test:office

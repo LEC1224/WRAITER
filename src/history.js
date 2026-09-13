@@ -21,7 +21,9 @@ function stable(value) {
   if (value === undefined) return 'null';
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']';
-  return '{' + Object.keys(value).sort().filter(key => value[key] !== undefined).map(key => JSON.stringify(key) + ':' + stable(value[key])).join(',') + '}';
+  // A new optional schema attribute must not invalidate journals made before
+  // it existed. An absent page break and the schema's null default are equal.
+  return '{' + Object.keys(value).sort().filter(key => value[key] !== undefined && !(key === 'pageBreakBefore' && value[key] == null)).map(key => JSON.stringify(key) + ':' + stable(value[key])).join(',') + '}';
 }
 
 // Two independent 32-bit hashes plus serialized length catch accidental stale

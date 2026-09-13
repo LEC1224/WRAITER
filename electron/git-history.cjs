@@ -18,7 +18,7 @@ function textOf(node) {
 }
 function contentFingerprint(project) {
   const { updatedAt, snapshots, historySequence, binding, fileBinding, nativeBinding, ...content } = project;
-  return hash(JSON.stringify(content));
+  return hash(JSON.stringify(content, (key, value) => key === 'pageBreakBefore' && value == null ? undefined : value));
 }
 class GitHistory {
   constructor(directory, options = {}) {

@@ -1,6 +1,7 @@
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const { buildPrompt, cleanResult } = require('./core.cjs');
+const { parseRephraseOptions } = require('./rephrase-options.cjs');
 const { getBridge, disconnect, resolveCodex, codexEnvironment, COMPLETION_SCHEMA } = require('./codex-bridge.cjs');
 const { isLocalOllama, startOllama, stopOwnedOllama } = require('./ollama-service.cjs');
 let localModels;
@@ -121,7 +122,7 @@ async function runOllama(settings, prompt, request, signal) {
   if (mode === 'raw' || (mode === 'auto' && guidedUnavailable.has(guidedKey))) return raw();
   try {
     const guided = mode === 'auto' || mode === 'guided';
-    const chatMessages = guided ? [{ ...messages[0], content: `${messages[0].content}\nReturn JSON with exactly one string field named completion containing ${request.mode === 'agent' ? 'the requested action envelope serialized as a JSON string' : 'the requested prose'}, with no commentary.` }, messages[1]] : messages;
+    const chatMessages = guided ? [{ ...messages[0], content: `${messages[0].content}\nReturn JSON with exactly one string field named completion containing ${request.mode === 'agent' || request.alternatives ? 'the requested JSON object serialized as a JSON string' : 'the requested prose'}, with no commentary.` }, messages[1]] : messages;
     const data = await requestJSON(endpoint(settings.baseUrl, 'api/chat'), { method: 'POST', headers, body: JSON.stringify({ ...common, messages: chatMessages, options, ...(guided ? { format: COMPLETION_SCHEMA } : {}) }) }, signal);
     if (data.done_reason === 'length' && request.mode !== 'continue') throw new Error('The model reached the output limit. Increase the token limit before accepting a partial revision.');
     if (!guided) return data.message?.content;
@@ -171,7 +172,7 @@ async function generate(settings, key, request, signal, suppliedPrompt) {
   } else throw new Error('Choose a provider in Connections.');
   if (typeof result !== 'string' || !result.trim()) throw new Error('The provider returned no usable text. Try another model or request.');
   signal?.throwIfAborted();
-  return request.mode === 'agent' ? result.trim() : cleanResult(result, request.mode, request.words, request);
+  return request.alternatives ? parseRephraseOptions(result, request) : request.mode === 'agent' ? result.trim() : cleanResult(result, request.mode, request.words, request);
 }
 // Only the local writing-agent module supplies this prompt. Renderer IPC never
 // accepts arbitrary system instructions or machine-tool definitions.

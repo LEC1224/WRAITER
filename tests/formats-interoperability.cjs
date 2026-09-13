@@ -29,7 +29,7 @@ const { chromium } = require('playwright');
         { type: 'paragraph', content: [{ type: 'text', text: 'A bold passage in Arial.', marks: [{ type: 'bold' }, { type: 'textStyle', attrs: { fontFamily: 'Arial', fontSize: '16pt', color: '#334455' } }] }] },
         { type: 'orderedList', attrs: { start: 3 }, content: [{ type: 'listItem', content: [paragraph('First numbered item')] }, { type: 'listItem', content: [paragraph('Second numbered item')] }] },
         { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableHeader', attrs: { colspan: 2, rowspan: 1 }, content: [paragraph('A merged header')] }] }, { type: 'tableRow', content: [{ type: 'tableCell', content: [paragraph('Left cell')] }, { type: 'tableCell', content: [paragraph('Right cell')] }] }] },
-        { type: 'image', attrs: { src: canvas.toDataURL('image/png'), alt: 'Synthetic rectangle' } }, paragraph('The final visible paragraph.')
+        { type: 'image', attrs: { src: canvas.toDataURL('image/png'), alt: 'Synthetic rectangle' } }, { ...paragraph('The final visible paragraph.'), attrs: { pageBreakBefore: true } }
       ] } }];
       return Promise.all(['odt', 'docx'].map(async format => ({ format, bytes: Array.from((await exportPayload(project, format, extensions, { nativeSave: true })).data) })));
     });
@@ -39,10 +39,11 @@ const { chromium } = require('playwright');
     assert(converted.status === 0, `LibreOffice could not open generated office files: ${converted.stderr || converted.error || converted.stdout}`);
     for (const file of files) {
       const pdf = path.join(output, `native-${file.format}.pdf`); await fs.access(pdf);
-      const extracted = spawnSync(process.env.WRAITER_TEST_PYTHON || 'python', ['-c', 'import fitz,json,sys; d=fitz.open(sys.argv[1]); d[0].get_pixmap(matrix=fitz.Matrix(1.1,1.1)).save(sys.argv[2]); print(json.dumps({"text":"\\n".join(p.get_text() for p in d),"pages":len(d),"fonts":[font[3] for p in d for font in p.get_fonts()]}))', pdf, path.join(output, `native-${file.format}.png`)], { encoding: 'utf8', windowsHide: true });
+      const extracted = spawnSync(process.env.WRAITER_TEST_PYTHON || 'python', ['-c', 'import fitz,json,sys; d=fitz.open(sys.argv[1]); d[0].get_pixmap(matrix=fitz.Matrix(1.1,1.1)).save(sys.argv[2]); print(json.dumps({"text":"\\n".join(p.get_text() for p in d),"pages":len(d),"pageTexts":[p.get_text() for p in d],"fonts":[font[3] for p in d for font in p.get_fonts()]}))', pdf, path.join(output, `native-${file.format}.png`)], { encoding: 'utf8', windowsHide: true });
       assert(extracted.status === 0, 'PyMuPDF is required to inspect independent office rendering');
       const actual = JSON.parse(extracted.stdout);
       for (const text of ['A visible opening paragraph.', 'Så börjar det.', 'A bold passage in Arial.', 'First numbered item', 'Second numbered item', 'A merged header', 'Left cell', 'Right cell', 'The final visible paragraph.']) assert(actual.text.includes(text), `${file.format} lost visible content in independent office rendering: ${text}`);
+      assert(actual.pages === 2 && !actual.pageTexts[0].includes('The final visible paragraph.') && actual.pageTexts[1].includes('The final visible paragraph.'), `${file.format} lost the explicit page break`);
       assert(!actual.text.includes('PRIVATE'), `${file.format} inserted app metadata into visible document`);
       assert(actual.fonts.some(name => /Arial/i.test(name)), `${file.format} lost individual run font in office rendering`);
       console.log(`PASS LibreOffice opens ${file.format.toUpperCase()} with native wording, lists, merged table, image and Arial formatting; ${actual.pages} page(s)`);

@@ -33,6 +33,7 @@ function validateContent(doc, budget) {
     if (++budget.count > 300000 || depth > 64) invalid('This document is too complex for this preview.');
     if (!object(node) || (!Object.hasOwn(children, node.type) && !leaves.has(node.type))) invalid('This document contains an unsupported text element.');
     validateAttrs(node.attrs);
+    if (node.attrs?.pageBreakBefore != null && typeof node.attrs.pageBreakBefore !== 'boolean') invalid('Invalid page break.');
     if (node.type === 'text') { string(node.text, 'text run', MAX_DOCUMENT_BYTES); if (!node.text.length) invalid('An empty text run is invalid.'); }
     else if (node.text != null) invalid('A non-text element contains unexpected text.');
     if (node.type === 'heading' && (!Number.isInteger(node.attrs?.level) || node.attrs.level < 1 || node.attrs.level > 6)) invalid('Invalid heading level.');
@@ -190,6 +191,7 @@ class DocumentStore {
 function validateRequest(request) {
   if (!object(request) || !['continue', 'correct', 'rewrite', 'chat'].includes(request.mode)) throw new Error('Unknown writing action.');
   string(request.id, 'request identifier', 200, true);
+  if (request.alternatives != null && (typeof request.alternatives !== 'boolean' || request.mode !== 'rewrite')) throw new Error('Alternatives are only available for selection rephrasing.');
   for (const field of ['before', 'after', 'selection', 'instruction', 'style', 'language', 'nativeLanguage']) if (request[field] != null) string(request[field], `request ${field}`);
   if (request.references != null && (!Array.isArray(request.references) || request.references.length > 20 || request.references.some(r => !object(r) || typeof r.name !== 'string' || typeof r.text !== 'string'))) throw new Error('Invalid AI references.');
   if (request.history != null && (!Array.isArray(request.history) || request.history.some(x => typeof x !== 'string'))) throw new Error('Invalid suggestion history.');
@@ -216,10 +218,12 @@ function buildPrompt(request) {
   task += `\nThe document's content language is ${language}. Use this language and its spelling conventions.`;
   if (nativeLanguage && ['rewrite', 'correct'].includes(mode)) task += `\nThe author's native language is ${nativeLanguage}. If the selected word or phrase is in ${nativeLanguage} and differs from the document language ${language}, translate ONLY that selected text naturally into ${language}, using the nearby sentence for context. Otherwise perform the requested correction or rephrasing in ${language}. Do not translate names or text already in the document language unnecessarily.`;
   if (guidance) task += `\nThe author included these bracketed editing instructions: ${guidance}\nFollow them for this selection. Do not include the brackets or their instruction text in the replacement.`;
+  if (mode === 'rewrite' && request.alternatives) task += '\nFor this request, return ONLY JSON: {"alternatives":[{"text":"replacement","rating":3},{"text":"another replacement","rating":2},{"text":"another replacement","rating":1}]}. Offer three distinct, natural alternatives when possible; fewer is better than inventing misleading synonyms. Each text replaces ONLY the selection and must fit grammatically into its surrounding sentence. Translate a foreign-language selection into the content language when appropriate. Rate contextual fit from 1 to 3 stars: 3 = strongest fit, 2 = good alternative, 1 = plausible but weaker. Ratings are your editorial judgment, not certainty or probabilities; ties are allowed. Rank strongest first. Preserve meaning and do not supply incorrect translations merely to fill the list. No explanations, labels, or star characters inside replacement text. This JSON format overrides the single-replacement output instruction above.';
   const localSelection = ['correct', 'rewrite'].includes(mode);
-  const beforeContext = localSelection ? (before.match(/\S+\s*/g) || []).slice(-10).join('') : contextBefore(before, contextWords);
+  const nearbyWords = request.alternatives ? 80 : 10;
+  const beforeContext = localSelection ? (before.match(/\S+\s*/g) || []).slice(-nearbyWords).join('') : contextBefore(before, contextWords);
   let body = `${task}\n\nREFERENCE MATERIAL:\n${refText || '(none)'}\n\nTEXT BEFORE CURSOR:\n${beforeContext}`;
-  if (mode !== 'continue') body += `\n\nSELECTED TEXT:\n${selectedText.slice(0, 16000)}\n\nTEXT AFTER CURSOR:\n${localSelection ? (after.match(/\S+\s*/g) || []).slice(0, 10).join('') : after.slice(0, 10000)}`;
+  if (mode !== 'continue') body += `\n\nSELECTED TEXT:\n${selectedText.slice(0, 16000)}\n\nTEXT AFTER CURSOR:\n${localSelection ? (after.match(/\S+\s*/g) || []).slice(0, nearbyWords).join('') : after.slice(0, 10000)}`;
   if (history.length) body += `\n\nDo not repeat these rejected alternatives:\n${history.slice(-3).map(x => String(x).slice(0, 1500)).join('\n---\n')}`;
   if (mode === 'chat' && conversation.length) body += `\n\nPRIOR CONVERSATION (context only; answer the current author question above):\n${conversation.slice(-8).map(x => `${x.role.toUpperCase()}: ${x.text.slice(0, 3000)}`).join('\n\n').slice(-16000)}`;
   return { system: rules, user: body };

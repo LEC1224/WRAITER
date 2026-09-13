@@ -18,10 +18,12 @@ import HistoryPanel from './HistoryPanel.jsx';
 import { LAYOUTS, documentLayout } from './layouts.js';
 import { normalizeHistoryProject, prepareHistoryLoad, recordTransaction, recordProjectChange, applyHistory, historyStatus } from './history.js';
 import { applyAgentResult } from './agent-edits.js';
+import RephraseOptions from './RephraseOptions.jsx';
+import { insertPageBreak } from './pagination.js';
 
 const api = window.wraiter;
 const schema = getSchema(extensions);
-const DEFAULTS = { theme: 'paper', font: 'Cambria', fontSize: 16, lineHeight: 1.5, measure: 720, zoom: 100, predictionWords: 35, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', goal: 500, spellcheck: true, language: 'en-US', nativeLanguage: '', provider: 'codex', baseUrl: '', model: '', enabled: false, continuous: false, hotkeys: DEFAULT_HOTKEYS };
+const DEFAULTS = { pageMode: 'continuous', theme: 'paper', font: 'Cambria', fontSize: 16, lineHeight: 1.5, measure: 720, zoom: 100, predictionWords: 35, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', goal: 500, spellcheck: true, language: 'en-US', nativeLanguage: '', provider: 'codex', baseUrl: '', model: '', enabled: false, continuous: false, hotkeys: DEFAULT_HOTKEYS };
 const providerNames = { local: 'Local models', ollama: 'Ollama', openai: 'OpenAI', compatible: 'Compatible API / xAI', anthropic: 'Claude API', codex: 'Codex' };
 const errorText = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
@@ -59,7 +61,7 @@ function Modal({ title, subtitle, children, onClose, wide = false }) {
 export default function App() {
   const [project, setProject] = useState(null), [prefs, setPrefs] = useState(DEFAULTS), [activeId, setActiveId] = useState(null);
   const [path, setPath] = useState(null), [saveState, setSaveState] = useState('saved'), [saveError, setSaveError] = useState('');
-  const [panel, setPanel] = useState(null), [leftOpen, setLeftOpen] = useState(true), [focus, setFocus] = useState(false), [pageView, setPageView] = useState(true);
+  const [panel, setPanel] = useState(null), [leftOpen, setLeftOpen] = useState(true), [focus, setFocus] = useState(false);
   const [modal, setModal] = useState(null), [menu, setMenu] = useState(false), [toast, setToast] = useState(''), [epoch, setEpoch] = useState(0);
   const [editor, setEditor] = useState(null), [, refreshToolbar] = useState(0), [selection, setSelection] = useState({ from: 0, to: 0 });
   const [query, setQuery] = useState(''), [replacement, setReplacement] = useState(''), [searchOpen, setSearchOpen] = useState(false);
@@ -319,6 +321,15 @@ export default function App() {
     }
     setGhost(null); rejected.current = []; notify('Revision applied. Ctrl+Z to undo.');
   }
+  function chooseOption(index) {
+    const previous = proposalRef.current, current = editorRef.current;
+    if (!previous?.alternatives || !current || current.isDestroyed) return;
+    const activeOption = (index + previous.alternatives.length) % previous.alternatives.length, text = previous.alternatives[activeOption].text;
+    const next = { ...previous, activeOption, text, changesStructure: proposalChangesStructure(current.state, previous.from, previous.to, text) };
+    proposalRef.current = next; setProposal(next);
+    const item = { kind: 'revision', pos: next.to, from: next.from, to: next.to, text, alternatives: true };
+    current.view.dispatch(current.state.tr.setMeta(ghostKey, item)); setGhost(item);
+  }
   async function askAI(mode, customInstruction = instruction, retry = false) {
     if (mode === 'chat') { await askAgent(customInstruction); return; }
     const current = editorRef.current, settings = prefsRef.current;
@@ -340,7 +351,9 @@ export default function App() {
     else current.view.dispatch(current.state.tr.setMeta(ghostKey, { kind: 'loading', pos: mode === 'continue' ? from : to }));
     if (mode === 'chat') { if (!customInstruction.trim()) { setBusy(null); requestRef.current = null; return; } setMessages(prev => [...prev, { id, role: 'user', text: customInstruction }]); setInstruction(''); }
     try {
-      const text = await api.generate(request);
+      const response = await api.generate({ ...request, ...(mode === 'rewrite' ? { alternatives: true } : {}) });
+      const alternatives = mode === 'rewrite' ? (response?.alternatives || [{ text: response, rating: null }]).filter(item => item.text !== selected) : null;
+      const text = mode === 'rewrite' ? alternatives[0]?.text || selected : response;
       if (requestRef.current !== pending) return;
       if (mode === 'chat') setMessages(prev => [...prev, { id: uid(), role: 'assistant', text }]);
       else {
@@ -356,8 +369,8 @@ export default function App() {
           if (JSON.stringify(current.getJSON()) !== originalDoc || current.state.selection.from !== from || current.state.selection.to !== to) return;
           if (text === selected) { current.view.dispatch(current.state.tr.setMeta(ghostKey, null)); notify('No changes suggested for this selection.'); }
           else {
-            const item = { kind: 'revision', pos: to, from, to, text };
-            const proposed = { text, original: selected, from, to, originalDoc, projectId, mode, changesStructure: proposalChangesStructure(current.state, from, to, text) };
+            const item = { kind: 'revision', pos: to, from, to, text, alternatives: Boolean(alternatives) };
+            const proposed = { text, alternatives, activeOption: 0, original: selected, from, to, originalDoc, projectId, mode, changesStructure: proposalChangesStructure(current.state, from, to, text) };
             proposalRef.current = proposed; setProposal(proposed);
             current.view.dispatch(current.state.tr.setMeta(ghostKey, item)); setGhost(item);
           }
@@ -398,7 +411,7 @@ export default function App() {
   }
   function rejectSuggestion() {
     const item = proposalRef.current, current = editorRef.current, text = item?.text || (current && !current.isDestroyed ? ghostKey.getState(current.state)?.text : '');
-    if (text) rejected.current = [...rejected.current, text].slice(-5);
+    if (text) rejected.current = [...rejected.current, ...(item?.alternatives?.map(option => option.text) || [text])].slice(-6);
     dismiss();
     if (item && editorRef.current && JSON.stringify(editorRef.current.getJSON()) === item.originalDoc) editorRef.current.chain().focus().setTextSelection({ from: item.from, to: item.to }).run();
   }
@@ -413,10 +426,12 @@ export default function App() {
     }, 1200);
   }
   const actionRef = useRef();
-  actionRef.current = { askAI, acceptGhost, dismiss, rejectSuggestion, saveNamed, saveLocal, command: handleCommand, updatePrefs, travelHistory, encodeNative };
+  actionRef.current = { askAI, acceptGhost, dismiss, rejectSuggestion, saveNamed, saveLocal, command: handleCommand, updatePrefs, travelHistory, encodeNative, chooseOption };
   const onEditorAction = useCallback(action => {
     if (action === 'toolbar-refresh') { refreshToolbar(x => x + 1); return; }
     if (action === 'undo' || action === 'redo') { actionRef.current.travelHistory(action); return; }
+    if (action === 'page-break') { actionRef.current.command(action); return; }
+    if (action === 'option-next' || action === 'option-previous') { actionRef.current.chooseOption((proposalRef.current?.activeOption || 0) + (action === 'option-next' ? 1 : -1)); return; }
     if (action === 'accept') actionRef.current.acceptGhost();
     if (action === 'accept-word') actionRef.current.acceptGhost('word');
     if (action === 'accept-character') actionRef.current.acceptGhost('character');
@@ -430,7 +445,7 @@ export default function App() {
     const next = { ...before, updatedAt: new Date().toISOString(), chapters: before.chapters.map(chapter => chapter.id === activeId ? { ...chapter, content } : chapter) };
     try {
       let history;
-      try { history = recordTransaction(historyRef.current, { chapterId: activeId, transaction, beforeProject: before, afterProject: next, appendedTransactions: options.appendedTransactions || [], label: transaction.getMeta('assistAccept') ? 'Accept AI suggestion' : undefined }); }
+      try { history = recordTransaction(historyRef.current, { chapterId: activeId, transaction, beforeProject: before, afterProject: next, appendedTransactions: options.appendedTransactions || [], label: transaction.getMeta('historyLabel') || (transaction.getMeta('assistAccept') ? 'Accept AI suggestion' : undefined) }); }
       catch { history = recordProjectChange(historyRef.current, before, next, { label: 'Edit chapter', chapterId: activeId }); }
       next.historySequence = history.sequence; projectRef.current = next; publishHistory(history); setProject(next);
     } catch (error) { projectRef.current = next; setProject(next); setSaveError(errorText(error)); notify(errorText(error)); }
@@ -457,7 +472,7 @@ export default function App() {
       recent: async () => { setRecents(await api.getRecents()); setModal({ type: 'recent' }); }, reveal: () => api.reveal(),
       undo: () => travelHistory('undo'), redo: () => travelHistory('redo'), 'select-all': () => current?.chain().focus().selectAll().run(),
       find: () => setSearchOpen(true), replace: () => setSearchOpen(true), focus: () => setFocus(value => !value), 'toggle-outline': () => { setFocus(false); setLeftOpen(value => !value); },
-      'toggle-assistant': () => { setFocus(false); setPanel(value => value === 'assist' ? null : 'assist'); }, 'page-view': () => setPageView(value => !value), history: () => setPanel('history'), snapshot: () => createSnapshot(),
+      'toggle-assistant': () => { setFocus(false); setPanel(value => value === 'assist' ? null : 'assist'); }, 'page-view': () => updatePrefs({ pageMode: prefsRef.current.pageMode === 'pages' ? 'continuous' : 'pages' }), 'page-break': () => { dismiss(); if (!insertPageBreak(current)) notify('Place the cursor in a paragraph to insert a page break.'); }, history: () => setPanel('history'), snapshot: () => createSnapshot(),
       complete: () => askAI(current?.state.selection.empty ? 'continue' : 'rewrite'), correct: () => askAI('correct'), rewrite: () => askAI('rewrite'), accept: () => acceptGhost(), dismiss: () => rejectSuggestion(),
       'toggle-ai': () => { dismiss(); updatePrefs({ enabled: !prefsRef.current.enabled }); }, 'toggle-continuous': () => updatePrefs({ continuous: !prefsRef.current.continuous })
     };
@@ -539,17 +554,17 @@ export default function App() {
         {!focus && <div className="ai-toolbar" role="toolbar" aria-label="Writing assistance"><button className={prefs.enabled ? 'active' : ''} aria-pressed={prefs.enabled} onClick={() => handleCommand('toggle-ai')} title={formatShortcut(prefs.hotkeys?.toggleAI)}><PenLine size={14} />AI {prefs.enabled ? 'on' : 'off'}</button><button className={prefs.continuous ? 'active' : ''} aria-pressed={prefs.continuous} onClick={() => handleCommand('toggle-continuous')} title={formatShortcut(prefs.hotkeys?.toggleContinuous)}>Automatic suggestions {prefs.continuous ? 'on' : 'off'}</button><span className="toolbar-divider" /><button disabled={!!busy} onClick={() => handleCommand('complete')}>Suggest <kbd>{formatShortcut(prefs.hotkeys?.complete ?? 'Tab')}</kbd></button><button disabled={!!busy || !selectedWords} onClick={() => askAI('correct')}><CheckCheck size={14} />Correct</button><button disabled={!!busy || !selectedWords} onClick={() => askAI('rewrite')}>Rephrase / translate</button><div className="toolbar-spacer" /><button onClick={() => setModal({ type: 'settings', tab: 'connections' })}><Settings2 size={14} />AI settings</button></div>}
         {searchOpen && <div className="search-bar"><Search size={15} /><input autoFocus aria-label="Find text" placeholder="Find in this chapter" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') nextMatch(); }} /><span>{matches} matches</span><IconButton icon={ArrowDown} title="Next match" onClick={nextMatch} /><input aria-label="Replacement text" placeholder="Replace with" value={replacement} onChange={e => setReplacement(e.target.value)} /><button onClick={() => replaceMatches(false)}>Replace</button><button onClick={() => replaceMatches(true)}>All</button><IconButton icon={X} title="Close search" onClick={() => { setSearchOpen(false); setQuery(''); }} /></div>}
         {saveError && <div className="inline-warning"><Info size={16} /><span>{saveError}</span><button onClick={() => saveNamed(true)}>Save a copy</button></div>}
-        <div className={`writing-scroll ${pageView ? 'page-view' : ''}`}>
+        <div className={`writing-scroll ${prefs.pageMode === 'pages' ? 'divided-pages' : 'continuous-pages'}`}>
           <article className="writing-sheet">
             <div className="chapter-kicker"><span>CHAPTER {String(project.chapters.findIndex(c => c.id === chapter.id) + 1).padStart(2, '0')}</span><span className="kicker-line" /><select aria-label="Chapter status" value={chapter.status || 'Draft'} onChange={e => editChapter(chapter.id, { status: e.target.value })}><option>Draft</option><option>Notes</option><option>Revising</option><option>Final</option></select></div>
             <div className="chapter-title-row"><input className="chapter-title" aria-label="Chapter title" value={chapter.title} onChange={e => editChapter(chapter.id, { title: e.target.value })} /><div className="chapter-tools"><IconButton icon={ArrowUp} title="Move chapter earlier" disabled={project.chapters[0].id === chapter.id} onClick={() => reorderChapter(chapter.id, -1)} /><IconButton icon={ArrowDown} title="Move chapter later" disabled={project.chapters.at(-1).id === chapter.id} onClick={() => reorderChapter(chapter.id, 1)} /><IconButton icon={Trash2} title="Delete chapter" disabled={project.chapters.length === 1} onClick={() => setModal({ type: 'delete-chapter' })} /></div></div>
             {(project.showStatistics ?? layout.showStatistics) && <div className="chapter-meta">{chapterWords.toLocaleString()} words<span>·</span>{Math.max(1, Math.ceil(chapterWords / 220))} min read</div>}
-            <ManuscriptEditor key={`${project.id}:${chapter.id}:${epoch}`} chapter={chapter} prefs={{ ...prefs, language: documentLanguage }} onReady={handleEditorReady} onChange={onContentChanged} onSelection={onEditorSelection} onAction={onEditorAction} />
+            <ManuscriptEditor key={`${project.id}:${chapter.id}:${epoch}`} chapter={chapter} prefs={{ ...prefs, language: documentLanguage }} layoutSignature={JSON.stringify([docStyle, chapter.title, project.showStatistics])} onReady={handleEditorReady} onChange={onContentChanged} onSelection={onEditorSelection} onAction={onEditorAction} />
             {ghost && <div className="ghost-controls"><span>{ghost.kind === 'revision' ? 'Selected text · proposed replacement' : 'Suggested continuation'}</span><button onClick={() => acceptGhost()}><kbd>{formatShortcut(prefs.hotkeys?.accept ?? 'Tab')}</kbd> Accept</button><button onClick={retryAI}><RotateCcw size={13} />Another</button><button onClick={rejectSuggestion}><kbd>{formatShortcut(prefs.hotkeys?.dismiss ?? 'Escape')}</kbd> Dismiss</button></div>}
             {busy && busy !== 'chat' && <div className="generation-inline" role="status">{localBusy && localProgress ? localProgress.message : 'Generating suggestion…'}<button onClick={dismiss}>Cancel</button></div>}
           </article>
         </div>
-        <div className="writer-status writing-status"><div><span className="file-format-label">{binding?.format?.toUpperCase() || 'WRAITER'}</span><span>{selectedWords ? selectedWords + ' selected' : chapterWords.toLocaleString() + ' words'}</span><span className="status-dot">·</span><span>{totalWords.toLocaleString()} in document</span></div><div><select className="layout-select" aria-label="Document layout" value={project.layout || 'story'} onChange={event => { const chosen = LAYOUTS[event.target.value]; updateProject({ layout: event.target.value, showStatistics: chosen.showStatistics, documentStyle: { ...docStyle, fontFamily: chosen.fontFamily, fontSize: chosen.fontSize, lineHeight: chosen.lineHeight } }, 'Apply ' + chosen.name + ' layout'); }}>{Object.entries(LAYOUTS).map(([id, value]) => <option key={id} value={id}>{value.name}</option>)}</select><select className="language-select" aria-label="Content language" value={documentLanguage} onChange={e => updateProject({ language: e.target.value })}>{[...new Map([...LANGUAGES, [documentLanguage, languageName(documentLanguage)]]).entries()].map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select><button onClick={() => setPageView(!pageView)}>{pageView ? 'Page view' : 'Continuous view'}</button><select aria-label="Document zoom" value={prefs.zoom || 100} onChange={e => updatePrefs({ zoom: Number(e.target.value) })}>{[50, 75, 90, 100, 110, 125, 150, 175, 200].map(zoom => <option key={zoom} value={zoom}>{zoom}%</option>)}</select></div></div>
+        <div className="writer-status writing-status"><div><span className="file-format-label">{binding?.format?.toUpperCase() || 'WRAITER'}</span><span>{selectedWords ? selectedWords + ' selected' : chapterWords.toLocaleString() + ' words'}</span><span className="status-dot">·</span><span>{totalWords.toLocaleString()} in document</span></div><div><select className="layout-select" aria-label="Document layout" value={project.layout || 'story'} onChange={event => { const chosen = LAYOUTS[event.target.value]; updateProject({ layout: event.target.value, showStatistics: chosen.showStatistics, documentStyle: { ...docStyle, fontFamily: chosen.fontFamily, fontSize: chosen.fontSize, lineHeight: chosen.lineHeight } }, 'Apply ' + chosen.name + ' layout'); }}>{Object.entries(LAYOUTS).map(([id, value]) => <option key={id} value={id}>{value.name}</option>)}</select><select className="language-select" aria-label="Content language" value={documentLanguage} onChange={e => updateProject({ language: e.target.value })}>{[...new Map([...LANGUAGES, [documentLanguage, languageName(documentLanguage)]]).entries()].map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select><button onClick={() => handleCommand('page-view')}>{prefs.pageMode === 'pages' ? 'Divided pages' : 'Continuous view'}</button><select aria-label="Document zoom" value={prefs.zoom || 100} onChange={e => updatePrefs({ zoom: Number(e.target.value) })}>{[50, 75, 90, 100, 110, 125, 150, 175, 200].map(zoom => <option key={zoom} value={zoom}>{zoom}%</option>)}</select></div></div>
       </main>
       {!focus && panel && <aside className="inspector">
         <div className="inspector-heading"><div className="inspector-title">{panel === 'assist' ? <Sparkles size={17} /> : panel === 'references' ? <BookMarked size={17} /> : panel === 'notes' ? <PenLine size={17} /> : <History size={17} />}<span>{({ assist: 'Writing assistant', references: 'Reference library', notes: 'Notes & voice', history: 'Revision history' })[panel]}</span></div><IconButton icon={PanelRightClose} title="Close side panel" onClick={() => setPanel(null)} /></div>
@@ -569,6 +584,7 @@ export default function App() {
       </aside>}
     </div>
     {toast && <div className="toast" role="status"><CheckCircle2 size={16} /><span>{toast}</span><IconButton icon={X} title="Dismiss notification" onClick={() => setToast('')} /></div>}
+    {proposal?.alternatives && editor && <RephraseOptions editor={editor} proposal={proposal} onChoose={chooseOption} onAccept={index => { chooseOption(index); acceptProposal(); }} onDismiss={rejectSuggestion} onRetry={retryAI} />}
     {modal?.type === 'settings' && <Settings Modal={Modal} fonts={fonts} initialTab={modal.tab} prefs={prefs} updatePrefs={updatePrefs} onClose={() => setModal(null)} notify={notify} />}
     {modal?.type === 'rename' && <Modal title="Document title" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); setModal(null); }}><label className="field-label">TITLE</label><input className="field-input" aria-label="Manuscript title" value={project.title} onChange={e => updateProject({ title: e.target.value })} /><div className="modal-footer"><button className="primary-button">Done</button></div></form></Modal>}
     {modal?.type === 'new' && <Modal title="New manuscript" subtitle="Your current manuscript will be preserved. Unnamed drafts remain available through Recent manuscripts." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={async () => { await saveNamed(); }}>Save current manuscript</button><button className="primary-button" onClick={createNew}>Create manuscript</button></div></Modal>}
@@ -583,6 +599,6 @@ export default function App() {
     {modal?.type === 'restore' && <Modal title="Return to this revision?" subtitle="We’ll capture your current version first, so you can return to it later." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep writing</button><button className="primary-button" onClick={() => { const item = modal.item; dismiss(); updateProject({ title: item.title, chapters: structuredClone(item.chapters), notes: item.notes || '', style: item.style || '', language: item.language || project.language, documentStyle: item.documentStyle || project.documentStyle, references: structuredClone(item.references || []), snapshots: [snapshot(project, 'Before restoring a revision'), ...project.snapshots].slice(0, 20) }); setActiveId(item.chapters[0].id); setEpoch(x => x + 1); setModal(null); notify('Revision restored.'); }}>Restore revision</button></div></Modal>}
     {modal?.type === 'reference' && <Modal title={modal.reference.name} subtitle="Attached copy. Linked files refresh separately before each AI request." onClose={() => setModal(null)} wide><pre className="reference-reader">{modal.reference.text}</pre></Modal>}
     {modal?.type === 'notice' && <Modal title={modal.title} onClose={() => setModal(null)}><p className="notice-copy">{modal.text}</p><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Continue writing</button></div></Modal>}
-    {modal?.type === 'about' && <Modal title="WRAITER · 0.4.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Run local models with a managed portable engine, reuse downloaded Ollama models, or add GGUF files. The writing assistant can edit prose and remove paragraph blocks, with persistent undo and redo.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Live print pagination, comments, tracked changes, footnotes and direct Claude Code / Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
+    {modal?.type === 'about' && <Modal title="WRAITER · 0.5.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Write in continuous view with room to scroll past the end, or switch to divided pages. Ctrl+Enter inserts a saved page break. Selection rephrasing offers rated alternatives, navigable with arrow keys and accepted with Enter or Tab.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Claude Code / Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
   </div>;
 }

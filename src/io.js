@@ -45,7 +45,7 @@ export function safeHTML(html) {
     else img.setAttribute('src', img.getAttribute('src').replace(/^data:image\/jpg;/i, 'data:image/jpeg;'));
   }
   for (const link of fragment.querySelectorAll('a[href]')) if (!/^(https?:|mailto:)/i.test(link.getAttribute('href'))) link.removeAttribute('href');
-  const allowed = new Set(['font-family', 'font-size', 'font-weight', 'font-style', 'color', 'background-color', 'text-align', 'text-decoration', 'text-decoration-line', 'white-space', 'line-height', 'margin-bottom', 'text-indent']);
+  const allowed = new Set(['font-family', 'font-size', 'font-weight', 'font-style', 'color', 'background-color', 'text-align', 'text-decoration', 'text-decoration-line', 'white-space', 'line-height', 'margin-bottom', 'text-indent', 'break-before', 'page-break-before']);
   for (const element of fragment.querySelectorAll('[style]')) {
     for (const property of [...element.style]) {
       const value = element.style.getPropertyValue(property);
@@ -101,6 +101,7 @@ async function importODT(bytes) {
     const align = attr(para, 'fo:text-align');
     if (align) result['text-align'] = ({ start: 'left', end: 'right' })[align] || align;
     const line = attr(para, 'fo:line-height');
+    if (attr(para, 'fo:break-before') === 'page') result['break-before'] = 'page';
     if (line && line !== 'normal') result['line-height'] = line;
     for (const name of ['margin-bottom', 'text-indent']) {
       const value = points(attr(para, `fo:${name}`));
@@ -149,7 +150,7 @@ async function importODT(bytes) {
     if (tag === 'table:covered-table-cell') return '';
     let inner = [...node.childNodes].map(child => convert(child, tag === 'text:list' ? listDepth + 1 : listDepth)).join('');
     const family = ['text:p', 'text:h'].includes(tag) ? 'paragraph' : 'text', properties = resolvedStyle(attr(node, 'text:style-name'), family);
-    const paragraphProperties = new Set(['text-align', 'line-height', 'margin-bottom', 'text-indent']);
+    const paragraphProperties = new Set(['text-align', 'line-height', 'margin-bottom', 'text-indent', 'break-before']);
     const css = Object.entries(properties).filter(([name]) => !paragraphProperties.has(name)).map(([name, value]) => `${name}:${value}`).join(';');
     if (css && ['text:p', 'text:h', 'text:span'].includes(tag)) inner = `<span style="${escape(css)}">${inner}</span>`;
     const paragraphCSS = Object.entries(properties).filter(([name]) => paragraphProperties.has(name)).map(([name, value]) => `${name}:${value}`).join(';');
@@ -245,6 +246,8 @@ async function docxTypography(bytes, html) {
   };
   const paragraphStyle = node => {
     const spacing = child(node, 'spacing'), indent = child(node, 'ind'), result = {};
+    const pageBreak = child(node, 'pageBreakBefore');
+    if (pageBreak) result.pageBreakBefore = !['0', 'false', 'off'].includes(property(pageBreak, 'val'));
     const after = property(spacing, 'after'), line = property(spacing, 'line'), rule = property(spacing, 'lineRule');
     if (after !== '' && Number.isFinite(Number(after))) result.spaceAfter = Number(after) / 20;
     if (line && Number(line) > 0) result.lineHeight = rule && rule !== 'auto' ? `${Number(line) / 20}pt` : Number(line) / 240;
@@ -291,6 +294,7 @@ async function docxTypography(bytes, html) {
     if (style.lineHeight != null) paragraph.style.lineHeight = String(style.lineHeight);
     if (style.spaceAfter != null) paragraph.style.marginBottom = `${style.spaceAfter}pt`;
     if (style.firstLineIndent != null) paragraph.style.textIndent = `${style.firstLineIndent}pt`;
+    if (style.pageBreakBefore) paragraph.style.breakBefore = 'page';
     if (['left', 'center', 'right', 'justify'].includes(style.textAlign)) paragraph.style.textAlign = style.textAlign;
     if (paragraph.textContent === candidate.value) {
       const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT), texts = [];
@@ -508,7 +512,7 @@ async function toDocx(project, options = {}) {
     const line = attrs.lineHeight || defaults.lineHeight;
     const absoluteLine = /(?:pt|px|in|cm|mm|pc)$/i.test(String(line)) ? points(line) : null;
     const spacing = { after: Math.round(Number(attrs.spaceAfter ?? defaults.fontSize * 0.8) * 20), line: Math.round(absoluteLine != null ? absoluteLine * 20 : lineRatio(line, defaults.lineHeight) * 240), lineRule: absoluteLine != null ? LineRuleType.EXACT : LineRuleType.AUTO };
-    return { children: inlines(node.content, header), heading: node.type === 'heading' ? HeadingLevel[`HEADING_${Math.min(6, attrs.level || 1)}`] : undefined, alignment: ({ left: AlignmentType.LEFT, center: AlignmentType.CENTER, right: AlignmentType.RIGHT, justify: AlignmentType.JUSTIFIED })[attrs.textAlign], indent: Object.keys(indent).length ? indent : undefined, spacing, widowControl: true };
+    return { children: inlines(node.content, header), heading: node.type === 'heading' ? HeadingLevel[`HEADING_${Math.min(6, attrs.level || 1)}`] : undefined, alignment: ({ left: AlignmentType.LEFT, center: AlignmentType.CENTER, right: AlignmentType.RIGHT, justify: AlignmentType.JUSTIFIED })[attrs.textAlign], indent: Object.keys(indent).length ? indent : undefined, spacing, widowControl: true, pageBreakBefore: Boolean(attrs.pageBreakBefore) };
   }
   function blocks(nodes = [], depth = 0, quote = false, header = false) {
     return nodes.flatMap(node => {
