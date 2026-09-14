@@ -1,10 +1,10 @@
 # WRAITER
 
-Windows desktop writing with integrated AI assistance. Version 0.6 adds project tabs, a native Open Recent submenu, and a choice of restoring all tabs or starting a clean project. It retains continuous/divided pages, manual page breaks, ranked rephrasing alternatives, managed local inference, portable Ollama, GGUF registration, document-editing agents, direct ODT/DOCX/text saving, persistent undo/redo, scoped exports, customizable keyboard behaviour, task-specific models, saved Codex connections, and Git checkpoints.
+Windows desktop writing with integrated AI assistance. Version 0.7 adds Discord and Telegram exports and a clipboard destination for text formats. Version 0.6 added project tabs, a native Open Recent submenu, and a choice of restoring all tabs or starting a clean project. It retains continuous/divided pages, manual page breaks, ranked rephrasing alternatives, managed local inference, portable Ollama, GGUF registration, document-editing agents, direct ODT/DOCX/text saving, persistent undo/redo, scoped exports, customizable keyboard behaviour, task-specific models, saved Codex connections, and Git checkpoints.
 
 ## Run
 
-Open `release/WRAITER-0.6.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, **Save as**, and **Export**. New documents start blank.
+Open `release/WRAITER-0.7.0-Windows.exe`. This is an unsigned portable preview; no installer is required. It preserves the earlier preview's application data. Use **File → New manuscript**, **Open**, **Save**, **Save as**, and **Export**. New documents start blank.
 
 ## Projects and startup
 
@@ -133,6 +133,12 @@ Opening an office/text document keeps it attached to its original format. Save a
 Unsupported office features are detected where possible and described on opening. Until the first compatibility review, changed content is staged safely in recovery. Saving after review preserves the complete original under **Format originals** in application data, plus the preceding-save `.bak` beside the document. New unsupported formatting in a text format also prompts for review before writing. This is direct file-format support, not lossless preservation of every Word/Writer feature: page sections, named styles, headers/footers, comments, tracked changes, footnotes/endnotes, fields, floating objects and advanced layouts may be simplified or omitted. Unrecognized office features can still require manual comparison.
 
 **File → Export** offers full manuscript, one chapter, or selected text, with title/chapter-heading options. Formats include DOCX, ODT, all three PDFs, EPUB, plain text, BBCode `.txt`, Markdown and HTML. Exports exclude private notes, AI context and editing history. PDF export performs pagination; page view is a writing surface, not an exact print preview.
+
+The export dialog also offers **Discord chat**, **Formatted text · Telegram / email**, and Telegram bot **MarkdownV2** and **HTML**. Choose **Destination → Export to Clipboard** for any text-based format, or **Create file** to save it. Clipboard export follows the same manuscript/chapter/selection scope and heading options. It does not open a save dialog or change the manuscript. PDF, DOCX, ODT and EPUB require files.
+
+Discord exports basic chat markup to `.txt`. Telegram bot exports are escaped `.txt` payloads for the corresponding bot parse mode; ordinary chat does not interpret these as bot markup. For ordinary Telegram Desktop chats and email, choose **Formatted text** and the clipboard destination: it places HTML formatting and a readable plain-text fallback on the clipboard. Receiving apps determine which formatting survives. Its file destination creates a browser-readable `.html` document. The separate **HTML document** option copies literal HTML source. Chat formats simplify tables and replace images with labelled placeholders; long text is retained in full and may need splitting into several messages.
+
+Formatting references: [Discord chat syntax](https://support.discord.com/hc/en-us/articles/210298617-Markdown-Text-101-Chat-Formatting-Bold-Italic-Underline), [Telegram bot formatting](https://core.telegram.org/bots/api#formatting-options), and [Telegram Desktop HTML clipboard support](https://telegramdesktop.github.io/tdesktop/changelog/). Run `npm run test:clipboard` for the synthetic desktop export regression; it intercepts clipboard writes so the user's clipboard remains intact.
 
 Live print pagination, editing comments/tracked changes/footnotes, and direct Claude Code/Grok Build connections remain future work. macOS and Linux are not yet packaged or validated.
 

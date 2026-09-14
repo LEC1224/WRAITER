@@ -1,4 +1,16 @@
-# WRAITER 0.6.0 validation
+# WRAITER 0.7.0 validation
+
+## Version 0.7.0 · 2026-09-14
+
+- Added Discord text, Telegram bot MarkdownV2/HTML, and formatted HTML clipboard exports. Every text-based format offers a clipboard destination with the same scope and title controls as file export.
+- `npm test`: 161 passing tests. Five chat-export groups cover escaping, emphasis, Telegram underline/italic boundaries, links, code, lists, tables, image placeholders, scope, privacy and long text without truncation. The five groups passed again after the final boundary fix.
+- `npm run test:io`: all 19 existing import/export regression checks passed.
+- `npm run test:clipboard`: passed in Electron and against `release/win-unpacked/WRAITER.exe`. Covers all eight clipboard formats, rich/plain MIME payloads, chapter/selection scope, switching to file-only formats, clipboard errors with retry, all four new file exports, and rejection of binary clipboard exports. Clipboard methods were intercepted to preserve the user's actual clipboard.
+- `npm run build` and `git diff --check` passed. The desktop export dialog screenshot was visually reviewed.
+- No live Telegram/Discord message was posted or pasted. Telegram Desktop HTML clipboard support is documented upstream; final formatting depends on the receiving app. Chat exports retain long text in full and do not automatically split it into messages.
+- Release build: `npm run package`; artifact `release/WRAITER-0.7.0-Windows.exe`. The desktop export suite passed again against the packaged 0.7.0 application. Windows executable metadata reports file version `0.7.0` and product version `0.7.0.0`.
+
+## Previous 0.6.0 validation
 
 Verified on Windows on 2026-09-13. All document fixtures were synthetic and desktop tests used isolated application data. Author manuscripts and LibreCompleteAI source were not edited.
 

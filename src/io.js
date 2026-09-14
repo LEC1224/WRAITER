@@ -9,6 +9,7 @@ import { toEPUB } from './formats/epub.js';
 import { exportScope, titleOptions } from './formats/scope.js';
 import { addStructure, readStructure, loadOfficePackage } from './formats/package.js';
 import { formatLosses } from './formats/losses.js';
+import { chatDocument, chatFormats } from './formats/chat.js';
 export { exportScope } from './formats/scope.js';
 
 const escape = text => String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -575,6 +576,15 @@ export async function exportPayload(source, format, extensions, options = {}) {
   if (format === 'pdf-mobile') options = { ...options, pdfPreset: 'mobile' };
   format = aliases[format] || format;
   const project = exportScope(source, options), titles = titleOptions(options), lossWarnings = formatLosses(project, format);
+  if (format === 'rich-text') {
+    const html = (titles.includeTitle ? `<h1>${escape(project.title)}</h1>` : '') + project.chapters.map(chapter => (titles.includeChapterTitles ? `<h2>${escape(chapter.title)}</h2>` : '') + safeHTML(generateHTML(chapter.content, extensions))).join('');
+    const container = document.createElement('div'); container.innerHTML = html;
+    for (const img of container.querySelectorAll('img')) img.replaceWith(document.createTextNode(`[Image: ${img.alt || 'image omitted'}]`));
+    const fragment = container.innerHTML;
+    const text = [...(titles.includeTitle ? [project.title] : []), ...project.chapters.flatMap(chapter => [...(titles.includeChapterTitles ? [chapter.title] : []), nodeText(chapter.content, '\n', true)])].join('\n\n');
+    return { format, title: project.title, data: `<!doctype html><html><head><meta charset="utf-8"><title>${escape(project.title)}</title></head><body>${fragment}</body></html>`, clipboardHTML: fragment, clipboardText: text, lossWarnings };
+  }
+  if (chatFormats.includes(format)) return { format, title: project.title, data: chatDocument(project, format, titles), lossWarnings };
   if (['pdf', 'html'].includes(format)) { const html = publicationHTML(project, extensions, options); return { format, title: project.title, html, data: textEncoding(html, options), lossWarnings, ...(format === 'pdf' ? { pdfOptions: { preferCSSPageSize: true, printBackground: true, displayHeaderFooter: false }, pdfPreset: options.pdfPreset || 'standard' } : {}) }; }
   if (format === 'docx') { const result = await toDocx(project, options); return { format, title: project.title, ...result, lossWarnings: result.warning ? [result.warning] : [] }; }
   if (format === 'odt') { const result = await toODT(project, options); return { format, title: project.title, ...result, lossWarnings: result.warning ? [result.warning] : [] }; }

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage, shell, clipboard } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { hash, atomicWrite, readLimited, validateProject, validateRequest, DocumentStore, samePath, safeFilename } = require('./core.cjs');
@@ -339,14 +339,24 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Choose codex.exe', properties: ['openFile'], filters: [{ name: 'Codex executable', extensions: ['exe'] }] });
     return result.canceled ? null : result.filePaths[0];
   });
+  ipcMain.handle('export:clipboard', (_e, payload) => {
+    if (!payload || !['txt', 'md', 'html', 'bbcode', 'discord', 'telegram-md', 'telegram-html', 'rich-text'].includes(payload.format)) throw new Error('This format cannot be exported to clipboard.');
+    const validText = value => typeof value === 'string' && Buffer.byteLength(value) <= 100 * 1024 * 1024;
+    if (!validText(payload.data)) throw new Error('Invalid or oversized clipboard content.');
+    if (payload.format === 'rich-text') {
+      if (!validText(payload.clipboardHTML) || !validText(payload.clipboardText)) throw new Error('Invalid formatted clipboard content.');
+      clipboard.write({ text: payload.clipboardText, html: payload.clipboardHTML });
+    } else clipboard.writeText(payload.data);
+    return true;
+  });
   ipcMain.handle('export', async (_e, payload) => {
     if (!payload || typeof payload !== 'object') throw new Error('Invalid export.');
     const { format, title, data, html } = payload;
-    if (!['txt', 'md', 'html', 'pdf', 'docx', 'odt', 'epub', 'bbcode'].includes(format)) throw new Error('Unsupported export.');
+    if (!['txt', 'md', 'html', 'pdf', 'docx', 'odt', 'epub', 'bbcode', 'discord', 'telegram-md', 'telegram-html', 'rich-text'].includes(format)) throw new Error('Unsupported export.');
     if (typeof title !== 'string' || title.length > 2000) throw new Error('Invalid export title.');
     const binary = ['docx', 'odt', 'epub'].includes(format);
     if (format === 'pdf' ? typeof html !== 'string' || Buffer.byteLength(html) > 100 * 1024 * 1024 : binary ? !(data instanceof Uint8Array || data instanceof ArrayBuffer) || data.byteLength > 100 * 1024 * 1024 : typeof data !== 'string' || Buffer.byteLength(data) > 100 * 1024 * 1024) throw new Error('Invalid or oversized export content.');
-    const extension = format === 'bbcode' ? 'txt' : format;
+    const extension = ['bbcode', 'discord', 'telegram-md', 'telegram-html'].includes(format) ? 'txt' : format === 'rich-text' ? 'html' : format;
     const result = await dialog.showSaveDialog(win, { title: `Export ${format.toUpperCase()}`, defaultPath: `${safeFilename(title)}.${extension}`, filters: [{ name: format.toUpperCase(), extensions: [extension] }] });
     if (result.canceled) return null;
     const target = result.filePath.toLowerCase().endsWith(`.${extension}`) ? result.filePath : `${result.filePath}.${extension}`;
