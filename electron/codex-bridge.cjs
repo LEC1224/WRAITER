@@ -60,7 +60,7 @@ async function resolveCodex(configured = '') {
   for (const name of names) {
     for (const directory of directories) { const found = await unwrapExecutable(path.join(directory, name)); if (found) return found; }
   }
-  const roots = [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'OpenAI', 'Codex', 'bin'), process.env.APPDATA && path.join(process.env.APPDATA, 'npm', 'node_modules', '@openai'), path.join(os.homedir(), '.codex', 'bin'), path.join(os.homedir(), '.local', 'bin'), '/Applications/Codex.app/Contents/Resources', '/usr/local/lib/node_modules/@openai/codex', '/opt/homebrew/lib/node_modules/@openai/codex'].filter(Boolean);
+  const roots = [process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', 'OpenAI', 'Codex', 'bin'), process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'OpenAI', 'Codex', 'bin'), process.env.APPDATA && path.join(process.env.APPDATA, 'npm', 'node_modules', '@openai'), path.join(os.homedir(), '.codex', 'bin'), path.join(os.homedir(), '.local', 'bin'), '/Applications/Codex.app/Contents/Resources', '/usr/local/lib/node_modules/@openai/codex', '/opt/homebrew/lib/node_modules/@openai/codex'].filter(Boolean);
   for (const root of roots) { const found = await nativeIn(root); if (found) return found; }
   throw new Error('Codex is not installed here. Install the Codex desktop app or select an existing Codex installation. WRAITER starts it automatically and uses its saved sign-in.');
 }

@@ -913,3 +913,41 @@ select.field-input { padding:5px 7px; }
 .rephrase-menu-footer { display:flex; flex-wrap:wrap; gap:8px; justify-content:space-between; padding:8px 12px 3px; border-top:1px solid var(--line); font-size:10px; color:var(--muted); }
 .rephrase-menu-footer button { color:var(--accent); text-decoration:underline; }
 .rephrase-menu > small { display:block; font-size:10px; padding:3px 12px 9px; color:var(--muted); }
+
+/* Guided setup and a quiet, readable first-run tour. */
+.onboarding-body { padding: 10px 26px 20px; overflow-y: auto; max-height: calc(100vh - 290px); line-height: 1.65; }
+.onboarding-lead { font-size: 18px; line-height: 1.7; }
+.onboarding-progress { display: flex; gap: 6px; padding: 0 26px 14px; }
+.onboarding-progress span { height: 4px; background: #b5b5b54d; flex: 1; border-radius: 4px; }
+.onboarding-progress .done { background: #587563; }
+.setup-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0; }
+.setup-choices button { text-align: left; border: 2px solid #8885; padding: 20px; border-radius: 12px; background: transparent; color: inherit; }
+.setup-choices button.selected { border-color: #587563; background: #58756315; }
+.setup-choices strong, .setup-choices span { display: block; }
+.setup-choices span { margin-top: 8px; line-height: 1.6; }
+.onboarding-tip { border-left: 3px solid #789480; background: #78948012; border-radius: 4px; padding: 14px 18px; margin: 20px 0; }
+.onboarding-tip p { margin: 6px 0 0; }
+
+/* The walkthrough reserves space below the workspace. No backdrop or focus trap. */
+.walkthrough { flex: 0 0 auto; max-height: 35vh; overflow: auto; background: var(--panel-raised); border-top: 2px solid var(--accent); padding: 12px 22px 16px; user-select: text; box-shadow: 0 -4px 16px #0000000c; }
+.walkthrough-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); }
+.walkthrough-heading > span { display: flex; align-items: center; gap: 9px; font-size: 11px; letter-spacing: .1em; font-weight: 650; }
+.walkthrough-heading > div { display: flex; gap: 10px; }
+.walkthrough-content { display: flex; align-items: center; justify-content: space-between; gap: 28px; }
+.walkthrough-copy { max-width: 1000px; }
+.walkthrough h2 { margin: 7px 0 5px; font-size: 18px; font-weight: 600; color: var(--text); }
+.walkthrough p { margin: 5px 0; font-size: 14px; line-height: 1.55; color: var(--text); }
+.walkthrough-actions { display: flex; flex-direction: column; align-items: stretch; flex: 0 0 195px; gap: 7px; padding-top: 8px; }
+.walkthrough .walkthrough-status { color: var(--accent); font-size: 13px; }
+.walkthrough .walkthrough-error { color: var(--danger); font-size: 13px; }
+.walkthrough.compact { display: flex; align-items: center; gap: 16px; padding: 10px 20px; }
+.walkthrough.compact p { flex: 1; font-size: 13px; }
+.tour-target { outline: 2px solid var(--accent) !important; outline-offset: -2px; box-shadow: 0 0 0 3px var(--accent-soft); border-radius: 3px; }
+@media (max-height: 740px) { .walkthrough { padding: 7px 16px 10px; max-height: 38vh; } .walkthrough h2 { font-size: 16px; } .walkthrough p { font-size: 13px; } }
+
+.app:has(.walkthrough) .toast { bottom: auto; top: 45px; }
+@media (max-height: 740px) {
+  .app:has(.walkthrough:not(.compact)) .formatbar { flex-wrap: nowrap; overflow-x: auto; }
+  .app:has(.walkthrough:not(.compact)) .formatbar > * { flex-shrink: 0; }
+  .app:has(.walkthrough:not(.compact)) .writing-sheet { padding-top: 20px; }
+}

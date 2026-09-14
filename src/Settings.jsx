@@ -6,11 +6,11 @@ import LocalModels from './LocalModels.jsx';
 
 const api = window.wraiter;
 const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['chat', 'Project assistant']];
-const PROVIDERS = { local: 'Local models (managed)', codex: 'Codex account', ollama: 'Ollama (local)', openai: 'OpenAI API', anthropic: 'Claude API', compatible: 'Compatible API / xAI' };
-const PRESETS = { local: { baseUrl: '', model: '' }, codex: { baseUrl: '', model: '', codexPath: '' }, ollama: { baseUrl: 'http://localhost:11434', model: '' }, openai: { baseUrl: 'https://api.openai.com/v1', model: '' }, anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: '' }, compatible: { baseUrl: 'https://api.x.ai/v1', model: '' } };
+const PROVIDERS = { local: 'Local models (managed)', codex: 'Codex account', claude: 'Claude Code account', ollama: 'Ollama (local)', openai: 'OpenAI API', anthropic: 'Claude API', compatible: 'Compatible API / xAI' };
+const PRESETS = { claude: { baseUrl: '', model: '', claudePath: '' }, local: { baseUrl: '', model: '' }, codex: { baseUrl: '', model: '', codexPath: '' }, ollama: { baseUrl: 'http://localhost:11434', model: '' }, openai: { baseUrl: 'https://api.openai.com/v1', model: '' }, anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: '' }, compatible: { baseUrl: 'https://api.x.ai/v1', model: '' } };
 const errorText = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
-const profileFor = (settings, task) => ({ provider: settings.provider || 'codex', baseUrl: settings.baseUrl || '', model: settings.model || '', codexPath: settings.codexPath || '', ...(settings.taskProfiles?.[task] || {}) });
-const connectionKey = profile => [profile.provider, profile.baseUrl.replace(/\/+$/, ''), profile.codexPath || ''].join('|');
+const profileFor = (settings, task) => ({ provider: settings.provider || 'codex', baseUrl: settings.baseUrl || '', model: settings.model || '', codexPath: settings.codexPath || '', claudePath: settings.claudePath || '', ...(settings.taskProfiles?.[task] || {}) });
+const connectionKey = profile => [profile.provider, profile.baseUrl.replace(/\/+$/, ''), profile.codexPath || '', profile.claudePath || ''].join('|');
 
 function NumberField({ label, value, min, max, step = 1, onChange, help }) {
   return <label>{label}<input className="field-input" type="number" aria-label={label} min={min} max={max} step={step} value={value ?? ''} onChange={event => onChange(event.target.value === '' ? '' : Number(event.target.value))} />{help && <small className="field-help">{help}</small>}</label>;
@@ -50,7 +50,7 @@ export default function Settings({ initialTab, prefs, updatePrefs, onClose, noti
     const current = ++requestNumber.current, key = identity;
     setPending(key);
     try {
-      const result = await (action === 'login' ? api.loginProvider(payload()) : action === 'reconnect' ? api.reconnectProvider(payload()) : action === 'connect' ? api.connectProvider(payload()) : api.listModels(payload()));
+      const result = await (action === 'login' ? (profile.provider === 'claude' ? api.setupClaudeLogin(payload()) : api.loginProvider(payload())) : action === 'reconnect' ? api.reconnectProvider(payload()) : action === 'connect' ? api.connectProvider(payload()) : api.listModels(payload()));
       if (!mounted.current || current !== requestNumber.current) return;
       setConnections(previous => ({ ...previous, [key]: { ...previous[key], ...result, error: false } }));
       // Some connection calls return account state only. Refresh the model list after a successful connection.
@@ -81,7 +81,10 @@ export default function Settings({ initialTab, prefs, updatePrefs, onClose, noti
     try {
       const continuation = profileFor(draft, 'continue');
       // Keep the original top-level connection in sync for older display consumers.
-      await updatePrefs({ ...draft, ...continuation });
+      // Walkthrough progress may advance while Settings is open. Its saved state
+      // is owned by the walkthrough, not this older settings draft.
+      const { tutorialSession, tutorialComplete, setupComplete, setupMode, ...editable } = draft;
+      await updatePrefs({ ...editable, ...continuation });
       for (const [signature, edit] of Object.entries(keyEdits)) {
         if (!edit.apiKey.trim() && !edit.clearKey) continue;
         const activeTask = TASKS.find(([which]) => connectionKey(profileFor(draft, which)) === signature)?.[0];
@@ -135,9 +138,9 @@ export default function Settings({ initialTab, prefs, updatePrefs, onClose, noti
         </div>
         <div className="connection-editor">
           <h3>{TASKS.find(([which]) => which === task)?.[1]} — {PROVIDERS[profile.provider]}</h3>
-          {profile.provider === 'local' ? <><p className="small-muted">WRAITER manages this engine and starts the selected model automatically. Processing stays on this computer.</p><button className="secondary-button" type="button" onClick={() => setTab('local')}>Manage local models</button></> : profile.provider === 'codex' ? <>
-            <p className="small-muted">WRAITER connects to the account already saved by Codex. You do not need to open a terminal or keep a CLI window running.</p>
-            {connection?.needsLogin && !connection.error && <button type="button" className="primary-button spaced-button" disabled={pending === identity} onClick={() => check('login')}><ExternalLink size={14} />Sign in with ChatGPT</button>}
+          {profile.provider === 'local' ? <><p className="small-muted">WRAITER manages this engine and starts the selected model automatically. Processing stays on this computer.</p><button className="secondary-button" type="button" onClick={() => setTab('local')}>Manage local models</button></> : ['codex', 'claude'].includes(profile.provider) ? <>
+            <p className="small-muted">WRAITER connects to the account saved by the selected helper. You do not need to open a terminal or keep a CLI window running.</p>
+            {connection?.needsLogin && !connection.error && <button type="button" className="primary-button spaced-button" disabled={pending === identity} onClick={() => check('login')}><ExternalLink size={14} />Sign in{profile.provider === 'codex' ? ' with ChatGPT' : ' to Claude Code'}</button>}
           </> : <>
             <label className="field-label">{profile.provider === 'ollama' ? 'Ollama address' : 'API base address'}</label>
             <input className="field-input" aria-label="Provider base address" value={profile.baseUrl} onChange={event => setProfile(task, { baseUrl: event.target.value })} />
@@ -151,6 +154,7 @@ export default function Settings({ initialTab, prefs, updatePrefs, onClose, noti
           <div className="connection-check"><button className="secondary-button" type="button" disabled={!!pending} onClick={() => check('connect')}>{pending === identity ? <LoaderCircle size={14} className="spin" /> : <Plug size={14} />}Connect</button><button className="secondary-button" type="button" disabled={!!pending} onClick={() => check('models')}>Refresh models</button>{profile.provider === 'codex' && <button className="text-button" type="button" disabled={!!pending} onClick={() => check('reconnect')}>Reconnect</button>}</div>
           {pending === identity && <div className="connection-status" role="status"><LoaderCircle size={14} className="spin" />Checking connection…</div>}
           {connection && pending !== identity && <div className={'connection-status ' + (connection.error ? 'error' : connection.needsLogin ? '' : 'success')} role="status">{connection.error ? <Info size={15} /> : <CheckCircle2 size={15} />}<span>{connection.message || (connection.connected ? 'Connected.' : 'Connection checked.')}{connection.models?.length && !/models? available/i.test(connection.message || '') ? ' ' + connection.models.length + ' models available.' : ''}</span></div>}
+          {profile.provider === 'claude' && <label>Claude Code executable (optional)<input className="field-input" aria-label="Claude Code executable path" value={profile.claudePath || ''} onChange={e => setProfile(task, { claudePath: e.target.value })} placeholder="Automatic detection" /></label>}
           {profile.provider === 'codex' && <details><summary>Advanced: executable location</summary><p className="small-muted">Detected automatically from your Codex installation. Override only if you use a custom installation.</p><div className="input-with-button"><input className="field-input" aria-label="Codex executable path" value={profile.codexPath || ''} placeholder="Automatic detection" onChange={event => setProfile(task, { codexPath: event.target.value })} /><button className="secondary-button" type="button" onClick={async () => { try { const chosen = await api.chooseCodex(); if (chosen) setProfile(task, { codexPath: chosen }); } catch (error) { setSaveError(errorText(error)); } }}>Browse</button></div></details>}
           <p className="small-muted">{profile.provider === 'local' ? 'Local processing uses the selected model folder and memory controls.' : profile.provider === 'ollama' ? 'Text is sent to this Ollama address. A localhost address keeps model processing on this computer.' : 'Selected text, surrounding context, and enabled references are sent to the chosen provider when assistance runs.'}</p>
         </div>

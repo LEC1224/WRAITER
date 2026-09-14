@@ -1,0 +1,18 @@
+name: Suggest an improvement
+description: An idea that would make writing or learning WRAITER easier.
+title: "[Idea] "
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What would you like to do more easily?
+      description: Describe the writing task or confusing step. No technical solution needed.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could WRAITER help?
+      description: Include examples or sketches if you like. Please use made-up text instead of private writing.
+    validations:
+      required: true

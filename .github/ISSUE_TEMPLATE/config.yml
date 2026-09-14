@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Getting started and troubleshooting
+    url: https://github.com/LEC1224/WRAITER/blob/main/docs/TROUBLESHOOTING.md
+    about: Help with downloads, sign-in, suggestions and documents.
+  - name: Report a security vulnerability privately
+    url: https://github.com/LEC1224/WRAITER/security/advisories/new
+    about: Please keep security reports and credentials out of public issues.

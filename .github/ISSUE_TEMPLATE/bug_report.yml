@@ -1,0 +1,44 @@
+name: Get help or report a problem
+description: Tell us where you got stuck. No technical knowledge needed.
+title: "[Help] "
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks for helping improve WRAITER. This page is public: please leave out private writing, account details and keys. Use sample text in screenshots."
+  - type: input
+    id: version
+    attributes:
+      label: WRAITER version
+      description: Which version did you download? It is okay if you are not sure.
+      placeholder: "For example: 0.9.0, Windows installer"
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "For example: Windows 11"
+  - type: textarea
+    id: steps
+    attributes:
+      label: What were you trying to do?
+      description: Tell us what you clicked or typed, in your own words.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include any error message. A screenshot with sample text can help.
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: If this involves AI, which connection were you using?
+      options:
+        - Not sure / not an AI problem
+        - Codex
+        - Claude Code
+        - Local model / Ollama
+        - OpenAI API
+        - Claude API
+        - Another compatible service

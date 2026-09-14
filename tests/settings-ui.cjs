@@ -12,7 +12,7 @@ const root = path.resolve(__dirname, '..');
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  const baseUrl='http://127.0.0.1:'+server.address().port;
  const {defaults}=require('../electron/preferences.cjs');
- await fs.writeFile(path.join(userData,'settings.json'),JSON.stringify({...defaults,provider:'ollama',baseUrl,model:'test-autocomplete',nativeLanguage:'',taskProfiles:{},keys:{}}));
+ await fs.writeFile(path.join(userData,'settings.json'),JSON.stringify({...defaults,setupComplete:true,tutorialComplete:true,provider:'ollama',baseUrl,model:'test-autocomplete',nativeLanguage:'',taskProfiles:{},keys:{}}));
  const env={...process.env,WRAITER_USER_DATA:userData}; delete env.ELECTRON_RUN_AS_NODE;
  let app;
  try {

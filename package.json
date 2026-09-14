@@ -1,16 +1,16 @@
 {
   "name": "wraiter",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Desktop writing with integrated AI assistance.",
   "author": "WRAITER",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "start": "electron .",
-    "package": "npm run build && electron-builder --win portable --x64",
+    "package": "npm run notices && npm run build && electron-builder --win nsis portable --x64",
     "test": "node --test tests/*.test.cjs tests/*.test.mjs",
     "test:app": "node tests/app.cjs",
     "test:v03": "node tests/v03-app.cjs",
@@ -24,7 +24,11 @@
     "test:v04": "node tests/v04-app.cjs",
     "test:local-live": "node tests/local-live.cjs",
     "test:v05": "node tests/v05-app.cjs",
-    "test:v06": "node tests/v06-app.cjs"
+    "test:v06": "node tests/v06-app.cjs",
+    "test:onboarding": "node tests/onboarding-ui.cjs",
+    "test:tutorial": "node tests/tutorial-ui.cjs",
+    "test:tutorial:live": "node tests/tutorial-live.cjs",
+    "notices": "node tools/third-party-notices.cjs"
   },
   "devDependencies": {
     "@tiptap/core": "3.31.3",
@@ -62,11 +66,14 @@
       "dist/**/*",
       "electron/**/*",
       "package.json",
-      "assets/**/*"
+      "assets/**/*",
+      "LICENSE",
+      "THIRD-PARTY-NOTICES.md"
     ],
     "asar": true,
     "win": {
       "target": [
+        "nsis",
         "portable"
       ],
       "icon": "assets/icon.ico",
@@ -74,7 +81,30 @@
     },
     "portable": {
       "artifactName": "WRAITER-${version}-Windows.exe"
-    }
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "artifactName": "WRAITER-${version}-Setup.exe",
+      "include": "build/installer.nsh"
+    },
+    "extraFiles": [
+      "LICENSE",
+      "THIRD-PARTY-NOTICES.md"
+    ]
   },
-  "type": "module"
+  "type": "module",
+  "homepage": "https://github.com/LEC1224/WRAITER#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LEC1224/WRAITER.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LEC1224/WRAITER/issues"
+  }
 }

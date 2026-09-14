@@ -1,3 +1,4 @@
+const claude = require('./claude-bridge.cjs');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const { buildPrompt, cleanResult } = require('./core.cjs');
@@ -146,11 +147,12 @@ async function generate(settings, key, request, signal, suppliedPrompt) {
   if (settings.provider === 'codex' && request.references?.length) prompt.user = prompt.user.replace('REFERENCE MATERIAL:\n(none)', 'REFERENCE MATERIAL:\nUse the reference material already supplied in this writing session.');
   const headers = { 'Content-Type': 'application/json' };
   const model = settings.model?.trim();
-  if (settings.provider !== 'codex' && !model) throw new Error('Choose a model in Connections first.');
+  if (!['codex', 'claude'].includes(settings.provider) && !model) throw new Error('Choose a model in Connections first.');
   let result;
   const maxTokens = outputLimit(settings, request);
   const temperature = bounded(settings.temperature, 0.65, 0, 2);
   if (settings.provider === 'codex') result = await (await getBridge(settings)).complete(settings, prompt, request.references || [], signal);
+  else if (settings.provider === 'claude') result = await claude.complete(settings, prompt, signal);
   else if (settings.provider === 'ollama') result = await runOllama(settings, prompt, request, signal);
   else if (settings.provider === 'anthropic') {
     if (!key) throw new Error('Add an Anthropic API key in Connections.');
@@ -180,6 +182,7 @@ async function generateStructured(settings, key, prompt, signal) {
   return generate(settings, key, { mode: 'agent', references: [], history: [] }, signal, prompt);
 }
 async function probe(settings, key) {
+  if (settings.provider === 'claude') return claude.status(settings);
   if (settings.provider === 'local') {
     if (!localModels) throw new Error('Open Settings → Local models to set up the engine.');
     const status = await localModels.status(), models = status.models.filter(item => item.complete).map(item => item.name);

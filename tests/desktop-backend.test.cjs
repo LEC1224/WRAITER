@@ -41,7 +41,7 @@ test('settings reject malformed task profiles, languages, and out-of-range AI kn
 test('native menu owns document hotkeys and leaves editor AI shortcuts to renderer', () => {
   const sent = []; let closed = false;
   const menu = menuTemplate(command => sent.push(command), () => { closed = true; }, { ...DEFAULT_HOTKEYS, save: 'Ctrl+Alt+W' });
-  assert.deepEqual(menu.map(item => item.label), ['&File', '&Edit', '&View', '&Settings']);
+  assert.deepEqual(menu.map(item => item.label), ['&File', '&Edit', '&View', '&Settings', '&Help']);
   const items = menu.flatMap(item => item.submenu);
   const save = items.find(item => item.label === '&Save');
   assert.equal(save.accelerator, 'Ctrl+Alt+W'); save.click(); assert.deepEqual(sent, ['save']);

@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 const invoke = channel => (...args) => ipcRenderer.invoke(channel, ...args);
 contextBridge.exposeInMainWorld('wraiter', {
+  setupInstall: invoke('setup:install'), setupCancel: invoke('setup:cancel'), setupHelp: invoke('setup:help'), setupChoose: invoke('setup:choose'), setupClaudeLogin: invoke('setup:claude-login'), setupTest: invoke('setup:test'),
   boot: invoke('boot'), getRecents: invoke('recent:list'), clearRecents: invoke('recent:clear'), open: invoke('open'), openRecent: invoke('open-recent'), save: invoke('save'),
   activateProject: invoke('workspace:activate'), closeProject: invoke('workspace:close'), rememberProjectView: invoke('workspace:view'),
   autosave: invoke('autosave'), newProject: invoke('new-project'), exportFile: invoke('export'), exportClipboard: invoke('export:clipboard'),

@@ -1,4 +1,35 @@
-# WRAITER 0.7.0 validation
+# WRAITER 0.9.0 validation
+
+## First public release packaging · 2026-09-15
+
+- `npm test`: **168 passing tests**. The MIT release metadata and lockfile remain consistent.
+- `npm run package`: passed with the MIT license and notices for 109 installed application dependencies included beside the executable. Electron and Chromium notices are retained. The application archive contains only the expected source, built frontend, assets and package metadata; it contains no account settings or manuscript recovery data.
+- `npm run test:onboarding` and `npm run test:tutorial`: passed against the rebuilt `release/win-unpacked/WRAITER.exe`. A timing issue in the tutorial test setup was corrected: it now starts with automatic suggestions off, then enables them through the real command after the practice manuscript owns the tour. This verifies tutorial suppression with the renderer and saved settings in agreement.
+- Verified packaged main-process files against the release source, 13 local documentation links, and the GitHub workflow/issue-form YAML. Reviewed the README screenshot with synthetic practice text. A pattern scan of current files and historical text blobs found no credentials or personal document paths before publication.
+- `WRAITER-0.9.0-Setup.exe`: **111,839,819 bytes**, SHA-256 `4c1f2bd4176613f452c8c94ed994d8e5ba6d2138f9a93cb68ee82c678d112a1d`.
+- `WRAITER-0.9.0-Windows.exe`: **111,622,768 bytes**, SHA-256 `38ef32c9abe3fa246553331dabbcabdf084ddbd1a38192d217078b892bd245c7`.
+- Both executables remain unsigned Windows x64 previews. Live Claude Code and completely fresh-PC provider installation/sign-in remain outside the validated scope. The live Codex results below are from the same application source, before publication metadata and license files were added.
+
+## Version 0.9.0 · In-editor writing walkthrough · 2026-09-14
+
+- Replaced the tutorial dialog with a nonmodal dock beneath the real editor. A separate tutorial manuscript starts with one short chapter. The user creates chapter two; the exact requested opening is typed into it. The guide responds to real editor operations and offers a pause/resume path, lesson skipping, and return to the original project.
+- `npm test`: **168 passing tests**. New checks cover distinct tutorial documents, the exact opening text, event-driven progress, wrong-project and paused-event rejection, partial/full acceptance, undo/redo order and saved-state validation. The writing-agent tests now verify writing voice is shared, while private notes remain excluded.
+- `npm run test:tutorial`: passed in development Electron and again against the packaged `release/win-unpacked/WRAITER.exe`. Exercises the normal editor, IPC and provider HTTP adapter with a local test service: real chapter creation and opening insertion; switching away during introductory typing; untouched original-project contents; request failure/retry and cancellation; character/word/full acceptance; selected-word rephrasing; undo/redo; correction; writing voice; disabled references; multi-turn document-agent edits; pause/restart/resume; Settings preserving newer tutorial progress; history/search/page/focus controls; and the real export dialog. Automatic suggestions do not send background requests from the tutorial manuscript.
+- `npm run test:tutorial:live`: **passed using the saved Codex account** with two short real requests and no original-author manuscript content. Codex generated a continuation about an author choosing a confident goose instead of a dragon, then supplied three alternatives for “software”. The actual editor accepted a word, accepted the remainder, accepted a selected-word revision and undid it. This opt-in test uses an isolated WRAITER profile and the synthetic tutorial manuscript. Live Claude Code inference was not exercised in this run.
+- `npm run test:onboarding` and `npm run test:settings`: passed after integration with the new walkthrough. The installer/account setup remains a dialog; only the writing tutorial has been replaced. Help can resume a paused tour or start a fresh one after completion.
+- Screenshots of the dock, real continuation, live rephrasing menu, assistant edit and minimum-size window were visually reviewed. At 960 × 650, the formatting toolbar becomes one horizontally scrollable row during the tour to leave room for the manuscript. Tutorial notices remain above the dock. No tutorial overlay intercepts the editor's keys or clicks.
+- `npm run package`: built `release/WRAITER-0.9.0-Setup.exe` and `release/WRAITER-0.9.0-Windows.exe`. Both remain unsigned Windows previews. `git diff --check` passed. Existing running WRAITER sessions and original writing files were left in place.
+
+## Version 0.8.0 · Guided setup and tutorial · 2026-09-14
+
+- Built `release/WRAITER-0.8.0-Setup.exe` (assisted, per-user Windows NSIS installer) and `release/WRAITER-0.8.0-Windows.exe` (portable). Both are unsigned previews. The 0.7 portable app was already running, so it was left running and the new release uses a separate versioned filename.
+- `npm test`: 165 passing tests, including setup preference validation, Claude process isolation arguments, allowlisted installer commands, bounded process output, errors and cancellation.
+- `npm run test:onboarding`: passed in development Electron and again against `release/win-unpacked/WRAITER.exe`. Verifies fresh setup, Simple versus Advanced controls, account sign-in gating, successful synthetic writing test, four-task provider assignment, tutorial practice, unchanged manuscript contents, preferences across restart, and Help-menu replay.
+- `npm run test:desktop` and `npm run test:settings`: passed. Existing task routing, account-key scoping, menus, shortcuts and settings still work.
+- Setup welcome, advanced connection, tutorial layout and tutorial practice screenshots were rendered and visually reviewed under `test-output/`. The screens fit the desktop viewport with clear navigation and readable text.
+- Official Codex and Claude Code installation and CLI documentation were checked. Read-only inspection of the installed Claude Code 2.1.62 help confirmed the flags used by the integration. Codex discovery now also checks the standalone installer's `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin` location before a restart is needed.
+- No provider installation, live authentication, subscription purchase or live AI inference was performed during QA. Provider responses in integration tests were simulated. A fresh Windows machine's installer/account flow still needs end-to-end human validation; successfully building NSIS does not establish that clean-machine result. Claude aliases are suggestions and model access is verified by the wizard's writing test.
+- `npm run build`, the NSIS/portable packaging pipeline, and `git diff --check` passed. Author manuscripts and LibreCompleteAI were not modified.
 
 ## Version 0.7.0 · 2026-09-14
 

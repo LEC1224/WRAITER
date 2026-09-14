@@ -27,7 +27,7 @@ const root = path.resolve(__dirname, '..');
     const boot = await page.evaluate(() => window.wraiter.boot());
     assert.ok(Array.isArray(boot.availableSpellLanguages));
     const menu = await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map(item => ({ label: item.label, items: item.submenu.items.map(child => ({ label: child.label, accelerator: child.accelerator })) })));
-    assert.deepEqual(menu.map(item => item.label), ['&File', '&Edit', '&View', '&Settings']);
+    assert.deepEqual(menu.map(item => item.label), ['&File', '&Edit', '&View', '&Settings', '&Help']);
     const settings = { enabled: true, taskProfiles: Object.fromEntries(['continue', 'correct', 'rewrite', 'chat'].map(task => [task, { provider: 'compatible', baseUrl, model: `mock-${task}` }])), nativeLanguage: 'sv', zoom: 110, apiKeyTask: 'correct', apiKey: 'only-a-local-test-key' };
     const saved = await page.evaluate(value => window.wraiter.settings(value), settings);
     assert.equal(saved.zoom, 110); assert.equal(saved.nativeLanguage, 'sv'); assert.equal(saved.taskHasKey.correct, true);

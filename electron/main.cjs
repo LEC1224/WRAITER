@@ -117,6 +117,12 @@ function createWindow() {
 app.whenReady().then(async () => {
   if (!primaryInstance) return;
   const savedPrefs = await tryRead('settings.json', {});
+  if (!Object.hasOwn(savedPrefs, 'setupMode')) {
+    const mode = await fs.readFile(path.join(path.dirname(app.getPath('exe')), 'setup-mode.txt'), 'utf8').catch(() => 'simple');
+    savedPrefs.setupMode = mode.trim() === 'advanced' ? 'advanced' : 'simple';
+  }
+  // Existing installations receive the tour without rerunning account setup.
+  if (!Object.hasOwn(savedPrefs, 'setupComplete') && Object.keys(savedPrefs).some(key => key !== 'setupMode')) savedPrefs.setupComplete = true;
   try { prefs = { ...mergeSettings(defaults, savedPrefs), keys: savedPrefs.keys || {}, recent: savedPrefs.recent || [] }; }
   catch (error) { console.error('Some preferences were invalid:', error.message); prefs = { ...defaults, keys: savedPrefs.keys || {}, recent: savedPrefs.recent || [] }; }
   // Keys in the original preview had no endpoint scope. Preserve the active connection only; never guess another key's destination.
@@ -136,6 +142,7 @@ app.whenReady().then(async () => {
   if (store.project) gitHistory.record(store.project, 'Recovered manuscript').catch(error => console.error('Git history:', error.message));
   updateMenu();
   createWindow();
+  require('./setup.cjs').registerSetup({ ipcMain, app, dialog, shell, win: () => win, draftConnection });
   ipcMain.handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
   ipcMain.handle('workspace:view', (_e, view) => serial(async () => { workspace.rememberView(view); return true; }));
   ipcMain.handle('workspace:activate', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.activate(id); syncWorkspace(); return result; }));

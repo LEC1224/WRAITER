@@ -4,7 +4,7 @@ const http = require('node:http');
 const { runWritingAgent, createDocumentTools, collectBlocks, parseReply, projectFingerprint } = require('../electron/writing-agent.cjs');
 const { generateStructured } = require('../electron/providers.cjs');
 const p = text => ({ type: 'paragraph', ...(text ? { content: [{ type: 'text', text }] } : {}) });
-const project = () => ({ format: 'wraiter', version: 1, id: 'agent-test', title: 'Synthetic manuscript', notes: 'PRIVATE_NOTES_NOT_SENT', style: 'PRIVATE_STYLE_NOT_SENT', chapters: [{ id: 'one', title: 'First', content: { type: 'doc', content: [p('First  sentence.  Next one.'), p('')] } }, { id: 'two', title: 'Second', content: { type: 'doc', content: [p('A   second chapter.'), { type: 'codeBlock', content: [{ type: 'text', text: 'const  x = 1;' }] }] } }], references: [], snapshots: [] });
+const project = () => ({ format: 'wraiter', version: 1, id: 'agent-test', title: 'Synthetic manuscript', notes: 'PRIVATE_NOTES_NOT_SENT', style: 'PUBLIC_WRITING_VOICE', chapters: [{ id: 'one', title: 'First', content: { type: 'doc', content: [p('First  sentence.  Next one.'), p('')] } }, { id: 'two', title: 'Second', content: { type: 'doc', content: [p('A   second chapter.'), { type: 'codeBlock', content: [{ type: 'text', text: 'const  x = 1;' }] }] } }], references: [], snapshots: [] });
 const reply = (tools = [], message = 'Done.') => JSON.stringify({ message, done: !tools.length, tools });
 const call = (name, args = {}) => ({ name, arguments: args });
 
@@ -18,7 +18,7 @@ test('writing chat executes a manuscript-wide double-space cleanup and verifies 
   assert.equal(result.edits[0].after, 'First sentence. Next one.'); assert.equal(result.edits[1].after, 'A second chapter.');
   assert.match(prompts[1].user, /Removed 3 repeated-space runs/);
   assert.ok(!JSON.stringify(prompts).includes('PRIVATE_NOTES_NOT_SENT'));
-  assert.ok(!JSON.stringify(prompts).includes('PRIVATE_STYLE_NOT_SENT'));
+  assert.ok(JSON.stringify(prompts).includes('PUBLIC_WRITING_VOICE'));
   assert.equal(original.chapters[0].content.content[0].content[0].text, 'First  sentence.  Next one.', 'server only stages changes until the batch is complete');
   assert.ok(events.some(event => event.tool === 'normalize_spaces' && event.state === 'done' && event.count === 3));
   assert.equal(result.baseFingerprint, projectFingerprint(original));

@@ -10,6 +10,9 @@ import { TextSelection, Selection } from '@tiptap/pm/state';
 import { getSchema } from '@tiptap/core';
 import { findTextMatches } from './search.js';
 import Settings from './Settings.jsx';
+import { SetupWizard } from './Onboarding.jsx';
+import WritingWalkthrough, { useWritingWalkthrough } from './WritingWalkthrough.jsx';
+import { tutorialProject } from './tutorial.js';
 import { DEFAULT_HOTKEYS, shortcutFromEvent, formatShortcut, appendedDuringRequest } from './hotkeys.js';
 import { LANGUAGES, languageName } from './languages.js';
 import FontPicker from './FontPicker.jsx';
@@ -24,7 +27,7 @@ import { insertPageBreak } from './pagination.js';
 const api = window.wraiter;
 const schema = getSchema(extensions);
 const DEFAULTS = { pageMode: 'continuous', theme: 'paper', font: 'Cambria', fontSize: 16, lineHeight: 1.5, measure: 720, zoom: 100, predictionWords: 35, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', goal: 500, spellcheck: true, language: 'en-US', nativeLanguage: '', provider: 'codex', baseUrl: '', model: '', enabled: false, continuous: false, hotkeys: DEFAULT_HOTKEYS };
-const providerNames = { local: 'Local models', ollama: 'Ollama', openai: 'OpenAI', compatible: 'Compatible API / xAI', anthropic: 'Claude API', codex: 'Codex' };
+const providerNames = { local: 'Local models', ollama: 'Ollama', openai: 'OpenAI', compatible: 'Compatible API / xAI', anthropic: 'Claude API', codex: 'Codex', claude: 'Claude Code' };
 const errorText = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
 function IconButton({ icon: Icon, title, active, className = '', children, ...props }) {
@@ -60,6 +63,7 @@ function Modal({ title, subtitle, children, onClose, wide = false }) {
 
 export default function App() {
   const [workspace, setWorkspace] = useState({ tabs: [], activeId: null }), [switching, setSwitching] = useState(false), [savingNamed, setSavingNamed] = useState(false);
+  const tourRef = useRef(null);
   const workspaceRef = useRef(workspace), tabCache = useRef(new Map()), transition = useRef(null), namedSave = useRef(false), namedSaveCompletion = useRef(Promise.resolve()), restoreScroll = useRef(null);
   workspaceRef.current = workspace;
   const [project, setProject] = useState(null), [prefs, setPrefs] = useState(DEFAULTS), [activeId, setActiveId] = useState(null);
@@ -98,6 +102,9 @@ export default function App() {
       await installWorkspace(result);
       setRecents(result.prefs.recent || []);
       if (result.warning) notify(result.warning);
+      if (result.prefs.tutorialSession) tourRef.current?.restore(result.prefs.tutorialSession);
+      if (!result.prefs.setupComplete) setModal({ type: 'setup' });
+      else if (!result.prefs.tutorialComplete && !result.prefs.tutorialSession) setModal({ type: 'tutorial' });
     }).catch(error => notify(errorText(error)));
   }, []);
 
@@ -197,7 +204,7 @@ export default function App() {
       pendingSave.current = work.catch(() => {});
       const result = await work;
       if (result?.chooseCopy) { namedSave.current = false; await saveNamed(true); return; }
-      if (result) { setPath(result.path); setBinding(result.binding); bindingRef.current = result.binding; setSaveState('saved'); setSaveError(''); notify(copy ? 'Document saved as a new file.' : 'Document saved.'); }
+      if (result) { setPath(result.path); setBinding(result.binding); bindingRef.current = result.binding; setSaveState('saved'); setSaveError(''); notify(copy ? 'Document saved as a new file.' : 'Document saved.'); tourRef.current?.emit('saved'); }
     }
     catch (error) { setSaveState('error'); setSaveError(errorText(error)); notify(errorText(error)); }
     finally { namedSave.current = false; setSavingNamed(false); finished(); }
@@ -266,10 +273,22 @@ export default function App() {
   async function createNew() {
     return projectTransition(async () => { await installWorkspace(await api.newProject({ ...newProject(), language: prefsRef.current.language })); setModal(null); });
   }
+  async function createTutorialDocument() {
+    let result;
+    await projectTransition(async () => { result = await api.newProject(tutorialProject()); await installWorkspace(result); setModal(null); });
+    return result;
+  }
+  async function activateTutorialDocument(id) {
+    if (id === workspaceRef.current.activeId) return { project: projectRef.current };
+    let result;
+    await projectTransition(async () => { result = await api.activateProject(id); await installWorkspace(result); });
+    return result;
+  }
   function changeChapter(id) { dismiss(); setActiveId(id); setQuery(''); setRenameId(null); }
   function addChapter() {
     dismiss(); const next = { id: uid(), title: `Chapter ${project.chapters.length + 1}`, status: 'Draft', content: blankContent() };
     updateProject({ chapters: [...project.chapters, next] }); setActiveId(next.id); setRenameId(next.id);
+    tourRef.current?.emit('chapter-created', { chapterId: next.id });
   }
   function editChapter(id, update) { updateProject({ chapters: projectRef.current.chapters.map(c => c.id === id ? { ...c, ...update } : c) }); }
   function reorderChapter(id, direction) {
@@ -326,6 +345,7 @@ export default function App() {
     setModal({ type: 'export', selectionDoc });
   }
   function handleEditorReady(current) {
+    if (current) current.storage.wraiterContext = { projectId: projectRef.current?.id, chapterId: activeId };
     editorRef.current = current; setEditor(current);
     if (current && restoreSelection.current) {
       const selection = restoreSelection.current; restoreSelection.current = null;
@@ -342,6 +362,7 @@ export default function App() {
       const result = applyHistory(projectRef.current, historyRef.current, direction, schema);
       if (!result) return;
       dismiss(); projectRef.current = result.project; publishHistory(result.journal); setProject(result.project); setActiveId(result.chapterId); restoreSelection.current = result.selection; setEpoch(value => value + 1);
+      tourRef.current?.emit(direction);
     } catch (error) { notify(errorText(error)); }
   }
 
@@ -355,6 +376,7 @@ export default function App() {
     let tr = closeHistory(current.state.tr).insertText(accepted, item.pos).setMeta(ghostKey, next).setMeta('assistAccept', true);
     tr.setSelection(TextSelection.create(tr.doc, item.pos + accepted.length));
     current.view.dispatch(tr); current.view.focus(); setGhost(next);
+    tourRef.current?.emit('accepted', { mode: 'continue', part });
   }
   function acceptProposal() {
     const current = editorRef.current, proposal = proposalRef.current;
@@ -368,6 +390,7 @@ export default function App() {
       current.view.dispatch(closeHistory(current.state.tr).setMeta(ghostKey, null));
       current.chain().focus().setTextSelection({ from, to }).insertContent(text.includes('\n') ? text.split('\n').map(p => ({ type: 'paragraph', content: p ? [{ type: 'text', text: p }] : undefined })) : { type: 'text', text, marks: current.state.doc.resolve(from).marks().map(m => m.toJSON()) }).run();
     }
+    tourRef.current?.emit('accepted', { mode: proposal.mode });
     setGhost(null); rejected.current = []; notify('Revision applied. Ctrl+Z to undo.');
   }
   function chooseOption(index) {
@@ -414,9 +437,10 @@ export default function App() {
           const remaining = whole.slice(typed.length);
           const item = remaining ? { kind: 'completion', pos: current.state.selection.from, text: remaining } : null;
           current.view.dispatch(current.state.tr.setMeta(ghostKey, item)); setGhost(item);
+          if (item) tourRef.current?.emit('suggestion', { mode });
         } else {
           if (JSON.stringify(current.getJSON()) !== originalDoc || current.state.selection.from !== from || current.state.selection.to !== to) return;
-          if (text === selected) { current.view.dispatch(current.state.tr.setMeta(ghostKey, null)); notify('No changes suggested for this selection.'); }
+          if (text === selected) { current.view.dispatch(current.state.tr.setMeta(ghostKey, null)); notify('No changes suggested for this selection.'); tourRef.current?.emit('no-change', { mode }); }
           else {
             const item = { kind: 'revision', pos: to, from, to, text, alternatives: Boolean(alternatives) };
             const proposed = { text, alternatives, activeOption: 0, original: selected, from, to, originalDoc, projectId, mode, changesStructure: proposalChangesStructure(current.state, from, to, text) };
@@ -442,6 +466,7 @@ export default function App() {
       if (!result.edits?.length && !result.chapterTitles?.length) {
         setAgentActivity(result.activity || []);
         setMessages(previous => [...previous, { id: uid(), role: 'assistant', text: result.message }]);
+        tourRef.current?.emit('chat-finished');
         return;
       }
       if (projectRef.current !== baseline) { notify('The document changed while the assistant was working. Its edits were not applied; ask again using the current text.'); return; }
@@ -455,12 +480,14 @@ export default function App() {
       }
       setAgentActivity(result.activity || []);
       setMessages(previous => [...previous, { id: uid(), role: 'assistant', text: result.message, edits: applied.changeCount, historyEntryId: applied.changeCount ? historyRef.current.entries.at(-1)?.id : null }]);
+      tourRef.current?.emit('chat-finished');
     } catch (error) { if (requestRef.current === pending) setAiError(errorText(error)); }
     finally { if (requestRef.current === pending) { requestRef.current = null; setBusy(null); } }
   }
   function rejectSuggestion() {
     const item = proposalRef.current, current = editorRef.current, text = item?.text || (current && !current.isDestroyed ? ghostKey.getState(current.state)?.text : '');
     if (text) rejected.current = [...rejected.current, ...(item?.alternatives?.map(option => option.text) || [text])].slice(-6);
+    if (text || requestRef.current) tourRef.current?.emit('dismissed');
     dismiss();
     if (item && editorRef.current && JSON.stringify(editorRef.current.getJSON()) === item.originalDoc) editorRef.current.chain().focus().setTextSelection({ from: item.from, to: item.to }).run();
   }
@@ -470,6 +497,7 @@ export default function App() {
   }
   function scheduleContinuous() {
     clearTimeout(continuousTimer.current);
+    if (tourRef.current?.session?.projectId === projectRef.current?.id) return;
     if (prefsRef.current.enabled && prefsRef.current.continuous) continuousTimer.current = setTimeout(() => {
       if (editorRef.current?.isFocused && editorRef.current.state.selection.empty && !requestRef.current) actionRef.current.askAI('continue');
     }, 1200);
@@ -517,6 +545,7 @@ export default function App() {
     if (transition.current) return;
     if (document.querySelector('[role="dialog"]') && (command.startsWith('open-recent:') || ['new', 'open', 'close-tab', 'next-tab', 'previous-tab', 'save', 'save-copy', 'export'].includes(command))) return;
     if (command.startsWith('open-recent:')) { openDocument(command.slice(12)); return; }
+    if (['setup', 'tutorial', 'about'].includes(command)) { setModal({ type: command }); return; }
     if (command.startsWith('settings-')) { setModal({ type: 'settings', tab: command.slice(9) }); return; }
     const current = editorRef.current;
     const actions = {
@@ -525,8 +554,8 @@ export default function App() {
       'clear-recents': async () => { try { setRecents(await api.clearRecents()); } catch (error) { notify(errorText(error)); } },
       recent: async () => { setRecents(await api.getRecents()); setModal({ type: 'recent' }); }, reveal: () => api.reveal(),
       undo: () => travelHistory('undo'), redo: () => travelHistory('redo'), 'select-all': () => current?.chain().focus().selectAll().run(),
-      find: () => setSearchOpen(true), replace: () => setSearchOpen(true), focus: () => setFocus(value => !value), 'toggle-outline': () => { setFocus(false); setLeftOpen(value => !value); },
-      'toggle-assistant': () => { setFocus(false); setPanel(value => value === 'assist' ? null : 'assist'); }, 'page-view': () => updatePrefs({ pageMode: prefsRef.current.pageMode === 'pages' ? 'continuous' : 'pages' }), 'page-break': () => { dismiss(); if (!insertPageBreak(current)) notify('Place the cursor in a paragraph to insert a page break.'); }, history: () => setPanel('history'), snapshot: () => createSnapshot(),
+      find: () => setSearchOpen(true), replace: () => setSearchOpen(true), focus: () => { setFocus(value => !value); tourRef.current?.emit('focus'); }, 'toggle-outline': () => { setFocus(false); setLeftOpen(value => !value); },
+      'toggle-assistant': () => { setFocus(false); setPanel(value => value === 'assist' ? null : 'assist'); }, 'page-view': async () => { await updatePrefs({ pageMode: prefsRef.current.pageMode === 'pages' ? 'continuous' : 'pages' }); tourRef.current?.emit('page-view'); }, 'page-break': () => { dismiss(); if (!insertPageBreak(current)) notify('Place the cursor in a paragraph to insert a page break.'); }, history: () => setPanel('history'), snapshot: () => createSnapshot(),
       complete: () => askAI(current?.state.selection.empty ? 'continue' : 'rewrite'), correct: () => askAI('correct'), rewrite: () => askAI('rewrite'), accept: () => acceptGhost(), dismiss: () => rejectSuggestion(),
       'toggle-ai': () => { dismiss(); updatePrefs({ enabled: !prefsRef.current.enabled }); }, 'toggle-continuous': () => updatePrefs({ continuous: !prefsRef.current.continuous })
     };
@@ -543,6 +572,7 @@ export default function App() {
     document.addEventListener('keydown', onKey);
     const stop = api?.onCommand(async command => {
       if (command === 'close-request') {
+        await tourRef.current?.flush();
         await namedSaveCompletion.current;
         await transition.current;
         clearTimeout(autosaveTimer.current); actionRef.current.dismiss();
@@ -568,6 +598,18 @@ export default function App() {
     const tr = closeHistory(editor.state.tr);
     [...chosen].reverse().forEach(m => tr.insertText(replacement, m.from, m.to)); editor.view.dispatch(tr); notify(`Replaced ${chosen.length} match${chosen.length === 1 ? '' : 'es'}.`);
   }
+
+  const walkthroughState = { prefs, project, workspace, editor, activeId, busy, ghost, proposal, aiError, panel, query, path, modal, focus, searchOpen, switching };
+  const tour = useWritingWalkthrough(walkthroughState, {
+    create: createTutorialDocument, activate: activateTutorialDocument, dismiss, save: saveLocal, updatePrefs, changeChapter,
+    canType: (current, projectId) => !transition.current && editorRef.current === current && projectRef.current?.id === projectId,
+    closeModal: () => setModal(null), showWorkspace: () => { setFocus(false); setLeftOpen(true); },
+    prepareChat: text => { setFocus(false); setPanel('assist'); setInstruction(text); const current = editorRef.current; if (current && !current.isDestroyed) current.commands.setTextSelection(current.state.doc.content.size - 1); requestAnimationFrame(() => document.querySelector('[aria-label="Ask the writing assistant"]')?.focus()); }
+  });
+  tourRef.current = tour;
+  useEffect(() => {
+    if (modal?.type === 'tutorial' && project && !switching) tour.begin();
+  }, [modal?.type, !!project, switching]);
 
   if (!api) return <div className="boot-screen"><Feather /><h1>WRAITER is a desktop application.</h1><p>Launch WRAITER.exe to use local files and writing assistance.</p></div>;
   if (!project) return <div className="boot-screen"><Feather size={38} /><h1>Opening WRAITER…</h1>{toast && <p>{toast}</p>}</div>;
@@ -600,14 +642,14 @@ export default function App() {
         </div>)}</nav>
         <button className="add-chapter" onClick={addChapter}><Plus size={15} />New chapter</button>
         <div className="sidebar-divider" />
-        <button className={`sidebar-nav ${panel === 'references' ? 'selected' : ''}`} onClick={() => setPanel(panel === 'references' ? null : 'references')}><BookMarked size={17} />Reference library<span>{project.references?.length || 0}</span></button>
-        <button className={`sidebar-nav ${panel === 'notes' ? 'selected' : ''}`} onClick={() => setPanel(panel === 'notes' ? null : 'notes')}><PenLine size={17} />Notes & voice</button>
-        <button className={`sidebar-nav ${panel === 'history' ? 'selected' : ''}`} onClick={() => setPanel(panel === 'history' ? null : 'history')}><History size={17} />Revision history<span>{undoInfo.totalEdits}</span></button>
+        <button data-tour="references" className={`sidebar-nav ${panel === 'references' ? 'selected' : ''}`} onClick={() => setPanel(panel === 'references' ? null : 'references')}><BookMarked size={17} />Reference library<span>{project.references?.length || 0}</span></button>
+        <button data-tour="notes" className={`sidebar-nav ${panel === 'notes' ? 'selected' : ''}`} onClick={() => setPanel(panel === 'notes' ? null : 'notes')}><PenLine size={17} />Notes & voice</button>
+        <button data-tour="history" className={`sidebar-nav ${panel === 'history' ? 'selected' : ''}`} onClick={() => setPanel(panel === 'history' ? null : 'history')}><History size={17} />Revision history<span>{undoInfo.totalEdits}</span></button>
         <div className="sidebar-spacer" />
         <div className="session-progress"><span>Session: {sessionWords.toLocaleString()} / {Number(prefs.goal).toLocaleString()} words</span><div className="progress-track"><div style={{ width: Math.min(100, sessionWords / Math.max(1, prefs.goal) * 100) + '%' }} /></div></div>
       </aside>}
       <main className="main-panel">
-        <div className="document-topbar"><div className="document-location"><IconButton icon={leftOpen && !focus ? PanelLeftClose : PanelLeftOpen} title="Toggle manuscript sidebar" onClick={() => { setFocus(false); setLeftOpen(!leftOpen); }} /><button className="document-name" onClick={() => setModal({ type: 'rename' })}>{project.title}</button><ChevronRight size={13} /><span>{chapter.title}</span></div><div className="document-actions"><button className={'save-indicator ' + (saveState === 'error' ? 'error' : '')} title={saveError || path || 'Saved in recovery. Use File → Save to choose a file.'} onClick={() => saveNamed()}>{saveState === 'saving' || saveState === 'pending' ? <LoaderCircle size={13} className="spin" /> : saveState === 'error' ? <Info size={13} /> : <Check size={13} />}<span>{saveState === 'error' ? 'Save needs attention' : saveState === 'recovery' ? 'Recovery saved' : saveState === 'saved' ? path ? 'Saved' : 'Autosaved' : 'Saving'}</span></button><IconButton icon={Focus} title="Focus view" active={focus} onClick={() => setFocus(!focus)} /><IconButton icon={PanelRightOpen} title="Toggle writing assistant" active={panel === 'assist'} onClick={() => setPanel(panel === 'assist' ? null : 'assist')} /></div></div>
+        <div className="document-topbar"><div className="document-location"><IconButton icon={leftOpen && !focus ? PanelLeftClose : PanelLeftOpen} title="Toggle manuscript sidebar" onClick={() => { setFocus(false); setLeftOpen(!leftOpen); }} /><button className="document-name" onClick={() => setModal({ type: 'rename' })}>{project.title}</button><ChevronRight size={13} /><span>{chapter.title}</span></div><div className="document-actions"><button className={'save-indicator ' + (saveState === 'error' ? 'error' : '')} title={saveError || path || 'Saved in recovery. Use File → Save to choose a file.'} onClick={() => saveNamed()}>{saveState === 'saving' || saveState === 'pending' ? <LoaderCircle size={13} className="spin" /> : saveState === 'error' ? <Info size={13} /> : <Check size={13} />}<span>{saveState === 'error' ? 'Save needs attention' : saveState === 'recovery' ? 'Recovery saved' : saveState === 'saved' ? path ? 'Saved' : 'Autosaved' : 'Saving'}</span></button><IconButton icon={Focus} title="Focus view" active={focus} onClick={() => handleCommand('focus')} /><IconButton icon={PanelRightOpen} title="Toggle writing assistant" active={panel === 'assist'} onClick={() => setPanel(panel === 'assist' ? null : 'assist')} /></div></div>
         {!focus && <div className="writer-toolbar formatbar" role="toolbar" aria-label="Text formatting">
           <div className="native-toolbar-group"><IconButton icon={FilePlus2} title="New manuscript" onClick={createNew} /><IconButton icon={FolderOpen} title="Open manuscript" onClick={() => openDocument()} /><IconButton icon={Save} title="Save manuscript" onClick={() => saveNamed()} /><IconButton icon={Undo2} title="Undo (Ctrl Z)" disabled={!undoInfo.canUndo} onClick={() => travelHistory('undo')} /><IconButton icon={Redo2} title="Redo (Ctrl Shift Z)" disabled={!undoInfo.canRedo} onClick={() => travelHistory('redo')} /></div>
           <div className="native-toolbar-group"><select className="paragraph-style-select" aria-label="Paragraph style" value={titleStyle} onChange={e => editorCommand(c => e.target.value === 'paragraph' ? c.setParagraph() : c.setHeading({ level: Number(e.target.value.at(-1)) }))}><option value="paragraph">Normal</option><option value="heading1">Heading 1</option><option value="heading2">Heading 2</option><option value="heading3">Heading 3</option></select><FontPicker value={editor?.getAttributes('textStyle').fontFamily || docStyle.fontFamily} fonts={fonts} onChange={font => editorCommand(c => c.setFontFamily(font))} /><FontSizeInput value={parseFloat(editor?.getAttributes('textStyle').fontSize || docStyle.fontSize)} onApply={size => editorCommand(c => c.setFontSize(size + 'pt'))} /></div>
@@ -615,7 +657,7 @@ export default function App() {
           <div className="native-toolbar-group"><IconButton icon={AlignLeft} title="Align left" active={editor?.isActive({ textAlign: 'left' })} onClick={() => editorCommand(c => c.setTextAlign('left'))} /><IconButton icon={AlignCenter} title="Align centre" active={editor?.isActive({ textAlign: 'center' })} onClick={() => editorCommand(c => c.setTextAlign('center'))} /><IconButton icon={AlignRight} title="Align right" active={editor?.isActive({ textAlign: 'right' })} onClick={() => editorCommand(c => c.setTextAlign('right'))} /><IconButton icon={List} title="Bullet list" active={editor?.isActive('bulletList')} onClick={() => editorCommand(c => c.toggleBulletList())} /><IconButton icon={ListOrdered} title="Numbered list" active={editor?.isActive('orderedList')} onClick={() => editorCommand(c => c.toggleOrderedList())} /></div>
           <div className="native-toolbar-group"><IconButton icon={Image} title="Insert image" onClick={async () => { try { const src = await api.image(); if (src) editorCommand(c => c.setImage({ src })); } catch (e) { notify(errorText(e)); } }} /><IconButton icon={Link2} title="Insert or edit link" onClick={() => setModal({ type: 'link', value: editor?.getAttributes('link').href || '' })} /><IconButton icon={Table2} title="Table tools" onClick={() => setModal({ type: 'table' })} /><IconButton icon={SlidersHorizontal} title="Paragraph and document formatting" onClick={() => setModal({ type: 'format' })} /></div>
         </div>}
-        {!focus && <div className="ai-toolbar" role="toolbar" aria-label="Writing assistance"><button className={prefs.enabled ? 'active' : ''} aria-pressed={prefs.enabled} onClick={() => handleCommand('toggle-ai')} title={formatShortcut(prefs.hotkeys?.toggleAI)}><PenLine size={14} />AI {prefs.enabled ? 'on' : 'off'}</button><button className={prefs.continuous ? 'active' : ''} aria-pressed={prefs.continuous} onClick={() => handleCommand('toggle-continuous')} title={formatShortcut(prefs.hotkeys?.toggleContinuous)}>Automatic suggestions {prefs.continuous ? 'on' : 'off'}</button><span className="toolbar-divider" /><button disabled={!!busy} onClick={() => handleCommand('complete')}>Suggest <kbd>{formatShortcut(prefs.hotkeys?.complete ?? 'Tab')}</kbd></button><button disabled={!!busy || !selectedWords} onClick={() => askAI('correct')}><CheckCheck size={14} />Correct</button><button disabled={!!busy || !selectedWords} onClick={() => askAI('rewrite')}>Rephrase / translate</button><div className="toolbar-spacer" /><button onClick={() => setModal({ type: 'settings', tab: 'connections' })}><Settings2 size={14} />AI settings</button></div>}
+        {!focus && <div className="ai-toolbar" role="toolbar" aria-label="Writing assistance"><button className={prefs.enabled ? 'active' : ''} aria-pressed={prefs.enabled} onClick={() => handleCommand('toggle-ai')} title={formatShortcut(prefs.hotkeys?.toggleAI)}><PenLine size={14} />AI {prefs.enabled ? 'on' : 'off'}</button><button disabled={tour.isCurrent} title={tour.isCurrent ? "Automatic requests pause in the practice manuscript. Your saved preference is unchanged." : undefined} className={prefs.continuous ? 'active' : ''} aria-pressed={prefs.continuous} onClick={() => handleCommand('toggle-continuous')} title={formatShortcut(prefs.hotkeys?.toggleContinuous)}>Automatic suggestions {tour.isCurrent ? 'paused for tour' : prefs.continuous ? 'on' : 'off'}</button><span className="toolbar-divider" /><button disabled={!!busy} onClick={() => handleCommand('complete')}>Suggest <kbd>{formatShortcut(prefs.hotkeys?.complete ?? 'Tab')}</kbd></button><button disabled={!!busy || !selectedWords} onClick={() => askAI('correct')}><CheckCheck size={14} />Correct</button><button disabled={!!busy || !selectedWords} onClick={() => askAI('rewrite')}>Rephrase / translate</button><div className="toolbar-spacer" /><button onClick={() => setModal({ type: 'settings', tab: 'connections' })}><Settings2 size={14} />AI settings</button></div>}
         {searchOpen && <div className="search-bar"><Search size={15} /><input autoFocus aria-label="Find text" placeholder="Find in this chapter" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') nextMatch(); }} /><span>{matches} matches</span><IconButton icon={ArrowDown} title="Next match" onClick={nextMatch} /><input aria-label="Replacement text" placeholder="Replace with" value={replacement} onChange={e => setReplacement(e.target.value)} /><button onClick={() => replaceMatches(false)}>Replace</button><button onClick={() => replaceMatches(true)}>All</button><IconButton icon={X} title="Close search" onClick={() => { setSearchOpen(false); setQuery(''); }} /></div>}
         {saveError && <div className="inline-warning"><Info size={16} /><span>{saveError}</span><button onClick={() => saveNamed(true)}>Save a copy</button></div>}
         <div className={`writing-scroll ${prefs.pageMode === 'pages' ? 'divided-pages' : 'continuous-pages'}`}>
@@ -628,7 +670,7 @@ export default function App() {
             {busy && busy !== 'chat' && <div className="generation-inline" role="status">{localBusy && localProgress ? localProgress.message : 'Generating suggestion…'}<button onClick={dismiss}>Cancel</button></div>}
           </article>
         </div>
-        <div className="writer-status writing-status"><div><span className="file-format-label">{binding?.format?.toUpperCase() || 'WRAITER'}</span><span>{selectedWords ? selectedWords + ' selected' : chapterWords.toLocaleString() + ' words'}</span><span className="status-dot">·</span><span>{totalWords.toLocaleString()} in document</span></div><div><select className="layout-select" aria-label="Document layout" value={project.layout || 'story'} onChange={event => { const chosen = LAYOUTS[event.target.value]; updateProject({ layout: event.target.value, showStatistics: chosen.showStatistics, documentStyle: { ...docStyle, fontFamily: chosen.fontFamily, fontSize: chosen.fontSize, lineHeight: chosen.lineHeight } }, 'Apply ' + chosen.name + ' layout'); }}>{Object.entries(LAYOUTS).map(([id, value]) => <option key={id} value={id}>{value.name}</option>)}</select><select className="language-select" aria-label="Content language" value={documentLanguage} onChange={e => updateProject({ language: e.target.value })}>{[...new Map([...LANGUAGES, [documentLanguage, languageName(documentLanguage)]]).entries()].map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select><button onClick={() => handleCommand('page-view')}>{prefs.pageMode === 'pages' ? 'Divided pages' : 'Continuous view'}</button><select aria-label="Document zoom" value={prefs.zoom || 100} onChange={e => updatePrefs({ zoom: Number(e.target.value) })}>{[50, 75, 90, 100, 110, 125, 150, 175, 200].map(zoom => <option key={zoom} value={zoom}>{zoom}%</option>)}</select></div></div>
+        <div className="writer-status writing-status"><div><span className="file-format-label">{binding?.format?.toUpperCase() || 'WRAITER'}</span><span>{selectedWords ? selectedWords + ' selected' : chapterWords.toLocaleString() + ' words'}</span><span className="status-dot">·</span><span>{totalWords.toLocaleString()} in document</span></div><div><select className="layout-select" aria-label="Document layout" value={project.layout || 'story'} onChange={event => { const chosen = LAYOUTS[event.target.value]; updateProject({ layout: event.target.value, showStatistics: chosen.showStatistics, documentStyle: { ...docStyle, fontFamily: chosen.fontFamily, fontSize: chosen.fontSize, lineHeight: chosen.lineHeight } }, 'Apply ' + chosen.name + ' layout'); }}>{Object.entries(LAYOUTS).map(([id, value]) => <option key={id} value={id}>{value.name}</option>)}</select><select className="language-select" aria-label="Content language" value={documentLanguage} onChange={e => updateProject({ language: e.target.value })}>{[...new Map([...LANGUAGES, [documentLanguage, languageName(documentLanguage)]]).entries()].map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select><button data-tour="page-view" onClick={() => handleCommand('page-view')}>{prefs.pageMode === 'pages' ? 'Divided pages' : 'Continuous view'}</button><select aria-label="Document zoom" value={prefs.zoom || 100} onChange={e => updatePrefs({ zoom: Number(e.target.value) })}>{[50, 75, 90, 100, 110, 125, 150, 175, 200].map(zoom => <option key={zoom} value={zoom}>{zoom}%</option>)}</select></div></div>
       </main>
       {!focus && panel && <aside className="inspector">
         <div className="inspector-heading"><div className="inspector-title">{panel === 'assist' ? <Sparkles size={17} /> : panel === 'references' ? <BookMarked size={17} /> : panel === 'notes' ? <PenLine size={17} /> : <History size={17} />}<span>{({ assist: 'Writing assistant', references: 'Reference library', notes: 'Notes & voice', history: 'Revision history' })[panel]}</span></div><IconButton icon={PanelRightClose} title="Close side panel" onClick={() => setPanel(null)} /></div>
@@ -649,6 +691,8 @@ export default function App() {
     </div>
     {toast && <div className="toast" role="status"><CheckCircle2 size={16} /><span>{toast}</span><IconButton icon={X} title="Dismiss notification" onClick={() => setToast('')} /></div>}
     {proposal?.alternatives && editor && <RephraseOptions editor={editor} proposal={proposal} onChoose={chooseOption} onAccept={index => { chooseOption(index); acceptProposal(); }} onDismiss={rejectSuggestion} onRetry={retryAI} />}
+    {modal?.type === 'setup' && <SetupWizard prefs={prefs} updatePrefs={updatePrefs} Modal={Modal} onClose={() => setModal(null)} onTutorial={() => setModal({ type: 'tutorial' })} />}
+    <WritingWalkthrough tour={tour} state={walkthroughState} onSetup={() => setModal({ type: 'setup' })} onEnable={() => updatePrefs({ enabled: true })} onExport={openExport} />
     {modal?.type === 'settings' && <Settings Modal={Modal} fonts={fonts} initialTab={modal.tab} prefs={prefs} updatePrefs={updatePrefs} onClose={() => setModal(null)} notify={notify} />}
     {modal?.type === 'rename' && <Modal title="Document title" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); setModal(null); }}><label className="field-label">TITLE</label><input className="field-input" aria-label="Manuscript title" value={project.title} onChange={e => updateProject({ title: e.target.value })} /><div className="modal-footer"><button className="primary-button">Done</button></div></form></Modal>}
     {modal?.type === 'export' && <ExportDialog Modal={Modal} project={project} chapterId={activeId} hasSelection={Boolean(modal.selectionDoc)} onExport={exportDocument} onClose={() => setModal(null)} />}
@@ -662,6 +706,6 @@ export default function App() {
     {modal?.type === 'restore' && <Modal title="Return to this revision?" subtitle="We’ll capture your current version first, so you can return to it later." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep writing</button><button className="primary-button" onClick={() => { const item = modal.item; dismiss(); updateProject({ title: item.title, chapters: structuredClone(item.chapters), notes: item.notes || '', style: item.style || '', language: item.language || project.language, documentStyle: item.documentStyle || project.documentStyle, references: structuredClone(item.references || []), snapshots: [snapshot(project, 'Before restoring a revision'), ...project.snapshots].slice(0, 20) }); setActiveId(item.chapters[0].id); setEpoch(x => x + 1); setModal(null); notify('Revision restored.'); }}>Restore revision</button></div></Modal>}
     {modal?.type === 'reference' && <Modal title={modal.reference.name} subtitle="Attached copy. Linked files refresh separately before each AI request." onClose={() => setModal(null)} wide><pre className="reference-reader">{modal.reference.text}</pre></Modal>}
     {modal?.type === 'notice' && <Modal title={modal.title} onClose={() => setModal(null)}><p className="notice-copy">{modal.text}</p><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Continue writing</button></div></Modal>}
-    {modal?.type === 'about' && <Modal title="WRAITER · 0.7.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Keep multiple projects in tabs, reopen recent files from the File menu, and choose whether to restore all tabs or start a clean project. Every project retains its own editing history. Continuous and divided pages, manual page breaks, and rated selection rephrasing remain available.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Claude Code / Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
+    {modal?.type === 'about' && <Modal title="WRAITER · 0.9.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Keep multiple projects in tabs, reopen recent files from the File menu, and choose whether to restore all tabs or start a clean project. Every project retains its own editing history. Continuous and divided pages, manual page breaks, and rated selection rephrasing remain available.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
   </div>;
 }
