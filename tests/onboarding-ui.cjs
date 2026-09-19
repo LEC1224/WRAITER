@@ -43,7 +43,7 @@ const root = path.resolve(__dirname, '..');
     await page.locator('.walkthrough').waitFor({ state: 'hidden' });
     const saved = await page.evaluate(async () => (await window.wraiter.boot()).prefs);
     assert.equal(saved.enabled, true); assert.equal(saved.continuous, false); assert.equal(saved.setupComplete, true); assert.equal(saved.tutorialComplete, true);
-    for (const task of ['continue', 'correct', 'rewrite', 'chat']) assert.equal(saved.taskProfiles[task].provider, 'claude');
+    for (const task of ['continue', 'correct', 'rewrite', 'proofread', 'chat']) assert.equal(saved.taskProfiles[task].provider, 'claude');
 
     await close(); page = await launch(); await page.getByRole('textbox', { name: 'Manuscript editor', exact: true }).waitFor();
     assert.equal(await page.getByRole('dialog').count(), 0);
@@ -58,6 +58,6 @@ const root = path.resolve(__dirname, '..');
     await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find(i => i.label === '&Help').submenu.items[1].click());
     await page.locator('.walkthrough[data-step="welcome"]').waitFor();
     assert.deepEqual(errors, []);
-    console.log('Onboarding passed: first run, sign-in gate, synthetic connection test, four task assignments, tutorial practice, persistence, advanced options and Help replay. No live AI or installs.');
+    console.log('Onboarding passed: first run, sign-in gate, synthetic connection test, five task assignments, tutorial practice, persistence, advanced options and Help replay. No live AI or installs.');
   } finally { if (app) await close().catch(() => app?.close()); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -4,7 +4,7 @@ import { Download, FolderOpen, LoaderCircle, Play, RefreshCw, Square, Upload } f
 const api = window.wraiter;
 const bytes = value => !Number.isFinite(value) ? 'Unknown size' : value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(1)} GB` : `${Math.ceil(value / 1024 ** 2)} MB`;
 const errorText = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
-const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['chat', 'Project assistant'], ['all', 'All AI tasks']];
+const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['proofread', 'Proofreading review'], ['chat', 'Project assistant'], ['all', 'All AI tasks']];
 
 export default function LocalModels({ onAssign, notify }) {
   const [status, setStatus] = useState(null), [error, setError] = useState(''), [pending, setPending] = useState(''), [progress, setProgress] = useState(null);

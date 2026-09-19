@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('wraiter', {
   autosave: invoke('autosave'), newProject: invoke('new-project'), exportFile: invoke('export'), exportClipboard: invoke('export:clipboard'),
   bindNative: invoke('native:bind'), chooseSaveTarget: invoke('save:choose'), saveEncoded: invoke('save:encoded'), loadEditHistory: invoke('history:load'), appendEditHistory: invoke('history:append'), restartEditHistory: invoke('history:restart'), runAgent: invoke('agent:run'),
   reference: invoke('reference'), image: invoke('image'), settings: invoke('settings'),
-  generate: invoke('generate'), cancel: invoke('cancel'), probe: invoke('probe'),
+  generate: invoke('generate'), proofread: invoke('proofread:run'), cancel: invoke('cancel'), probe: invoke('probe'),
   connectionStatus: invoke('provider:status'), connectProvider: invoke('provider:connect'), reconnectProvider: invoke('provider:reconnect'), loginProvider: invoke('provider:login'), listModels: invoke('provider:models'),
   listFonts: invoke('fonts:list'), setDocumentLanguage: invoke('document:language'), setShortcutCapture: invoke('shortcuts:capture'),
   localStatus: invoke('local:status'), configureLocal: invoke('local:configure'), localFolder: invoke('local:folder'), startLocal: invoke('local:start'), stopLocal: invoke('local:stop'), unloadLocal: invoke('local:unload'), localRelease: invoke('local:release'), installLocal: invoke('local:install'), cancelLocal: invoke('local:cancel'), localCatalogInfo: invoke('local:catalog-info'), pullLocal: invoke('local:pull'), chooseGGUF: invoke('local:choose-gguf'), importGGUF: invoke('local:import'),

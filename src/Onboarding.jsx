@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 const api = window.wraiter;
 const cleanError = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
-const tasks = ['continue', 'correct', 'rewrite', 'chat'];
+const tasks = ['continue', 'correct', 'rewrite', 'proofread', 'chat'];
 
 export function SetupWizard({ prefs, updatePrefs, Modal, onClose, onTutorial }) {
   const [step, setStep] = useState(0), [mode, setMode] = useState(prefs.setupMode || 'simple');
@@ -35,7 +35,7 @@ export function SetupWizard({ prefs, updatePrefs, Modal, onClose, onTutorial }) 
       {step === 3 && <><h3>A small writing test</h3><p>We’ll ask {name} to finish “The morning sun”. This uses a small amount of your provider allowance. Your manuscript is not included in this test.</p>
         {mode === 'advanced' && <div className="settings-section"><label>Model (optional)<input className="field-input" aria-label="Setup model" list="setup-models" value={model} disabled={!!busy} placeholder="Use the provider default" onChange={e => { setModel(e.target.value); setReady(false); }} /></label><datalist id="setup-models">{status?.models?.map(value => <option key={value} value={value} />)}</datalist><label className="check-label"><input type="checkbox" checked={continuous} onChange={e => setContinuous(e.target.checked)} />Offer suggestions automatically while I write</label></div>}
         <button className="primary-button" disabled={!!busy} onClick={() => perform('Testing writing assistance…', async () => { setReady(false); const result = await api.setupTest(profile); setReady(result.ready === true); setMessage(`${result.message}\nSample: ${result.sample}`); })}>Run writing test</button><aside className="onboarding-tip">When you use AI, relevant writing and enabled reference files go to your chosen provider. Private notes are excluded. Simple setup starts with suggestions on request, so you decide when to ask.</aside></>}
-      {step === 4 && <><p className="onboarding-lead">Your connection passed its writing test.</p><p>Choose “Save and start tutorial” to use {name} for suggestions, corrections, rephrasing and the writing assistant.</p><aside className="onboarding-tip">You can change providers or assign different models later in Settings → AI connections. Reopen this guide anytime from Help → Set up AI.</aside></>}
+      {step === 4 && <><p className="onboarding-lead">Your connection passed its writing test.</p><p>Choose “Save and start tutorial” to use {name} for suggestions, corrections, rephrasing, proofreading and the writing assistant.</p><aside className="onboarding-tip">You can change providers or assign different models later in Settings → AI connections. Reopen this guide anytime from Help → Set up AI.</aside></>}
       {message && <p className="connection-status" role="status" style={{ whiteSpace: 'pre-wrap' }}>{message}</p>}
       {busy && <p role="status">{busy}</p>}{error && <p className="connection-status error" role="alert">{error}</p>}
     </div>

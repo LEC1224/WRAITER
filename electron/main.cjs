@@ -12,6 +12,7 @@ const { EditJournal } = require('./edit-journal.cjs');
 const { runWritingAgent } = require('./writing-agent.cjs');
 const { LocalModels } = require('./local-models.cjs');
 const { WorkspaceSession } = require('./workspace-session.cjs');
+const { runProofread, validateProofreadRequest } = require('./proofreading.cjs');
 
 if (process.env.WRAITER_USER_DATA) app.setPath('userData', path.resolve(process.env.WRAITER_USER_DATA));
 app.setName('WRAITER');
@@ -65,7 +66,7 @@ async function persistDocument(project, payload, events, options) {
   return documentFiles.persist(project, payload, options);
 }
 function updateMenu() {
-  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys, prefs.recent)));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys, prefs.recent, prefs)));
 }
 function setDocumentLanguage(language) {
   const session = win.webContents.session;
@@ -237,7 +238,7 @@ app.whenReady().then(async () => {
     }
     await atomicWrite(file('settings.json'), JSON.stringify(next));
     prefs = next;
-    if ('hotkeys' in update) updateMenu();
+    if (['hotkeys', 'spellcheck'].some(key => key in update)) updateMenu();
     if ('language' in update) setDocumentLanguage(store.project?.language || prefs.language);
     return publicPrefs();
   }));
@@ -259,6 +260,18 @@ app.whenReady().then(async () => {
       return await providers.generate(settings, await getKey(settings), { ...request, references: refreshed.references }, controller.signal);
     }
     catch (error) { throw new Error(controller.signal.aborted ? 'Request cancelled or timed out.' : error.message); }
+    finally { clearTimeout(timeout); activeRequests.delete(request.id); finished(); }
+  });
+  ipcMain.handle('proofread:run', async (_event, request) => {
+    if (!prefs.enabled) throw new Error('Enable an AI connection before proofreading.');
+    if (activeRequests.size) throw new Error('Finish or cancel the current AI request first.');
+    request = validateProofreadRequest(request);
+    if (store.project && store.project.id !== request.projectId) throw new Error('The requested document is no longer open.');
+    const settings = resolveTask(prefs, 'proofread'), controller = new AbortController();
+    let finished; controller.finished = new Promise(resolve => { finished = resolve; });
+    const timeout = setTimeout(() => controller.abort(), 240000); activeRequests.set(request.id, controller);
+    try { return await runProofread(providers, settings, await getKey(settings), request, controller.signal); }
+    catch (error) { throw new Error(controller.signal.aborted ? 'Proofreading stopped or timed out.' : error.message); }
     finally { clearTimeout(timeout); activeRequests.delete(request.id); finished(); }
   });
   ipcMain.handle('cancel', cancelAll);

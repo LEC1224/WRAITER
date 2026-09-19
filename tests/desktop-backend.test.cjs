@@ -41,11 +41,14 @@ test('settings reject malformed task profiles, languages, and out-of-range AI kn
 test('native menu owns document hotkeys and leaves editor AI shortcuts to renderer', () => {
   const sent = []; let closed = false;
   const menu = menuTemplate(command => sent.push(command), () => { closed = true; }, { ...DEFAULT_HOTKEYS, save: 'Ctrl+Alt+W' });
-  assert.deepEqual(menu.map(item => item.label), ['&File', '&Edit', '&View', '&Settings', '&Help']);
+  assert.deepEqual(menu.map(item => item.label), ['&File', '&Edit', '&View', '&Tools', '&Settings', '&Help']);
   const items = menu.flatMap(item => item.submenu);
   const save = items.find(item => item.label === '&Save');
   assert.equal(save.accelerator, 'Ctrl+Alt+W'); save.click(); assert.deepEqual(sent, ['save']);
   assert.equal(items.find(item => item.label === 'Suggest / rephrase selection').accelerator, undefined);
+  const tools = menu.find(item => item.label === '&Tools').submenu;
+  tools.find(item => item.label === '&Proofread…').click(); assert.deepEqual(sent, ['save', 'proofread']);
+  const spelling = tools.find(item => item.label === 'Spelling').submenu[0]; assert.equal(spelling.checked, true); spelling.click(); assert.equal(sent.at(-1), 'toggle-spellcheck');
   items.find(item => item.label === 'E&xit').click(); assert.equal(closed, true);
 });
 test('spell dictionaries use exact regional matches and safe base fallback', () => {

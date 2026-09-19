@@ -13,11 +13,13 @@ const waitFor = async (fn, label, timeout = 12000) => {
 (async () => {
   const output = path.join(root, 'test-output'); await fs.mkdir(output, { recursive: true });
   const userData = await fs.mkdtemp(path.join(output, 'session-')), projectPath = path.join(userData, 'Integration manuscript.wraiter');
+  const { defaults } = require('../electron/preferences.cjs');
+  await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ ...defaults, setupComplete: true, tutorialComplete: true, keys: {} }));
   const events = [], failures = [], requests = [];
   let nextReply = 'and found a note waiting on the windowsill.', delay = 0;
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    if (req.method === 'GET') return res.end(JSON.stringify({ models: ['continue', 'correct', 'rewrite', 'chat'].map(task => ({ name: `mock-${task}` })) }));
+    if (req.method === 'GET') return res.end(JSON.stringify({ models: ['continue', 'correct', 'rewrite', 'proofread', 'chat'].map(task => ({ name: `mock-${task}` })) }));
     let body = ''; req.on('data', bytes => { body += bytes; });
     req.on('end', () => {
       requests.push({ ...JSON.parse(body || '{}'), endpoint: req.url }); const reply = nextReply;
@@ -61,12 +63,12 @@ const waitFor = async (fn, label, timeout = 12000) => {
   try {
     app = await electron.launch(launchOptions); await prepareWindow();
     assert.equal((await editor.innerText()).trim(), '');
-    assert.deepEqual(await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map(item => item.label.replace(/&/g, ''))), ['File', 'Edit', 'View', 'Settings']);
+    assert.deepEqual(await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map(item => item.label.replace(/&/g, ''))), ['File', 'Edit', 'View', 'Tools', 'Settings', 'Help']);
     await replaceEditor('A reliable sentence with a mistkae.');
     await waitFor(async () => JSON.stringify(await recover()).includes('mistkae'), 'local recovery');
     await app.evaluate(({ dialog }, target) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: target }); }, projectPath);
     await menu('File', 'Save'); await waitFor(async () => JSON.parse(await fs.readFile(projectPath, 'utf8')).chapters.length === 1, 'named save');
-    events.push('Blank manuscript, native File/Edit/View/Settings menu, named saves and recovery work.');
+    events.push('Blank manuscript, native File/Edit/View/Tools/Settings/Help menu, named saves and recovery work.');
     await page.getByRole('button', { name: 'New chapter', exact: true }).click(); await page.getByRole('textbox', { name: 'Chapter title', exact: true }).fill('Integration chapter');
     await replaceEditor('This is a new chapter.'); await page.locator('.chapter-select').filter({ hasText: 'Chapter one' }).click(); assert.match(await visibleText(), /mistkae/);
     await chapter2().click(); assert.equal(await visibleText(), 'This is a new chapter.');
@@ -88,7 +90,7 @@ const waitFor = async (fn, label, timeout = 12000) => {
     assert.equal(textOf((await page.evaluate(revision => window.wraiter.getGitRevision(revision), savedVersion)).chapters[1].content), 'Before. A quiet hour. After.');
     events.push('Named Git checkpoints preserve full document content and formatting.');
 
-    await page.evaluate(baseUrl => window.wraiter.settings({ enabled: true, continuous: false, provider: 'ollama', baseUrl, model: 'mock-continue', ollamaMode: 'raw', nativeLanguage: 'sv-SE', taskProfiles: Object.fromEntries(['continue', 'correct', 'rewrite', 'chat'].map(task => [task, { provider: 'ollama', baseUrl, model: `mock-${task}`, codexPath: '' }])) }), baseUrl);
+    await page.evaluate(baseUrl => window.wraiter.settings({ setupComplete: true, tutorialComplete: true, enabled: true, continuous: false, provider: 'ollama', baseUrl, model: 'mock-continue', ollamaMode: 'raw', nativeLanguage: 'sv-SE', taskProfiles: Object.fromEntries(['continue', 'correct', 'rewrite', 'proofread', 'chat'].map(task => [task, { provider: 'ollama', baseUrl, model: `mock-${task}`, codexPath: '' }])) }), baseUrl);
     await reload(); await chapter2().click(); await page.getByRole('combobox', { name: 'Content language', exact: true }).selectOption('en-GB');
     await replaceEditor('Before. A quiet hour. After.'); await selectText('A quiet hour.'); nextReply = 'A peaceful moment.';
     await page.keyboard.press('Tab'); await preview('.revision-preview'); assert.equal(await visibleText(), 'Before. A quiet hour. After.');

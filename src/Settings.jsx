@@ -5,7 +5,7 @@ import { LANGUAGES } from './languages.js';
 import LocalModels from './LocalModels.jsx';
 
 const api = window.wraiter;
-const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['chat', 'Project assistant']];
+const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['proofread', 'Proofreading review'], ['chat', 'Project assistant']];
 const PROVIDERS = { local: 'Local models (managed)', codex: 'Codex account', claude: 'Claude Code account', ollama: 'Ollama (local)', openai: 'OpenAI API', anthropic: 'Claude API', compatible: 'Compatible API / xAI' };
 const PRESETS = { claude: { baseUrl: '', model: '', claudePath: '' }, local: { baseUrl: '', model: '' }, codex: { baseUrl: '', model: '', codexPath: '' }, ollama: { baseUrl: 'http://localhost:11434', model: '' }, openai: { baseUrl: 'https://api.openai.com/v1', model: '' }, anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: '' }, compatible: { baseUrl: 'https://api.x.ai/v1', model: '' } };
 const errorText = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
@@ -16,10 +16,10 @@ function NumberField({ label, value, min, max, step = 1, onChange, help }) {
   return <label>{label}<input className="field-input" type="number" aria-label={label} min={min} max={max} step={step} value={value ?? ''} onChange={event => onChange(event.target.value === '' ? '' : Number(event.target.value))} />{help && <small className="field-help">{help}</small>}</label>;
 }
 
-export default function Settings({ initialTab, prefs, updatePrefs, onClose, notify, fonts = [], Modal }) {
+export default function Settings({ initialTab, initialTask, prefs, updatePrefs, onClose, notify, fonts = [], Modal }) {
   const [tab, setTab] = useState(['general', 'appearance', 'language', 'connections', 'local', 'ai', 'hotkeys'].includes(initialTab) ? initialTab : 'appearance');
   const [draft, setDraft] = useState(() => ({ ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
-  const [task, setTask] = useState('continue');
+  const [task, setTask] = useState(TASKS.some(([which]) => which === initialTask) ? initialTask : 'continue');
   const [keyEdits, setKeyEdits] = useState({});
   const [connections, setConnections] = useState({});
   const [pending, setPending] = useState('');

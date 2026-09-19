@@ -23,6 +23,9 @@ import { normalizeHistoryProject, prepareHistoryLoad, recordTransaction, recordP
 import { applyAgentResult } from './agent-edits.js';
 import RephraseOptions from './RephraseOptions.jsx';
 import { insertPageBreak } from './pagination.js';
+import ProofreadingDialog from './ProofreadingDialog.jsx';
+import StatisticsDialog from './StatisticsDialog.jsx';
+import { applyProofreadingFixes } from './proofreading.js';
 
 const api = window.wraiter;
 const schema = getSchema(extensions);
@@ -38,14 +41,15 @@ function FontSizeInput({ value, onApply, label = 'Font size in points', classNam
   useEffect(() => setDraft(String(value)), [value]);
   return <input className={className} type="number" aria-label={label} title="Font size (points)" min="6" max="96" step="0.5" value={draft} onChange={e => setDraft(e.target.value)} onBlur={() => { const size = Number(draft); if (size >= 6 && size <= 96) onApply(size); else setDraft(String(value)); }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }} />;
 }
-function Modal({ title, subtitle, children, onClose, wide = false }) {
-  const ref = useRef();
+function Modal({ title, subtitle, children, onClose, wide = false, className = '' }) {
+  const ref = useRef(), closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const previous = document.activeElement;
     ref.current?.querySelector('input,button,select,textarea')?.focus();
     const handler = event => {
       if (event.defaultPrevented) return;
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') closeRef.current();
       if (event.key === 'Tab') {
         const items = [...ref.current.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')];
         const first = items[0], last = items.at(-1);
@@ -56,7 +60,7 @@ function Modal({ title, subtitle, children, onClose, wide = false }) {
     document.addEventListener('keydown', handler);
     return () => { document.removeEventListener('keydown', handler); previous?.focus?.(); };
   }, []);
-  return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><section ref={ref} className={`modal ${wide ? 'wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+  return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><section ref={ref} className={`modal ${wide ? 'wide' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={title}>
     <div className="modal-heading"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><IconButton icon={X} title="Close dialog" onClick={onClose} /></div>{children}
   </section></div>;
 }
@@ -174,7 +178,7 @@ export default function App() {
     } catch (error) { notify(errorText(error)); }
   }, []);
   async function updatePrefs(update) {
-    try { const next = await api.settings(update); setPrefs(next); return next; }
+    try { const next = await api.settings(update); prefsRef.current = next; setPrefs(next); return next; }
     catch (error) { notify(errorText(error)); throw error; }
   }
   function toggleDocumentMenu() {
@@ -320,6 +324,16 @@ export default function App() {
       notify('Earlier version restored. Your preceding version remains in Git history.');
     } catch (error) { notify(errorText(error)); }
   }
+  function applyProofreadSuggestions(ids, findings) {
+    const baseline = projectRef.current;
+    const result = applyProofreadingFixes(baseline, findings, ids, schema);
+    if (!result.changeCount) return result.findings;
+    const history = recordProjectChange(historyRef.current, baseline, result.project, { label: `Proofread: apply ${result.changeCount} correction${result.changeCount === 1 ? '' : 's'}`, chapterId: activeId });
+    const next = { ...result.project, historySequence: history.sequence, updatedAt: new Date().toISOString() };
+    projectRef.current = next; publishHistory(history); setProject(next); setEpoch(value => value + 1);
+    notify(`Applied ${result.changeCount} proofreading correction${result.changeCount === 1 ? '' : 's'}. Ctrl+Z to undo.`);
+    return result.findings;
+  }
   async function exportDocument(format, options = {}) {
     try {
       const selected = modal?.selectionDoc;
@@ -347,10 +361,14 @@ export default function App() {
   function handleEditorReady(current) {
     if (current) current.storage.wraiterContext = { projectId: projectRef.current?.id, chapterId: activeId };
     editorRef.current = current; setEditor(current);
+    if (current) setTimeout(() => {
+      const dialog = document.querySelector('[role="dialog"]');
+      if (dialog && !dialog.contains(document.activeElement)) dialog.querySelector('input:not(:disabled),button:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')?.focus();
+    }, 0);
     if (current && restoreSelection.current) {
       const selection = restoreSelection.current; restoreSelection.current = null;
       try { current.view.dispatch(current.state.tr.setSelection(Selection.fromJSON(current.state.doc, selection)).scrollIntoView()); } catch {}
-      current.view.focus();
+      if (!document.querySelector('[role="dialog"]')) current.view.focus();
     }
     if (current && restoreScroll.current !== null) {
       const top = restoreScroll.current; restoreScroll.current = null;
@@ -543,10 +561,11 @@ export default function App() {
     }
     if (command.startsWith('reference-warning:')) { notify(command.slice(18)); return; }
     if (transition.current) return;
-    if (document.querySelector('[role="dialog"]') && (command.startsWith('open-recent:') || ['new', 'open', 'close-tab', 'next-tab', 'previous-tab', 'save', 'save-copy', 'export'].includes(command))) return;
+    if (document.querySelector('[role="dialog"]') && (command.startsWith('open-recent:') || ['new', 'open', 'close-tab', 'next-tab', 'previous-tab', 'save', 'save-copy', 'export', 'proofread', 'statistics'].includes(command))) return;
     if (command.startsWith('open-recent:')) { openDocument(command.slice(12)); return; }
     if (['setup', 'tutorial', 'about'].includes(command)) { setModal({ type: command }); return; }
     if (command.startsWith('settings-')) { setModal({ type: 'settings', tab: command.slice(9) }); return; }
+    if (command === 'toggle-spellcheck') { updatePrefs({ spellcheck: !prefsRef.current.spellcheck }); return; }
     const current = editorRef.current;
     const actions = {
       new: createNew, open: () => openDocument(), save: () => saveNamed(), 'save-copy': () => saveNamed(true), export: () => openExport(),
@@ -557,6 +576,7 @@ export default function App() {
       find: () => setSearchOpen(true), replace: () => setSearchOpen(true), focus: () => { setFocus(value => !value); tourRef.current?.emit('focus'); }, 'toggle-outline': () => { setFocus(false); setLeftOpen(value => !value); },
       'toggle-assistant': () => { setFocus(false); setPanel(value => value === 'assist' ? null : 'assist'); }, 'page-view': async () => { await updatePrefs({ pageMode: prefsRef.current.pageMode === 'pages' ? 'continuous' : 'pages' }); tourRef.current?.emit('page-view'); }, 'page-break': () => { dismiss(); if (!insertPageBreak(current)) notify('Place the cursor in a paragraph to insert a page break.'); }, history: () => setPanel('history'), snapshot: () => createSnapshot(),
       complete: () => askAI(current?.state.selection.empty ? 'continue' : 'rewrite'), correct: () => askAI('correct'), rewrite: () => askAI('rewrite'), accept: () => acceptGhost(), dismiss: () => rejectSuggestion(),
+      proofread: () => setModal({ type: 'proofread' }), statistics: () => setModal({ type: 'statistics' }),
       'toggle-ai': () => { dismiss(); updatePrefs({ enabled: !prefsRef.current.enabled }); }, 'toggle-continuous': () => updatePrefs({ continuous: !prefsRef.current.continuous })
     };
     actions[command]?.();
@@ -632,7 +652,7 @@ export default function App() {
         <IconButton icon={X} title={`Close project ${title}`} disabled={switching || savingNamed} onClick={() => closeProject(tab.id)} />
       </div>;
     })}</div><IconButton icon={Plus} title="New project tab" disabled={switching || savingNamed} onClick={createNew} /></div>}
-    <div className="workspace" id="project-workspace" role="tabpanel" aria-labelledby={`project-tab-${workspace.activeId}`} inert={switching ? true : undefined}>
+    <div className="workspace" id="project-workspace" role="tabpanel" aria-labelledby={`project-tab-${workspace.activeId}`} inert={switching || (modal && modal.type !== 'tutorial') ? true : undefined}>
       {!focus && leftOpen && <aside className="sidebar">
         <div className="project-switcher"><div className="project-avatar"><BookOpen size={21} /></div><div className="project-switcher-text"><small>YOUR MANUSCRIPT</small><button className="project-title-button" onClick={() => setModal({ type: 'rename' })}>{project.title}<PenLine size={12} /></button></div></div>
         <button className="sidebar-search" onClick={() => setSearchOpen(x => !x)}><Search size={15} />Find in chapter<kbd>{formatShortcut(prefs.hotkeys?.find)}</kbd></button>
@@ -693,7 +713,9 @@ export default function App() {
     {proposal?.alternatives && editor && <RephraseOptions editor={editor} proposal={proposal} onChoose={chooseOption} onAccept={index => { chooseOption(index); acceptProposal(); }} onDismiss={rejectSuggestion} onRetry={retryAI} />}
     {modal?.type === 'setup' && <SetupWizard prefs={prefs} updatePrefs={updatePrefs} Modal={Modal} onClose={() => setModal(null)} onTutorial={() => setModal({ type: 'tutorial' })} />}
     <WritingWalkthrough tour={tour} state={walkthroughState} onSetup={() => setModal({ type: 'setup' })} onEnable={() => updatePrefs({ enabled: true })} onExport={openExport} />
-    {modal?.type === 'settings' && <Settings Modal={Modal} fonts={fonts} initialTab={modal.tab} prefs={prefs} updatePrefs={updatePrefs} onClose={() => setModal(null)} notify={notify} />}
+    {modal?.type === 'proofread' && <ProofreadingDialog Modal={Modal} project={project} activeChapterId={activeId} editor={editor} schema={schema} prefs={prefs} updatePrefs={updatePrefs} onApply={applyProofreadSuggestions} onClose={() => setModal(null)} onConnectionSettings={() => setModal({ type: 'settings', tab: 'connections', task: 'proofread' })} />}
+    {modal?.type === 'statistics' && <StatisticsDialog Modal={Modal} project={project} onClose={() => setModal(null)} />}
+    {modal?.type === 'settings' && <Settings Modal={Modal} fonts={fonts} initialTab={modal.tab} initialTask={modal.task} prefs={prefs} updatePrefs={updatePrefs} onClose={() => setModal(null)} notify={notify} />}
     {modal?.type === 'rename' && <Modal title="Document title" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); setModal(null); }}><label className="field-label">TITLE</label><input className="field-input" aria-label="Manuscript title" value={project.title} onChange={e => updateProject({ title: e.target.value })} /><div className="modal-footer"><button className="primary-button">Done</button></div></form></Modal>}
     {modal?.type === 'export' && <ExportDialog Modal={Modal} project={project} chapterId={activeId} hasSelection={Boolean(modal.selectionDoc)} onExport={exportDocument} onClose={() => setModal(null)} />}
     {modal?.type === 'link' && <Modal title="Link to something" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); const href = new FormData(e.currentTarget).get('href'); if (!/^(https?:\/\/|mailto:)/i.test(href)) { notify('Use a full https://, http://, or mailto: address.'); return; } editorCommand(c => c.extendMarkRange('link').setLink({ href })); setModal(null); }}><input className="field-input" name="href" aria-label="Link address" placeholder="https://" defaultValue={modal.value} /><div className="modal-footer"><button type="button" className="secondary-button" onClick={() => { editorCommand(c => c.unsetLink()); setModal(null); }}>Remove link</button><button className="primary-button">Apply link</button></div></form></Modal>}
@@ -706,6 +728,6 @@ export default function App() {
     {modal?.type === 'restore' && <Modal title="Return to this revision?" subtitle="We’ll capture your current version first, so you can return to it later." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep writing</button><button className="primary-button" onClick={() => { const item = modal.item; dismiss(); updateProject({ title: item.title, chapters: structuredClone(item.chapters), notes: item.notes || '', style: item.style || '', language: item.language || project.language, documentStyle: item.documentStyle || project.documentStyle, references: structuredClone(item.references || []), snapshots: [snapshot(project, 'Before restoring a revision'), ...project.snapshots].slice(0, 20) }); setActiveId(item.chapters[0].id); setEpoch(x => x + 1); setModal(null); notify('Revision restored.'); }}>Restore revision</button></div></Modal>}
     {modal?.type === 'reference' && <Modal title={modal.reference.name} subtitle="Attached copy. Linked files refresh separately before each AI request." onClose={() => setModal(null)} wide><pre className="reference-reader">{modal.reference.text}</pre></Modal>}
     {modal?.type === 'notice' && <Modal title={modal.title} onClose={() => setModal(null)}><p className="notice-copy">{modal.text}</p><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Continue writing</button></div></Modal>}
-    {modal?.type === 'about' && <Modal title="WRAITER · 0.9.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Keep multiple projects in tabs, reopen recent files from the File menu, and choose whether to restore all tabs or start a clean project. Every project retains its own editing history. Continuous and divided pages, manual page breaks, and rated selection rephrasing remain available.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
+    {modal?.type === 'about' && <Modal title="WRAITER · 0.10.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Keep multiple projects in tabs, reopen recent files from the File menu, and choose whether to restore all tabs or start a clean project. Every project retains its own editing history. Continuous and divided pages, manual page breaks, and rated selection rephrasing remain available.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
   </div>;
 }

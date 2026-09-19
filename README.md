@@ -61,10 +61,11 @@ Shortcuts can be changed in **Settings → Keyboard shortcuts**. The tutorial fo
 
 - **Keep your writing organised.** Work with chapters and several manuscripts in tabs, with word counts, focus mode, themes and familiar formatting.
 - **Stay in control of AI suggestions.** Preview completions and rewritten selections before accepting them. Direct editing requests in the assistant panel apply an undoable batch of changes.
+- **Proofread without surrendering the pen.** Review selected text, a chapter or the manuscript by severity and error type; edit, select and apply only the fixes you want. Detailed document statistics and local spelling underlines live in the same Tools menu.
 - **Give AI useful background.** Share writing-voice instructions and selected reference files. Keep private notes for yourself.
 - **Keep editing history.** Undo and redo survive restarts. Recovery saves and preceding-save backups help protect your work. Optional named checkpoints are available when Git is installed.
 - **Use familiar documents.** Open and save WRAITER, Word (`.docx`), LibreOffice (`.odt`), plain text, Markdown and HTML files. Export PDF, EPUB, office documents or text for publishing and sharing.
-- **Choose your AI.** Start with Codex or Claude Code; advanced connections include local models, Ollama, OpenAI and Claude APIs, and compatible services. Different writing tasks can use different models.
+- **Choose your AI.** Start with Codex or Claude Code; advanced connections include local models, Ollama, OpenAI and Claude APIs, and compatible services. Autocomplete, correction, rephrasing, proofreading and project assistance can use different models.
 
 ### Your writing and privacy
 
@@ -118,6 +119,7 @@ Rebuild after changing the renderer. `npm run dev` serves the browser UI only; n
 | `electron/setup.cjs`, `build/installer.nsh` | AI setup and the assisted Windows installer |
 | `electron/workspace-session.cjs`, `document-files.cjs`, `edit-journal.cjs` | Project tabs, native saves, recovery and persistent undo |
 | `electron/writing-agent.cjs` | Bounded document tools and validated assistant edit batches |
+| `electron/proofreading.cjs`, `src/proofreading.js` | Bounded proofreading prompts, exact-range findings and formatting-preserving fixes |
 | `src/tutorial.js`, `src/WritingWalkthrough.jsx` | Practice manuscript, lessons and progress driven by editor actions |
 | `tests/` | Unit checks, synthetic document fixtures and Electron workflow tests |
 
@@ -130,6 +132,7 @@ npm test
 npm run build
 npm run test:onboarding
 npm run test:tutorial
+npm run test:proofreading
 npm run test:settings
 npm run package
 ```

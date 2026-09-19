@@ -1,6 +1,6 @@
 # WRAITER user guide
 
-Detailed controls and behaviour for version 0.9.0. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
+Detailed controls and behaviour for version 0.10.0. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Projects and startup
 
@@ -34,15 +34,27 @@ Use the paragraph settings button at the right of the formatting toolbar for doc
 
 **Ctrl+Enter** inserts a manual page break at the cursor, also available under **Edit → Insert page break**. It splits the current paragraph and starts the following paragraph on a new page. Backspace at that paragraph's start removes the break. Manual breaks remain visible as markers in Continuous view and persist through save, restart, undo/redo, ODT, DOCX, HTML and PDF. Plain text and Markdown disclose the formatting loss before native save. Page-break insertion has a customizable shortcut; an existing Ctrl+Enter binding is preserved during upgrade instead of being reassigned.
 
+## Proofreading and statistics
+
+Open **Tools → Proofread** for a non-destructive review of selected text, the current chapter, or the whole manuscript. Proofreading has its own provider/model assignment under **Settings → Connections → Proofreading review**; the dialog also lists the models available through that connection. A long scope is divided into bounded passages and the progress indicator shows each batch. The selected text, document language, and writing-voice instructions are sent to that model. Private notes are excluded.
+
+Findings are split into **Definite error**, **Likely problem**, and **Editorial choice**, then grouped by spelling, grammar, punctuation, wrong-word typo, wrong-word meaning, agreement/tense, phrasing, consistency, or capitalization. Each compact item uses a two-line diff: surrounding sentence text is muted, the source phrase is red, and the replacement is green. It also shows the chapter, paragraph, and a short reason. Edit any proposed replacement directly before applying it. Apply one finding, select several, select everything currently shown, or use the clearly labelled **Select all definite**, **Select all likely**, and **Select all editorial** buttons within a category. Each applied batch is one persistent undo step; unaccepted findings never enter the manuscript. WRAITER checks the exact source range before applying, preserves surrounding inline formatting, and refuses stale or overlapping replacements instead of guessing.
+
+AI proofreading is editorial assistance, not an authority: models can miss errors or object to deliberate prose. The severity names describe the model's classification, not a guarantee. **Stop** cancels the active batch and leaves any findings already returned available for review.
+
+**Tools → Word count and statistics** shows manuscript words, characters with and without spaces, chapters, paragraphs, sentences, estimated pages, reading/read-aloud time, vocabulary figures, average lengths, quoted-dialogue share, longest/shortest chapters, and a per-chapter table. Page count is explicitly an estimate; change the words-per-page assumption in the dialog. It is independent of export pagination.
+
+**Tools → Spelling → Highlight spelling mistakes** controls Chromium's local dictionary underlines without sending text to AI. **Language and dictionaries** opens the language settings; the current document language remains selectable in the status bar. The AI proofreading review and local spelling underline are independent.
+
 ## Guided setup and first steps
 
-Run `release/WRAITER-0.9.0-Setup.exe`. Choose **Simple** (recommended) or **Advanced**, then an installation folder. WRAITER installs for your Windows account, adds shortcuts and offers to open the app. Installation continues with account setup on first launch; the mode selected in the installer is carried into that guide. The portable app uses the same first-run guide.
+Run `release/WRAITER-0.10.0-Setup.exe`. Choose **Simple** (recommended) or **Advanced**, then an installation folder. WRAITER installs for your Windows account, adds shortcuts and offers to open the app. Installation continues with account setup on first launch; the mode selected in the installer is carried into that guide. The portable app uses the same first-run guide.
 
 1. Choose **Codex** or **Claude Code**.
 2. **Check my account** looks for the installed helper and its saved sign-in. If missing, **Install** downloads and runs the provider's official Windows installer. No command typing is needed. Installation needs internet access and can be cancelled; an interrupted provider install may need a retry.
 3. **Sign in** opens the provider's authentication flow. Claude Code uses a one-time interactive sign-in window; follow its browser prompts, return to WRAITER, and check the account again. WRAITER does not ask for your account password.
 4. **Run writing test** sends a fixed short sample, using a small amount of provider allowance. It sends no manuscript. Setup cannot proceed to its ready screen without a successful response.
-5. **Save and start tutorial** assigns the chosen connection to all four writing tasks and enables AI. Simple setup requests suggestions only when asked. Advanced setup exposes a custom helper executable, model selection and automatic suggestions.
+5. **Save and start tutorial** assigns the chosen connection to all five writing tasks and enables AI. Simple setup requests suggestions only when asked. Advanced setup exposes a custom helper executable, model selection and automatic suggestions.
 
 An eligible provider account and its usage allowance are separate from WRAITER. **Set up later** lets you write without completing a new connection. Reopen setup from **Help → Set up AI**. Existing installations keep their saved connections and receive the tutorial without repeating setup.
 
@@ -99,7 +111,7 @@ The side chat can inspect chapters, search text, replace exact passages, normali
 
 ## Connections and task models
 
-**Settings → AI connections** assigns a separate provider and model to autocomplete, correction, rephrasing/translation, and writing chat.
+**Settings → AI connections** assigns a separate provider and model to autocomplete, correction, rephrasing/translation, proofreading review, and writing chat.
 
 - **Codex:** detects installed Codex, reuses its saved account, and starts a persistent hidden connection. No terminal or repeated login is needed when an account is already available. Model discovery is automatic. Browser sign-in is offered only when an account is missing. Reference context is cached and each request gets an isolated fork.
 - **Claude Code:** uses the helper application's saved account. Setup can install the helper, start sign-in and verify a real response. Writing requests disable host tools, hooks and MCP servers; WRAITER applies its own validated document edits.
@@ -118,7 +130,7 @@ Private notes are excluded from AI requests. Writing-voice instructions and enab
 Open **Settings → Local models**. Existing Ollama models are listed directly from their manifests and blobs, without starting the engine. WRAITER detects `OLLAMA_MODELS` from the process and Windows user/machine environment, then falls back to `%USERPROFILE%\.ollama\models`. Use the detected folder, WRAITER's own folder, or a folder selected through the native chooser. Switching folders does not move or delete files.
 
 - **Engine and model storage:** automatic selection prefers a WRAITER portable runtime, then installed Ollama. Check the official engine's version and download size, then install it if desired. The standard Windows x64 v0.34.0 archive tested for this release is about 1.4 GiB; AMD ROCm libraries are an optional additional package. Runtime size is separate from model sizes. Downloads are streamed, checked against the official SHA-256 digest, and validated before ZIP extraction. A failed or cancelled installation preserves the previous active engine and removes only its newly created staging folder.
-- **On this computer:** search downloaded models, inspect completeness and loaded GPU memory, unload a model, and assign it to autocomplete, correction, rephrase/translation, chat, or all tasks. Save Settings keeps task assignments; storage and resource changes apply immediately.
+- **On this computer:** search downloaded models, inspect completeness and loaded GPU memory, unload a model, and assign it to autocomplete, correction, rephrase/translation, proofreading, chat, or all tasks. Save Settings keeps task assignments; storage and resource changes apply immediately.
 - **Download models:** choose a small starting model or enter a public Ollama model name. Check its current size before downloading. Progress and cancellation are available. Downloads do not overwrite an already registered model name.
 - **Add GGUF file:** choose a GGUF v2/v3 file and give it a model name. WRAITER hashes and registers it with the local engine, reusing identical blobs when available. Registration may require another on-disk copy; the selected original is preserved. The model architecture must be supported by the selected Ollama version. Arbitrary PyTorch/Safetensors files and multi-file GGUF sets are not supported by this chooser.
 - **Memory and acceleration:** automatic GPU selection, a detected NVIDIA GPU, or CPU only; context size; idle unload delay; and one to three loaded models. Larger contexts need additional memory beyond the file size. Loading, generation and out-of-memory messages appear in the UI. Small models can be less reliable at structured agent actions.
@@ -180,6 +192,7 @@ npm run test:v03
 npm run test:v04
 npm run test:v05
 npm run test:v06
+npm run test:proofreading
 npm run test:tutorial
 npm run test:history-recovery
 npm run test:pdf
