@@ -40,9 +40,10 @@ export function arrangePages(lines, pageHeight, margin = 56, gap = 24) {
   return { pages, breaks, height: pages.at(-1).top + pages.at(-1).height };
 }
 
-function measureLines(view, sheet, scale) {
-  const top = sheet.getBoundingClientRect().top, lines = [];
+function measureLines(view, sheet, scale, numberText = false) {
+  const top = sheet.getBoundingClientRect().top, lines = []; let paragraph = 0;
   view.state.doc.descendants((node, pos) => {
+    if (numberText && node.type.name === 'table') return;
     if (node.type.name === 'table' || node.type.name === 'image' || node.type.name === 'horizontalRule') {
       const element = view.nodeDOM(pos), box = element?.getBoundingClientRect();
       if (box) lines.push({ pos, top: (box.top - top) / scale, height: box.height / scale, inline: false });
@@ -66,7 +67,7 @@ function measureLines(view, sheet, scale) {
           if (range.getBoundingClientRect().top < box.top - 1) low = mid + 1; else high = mid;
         }
         const y = (box.top - top) / scale - Math.max(0, lineHeight - box.height / scale) / 2;
-        const previous = rows.at(-1);
+        const previous = rows.find(row => Math.abs(row.top - y) < lineHeight * 0.45);
         if (previous && Math.abs(previous.top - y) < lineHeight * 0.45) { previous.height = Math.max(previous.height, lineHeight, box.height / scale); continue; }
         rows.push({ pos: view.posAtDOM(text, low), top: y, height: Math.max(lineHeight, box.height / scale), inline: true });
       }
@@ -77,7 +78,7 @@ function measureLines(view, sheet, scale) {
     }
     if (!rows.length) { const box = element.getBoundingClientRect(); rows.push({ pos: pos + 1, top: (box.top - top) / scale, height: lineHeight, inline: true }); }
     rows.sort((a, b) => a.top - b.top || a.pos - b.pos);
-    rows[0].force = Boolean(node.attrs.pageBreakBefore); lines.push(...rows); return false;
+    rows[0].force = Boolean(node.attrs.pageBreakBefore); rows[0].paragraph = ++paragraph; lines.push(...rows); return false;
   });
   return lines;
 }
@@ -96,18 +97,47 @@ export const Pagination = Extension.create({
       let sheet;
       let frame = 0, working = false, disposed = false, width = 0;
       const furniture = document.createElement('div'); furniture.className = 'page-furniture'; furniture.setAttribute('aria-hidden', 'true');
+      const gutter = document.createElement('div'); gutter.className = 'text-numbering'; gutter.setAttribute('aria-hidden', 'true');
+      function numberLines(state, scale, pages) {
+        const enabled = Object.entries(state.numbering || {}).filter(([, value]) => value);
+        if (!enabled.length) return;
+        const rows = measureLines(view, sheet, scale, true).filter(line => line.inline);
+        const pageRows = state.enabled ? pages.map((page, index) => ({ top: index ? page.top + (parseFloat(getComputedStyle(sheet).paddingTop) || 56) : rows[0]?.top || 0, number: index + 1 })) : [];
+        if (!state.enabled) {
+          // Use the same virtual page boundaries in continuous view, without
+          // inserting page gaps into the text merely to display page numbers.
+          pageRows.push({ top: rows[0]?.top || 0, number: 1 });
+          for (const item of pages.breaks) {
+            const row = rows.find(row => row.pos >= item.pos);
+            if (row) pageRows.push({ top: row.top, number: pageRows.length + 1 });
+          }
+        }
+        for (const [kind] of enabled) {
+          const column = document.createElement('div'); column.className = `numbering-column ${kind}-numbers`;
+          const heading = document.createElement('span'); heading.className = 'numbering-heading'; heading.textContent = { row: 'Row', page: 'Page', paragraph: '¶' }[kind]; column.append(heading);
+          const items = kind === 'page' ? pageRows : kind === 'paragraph' ? rows.filter(row => row.paragraph).map(row => ({ ...row, number: row.paragraph })) : rows.map((row, index) => ({ ...row, number: index + 1 }));
+          for (const item of items) {
+            const label = document.createElement('span'); label.className = 'text-number'; label.textContent = String(item.number); label.style.top = `${item.top}px`; label.style.lineHeight = `${item.height || rows[0]?.height || 24}px`; column.append(label);
+          }
+          gutter.append(column);
+        }
+      }
       function layout() {
         frame = 0; if (disposed || working || view.composing) { if (!disposed) schedule(); return; }
-        if (!sheet) { sheet = view.dom.closest('.writing-sheet'); if (!sheet) { schedule(); return; } sheet.prepend(furniture); resize.observe(sheet); }
+        if (!sheet) { sheet = view.dom.closest('.writing-sheet'); if (!sheet) { schedule(); return; } sheet.prepend(furniture, gutter); resize.observe(sheet); }
         working = true;
         const state = paginationKey.getState(view.state), scroller = sheet.closest('.writing-scroll'), oldScroll = scroller.scrollTop;
         try {
           // Restore natural flow for measurement synchronously within one frame.
           view.dispatch(view.state.tr.setMeta(paginationKey, { decorations: DecorationSet.empty }).setMeta('addToHistory', false));
-          sheet.style.removeProperty('min-height'); furniture.replaceChildren();
-          if (!state.enabled) { delete sheet.dataset.pageCount; return; }
+          sheet.style.removeProperty('min-height'); furniture.replaceChildren(); gutter.replaceChildren();
           const scale = sheet.getBoundingClientRect().width / sheet.offsetWidth;
           const height = Math.round(sheet.offsetWidth * Math.SQRT2), margin = parseFloat(getComputedStyle(sheet).paddingTop) || 56;
+          if (!state.enabled) {
+            delete sheet.dataset.pageCount;
+            if (Object.values(state.numbering || {}).some(Boolean)) numberLines(state, scale, state.numbering.page ? arrangePages(measureLines(view, sheet, scale), height, margin) : { breaks: [] });
+            return;
+          }
           const result = arrangePages(measureLines(view, sheet, scale), height, margin);
           const decorations = result.breaks.map((item, index) => Decoration.widget(item.pos, () => {
             const gap = document.createElement(item.inline ? 'span' : 'div'); gap.className = 'pagination-spacer'; gap.style.height = `${item.height}px`; gap.setAttribute('aria-hidden', 'true'); gap.setAttribute('contenteditable', 'false'); return gap;
@@ -118,6 +148,7 @@ export const Pagination = Extension.create({
             const number = document.createElement('span'); number.textContent = String(index + 1); card.append(number); furniture.append(card);
           }
           sheet.style.minHeight = `${result.height}px`; sheet.dataset.pageCount = String(result.pages.length);
+          numberLines(state, scale, result.pages);
         } finally {
           scroller.scrollTop = oldScroll;
           if (state.enabled && state.reveal && view.hasFocus() && view.state.selection.empty) {
@@ -131,8 +162,8 @@ export const Pagination = Extension.create({
       }
       function schedule() { if (!frame && !disposed) frame = requestAnimationFrame(layout); }
       const resize = new ResizeObserver(() => { const next = sheet.getBoundingClientRect().width; if (Math.abs(next - width) > 0.5) { width = next; schedule(); } });
-      const fonts = () => schedule(); document.fonts?.addEventListener('loadingdone', fonts); schedule();
-      return { update(next, previous) { const current = paginationKey.getState(next.state), before = paginationKey.getState(previous); if (!working && (!next.state.doc.eq(previous.doc) || current.enabled !== before.enabled || current.revision !== before.revision)) schedule(); }, destroy() { disposed = true; cancelAnimationFrame(frame); resize.disconnect(); document.fonts?.removeEventListener('loadingdone', fonts); furniture.remove(); sheet?.style.removeProperty('min-height'); } };
+      const fonts = () => schedule(); document.fonts?.addEventListener('loadingdone', fonts); view.dom.addEventListener('load', fonts, true); schedule();
+      return { update(next, previous) { const current = paginationKey.getState(next.state), before = paginationKey.getState(previous); if (!working && (!next.state.doc.eq(previous.doc) || current.enabled !== before.enabled || current.revision !== before.revision)) schedule(); }, destroy() { disposed = true; cancelAnimationFrame(frame); resize.disconnect(); document.fonts?.removeEventListener('loadingdone', fonts); view.dom.removeEventListener('load', fonts, true); furniture.remove(); gutter.remove(); sheet?.style.removeProperty('min-height'); } };
     }
   })]; }
 });

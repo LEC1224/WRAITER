@@ -27,6 +27,16 @@ test('single-project recovery migrates to separate tab stores and all tabs resto
   await restored.activate(beta.workspace.activeId); assert.match(JSON.stringify(restored.active.store.project), /Independent beta edits/);
   await assert.rejects(restored.active.files.persist(project('Alpha')), /another document/);
 });
+test('a completed background chat is persisted into its originating project', async t => {
+  const { directory, session } = await fixture(t), alphaTab = session.activeId;
+  await session.create(project('Beta'));
+  const chat = { id: 'chat-1', title: 'Background question', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), messages: [{ id: 'user-1', role: 'user', text: 'Can this finish elsewhere?' }, { id: 'assistant-1', role: 'assistant', text: 'Yes, the reply is saved.' }] };
+  await session.persistChat('Alpha', chat);
+  assert.equal(session.active.store.project.id, 'Beta');
+  const restored = new WorkspaceSession(directory); await restored.boot(); await restored.activate(alphaTab);
+  assert.equal(restored.active.store.project.activeChatId, 'chat-1');
+  assert.equal(restored.active.store.project.chats[0].messages[1].text, 'Yes, the reply is saved.');
+});
 test('reopening an open file activates its tab and saves cannot target another open file', async t => {
   const { directory, session } = await fixture(t), target = path.join(directory, 'Book & sequel.wraiter');
   await fs.writeFile(target, JSON.stringify(project('Book'))); const first = await session.open(target);
@@ -80,4 +90,58 @@ test('recent menu entries open exact paths and startup/tab shortcuts preserve sa
   const updated = mergeSettings(defaults, { hotkeys: { accept: 'Ctrl+Tab', complete: 'Ctrl+W' } }); assert.equal(updated.hotkeys.nextTab, ''); assert.equal(updated.hotkeys.closeTab, ''); assert.equal(updated.hotkeys.accept, 'Ctrl+Tab');
   assert.deepEqual(cleanView({ chapterId: 'chapter', scrollTop: -10, selection: { from: 2, to: 3 }, project: 'ignored' }), { chapterId: 'chapter', scrollTop: 0, selection: { from: 2, to: 3 } });
   assert.deepEqual(cleanView(null), {});
+});
+
+test('reloading an external WRAITER edit replaces the tab, preserves the draft and starts a separate journal', async t => {
+  const { directory, session } = await fixture(t), target = path.join(directory, 'Book.wraiter');
+  const original = { ...project('Book', 'Original'), historySequence: 7 };
+  await fs.writeFile(target, JSON.stringify(original)); await session.open(target);
+  const count = session.entries.length, oldId = session.activeId;
+  const external = { ...original, chapters: project('Book', 'Edited elsewhere').chapters };
+  await fs.writeFile(target, JSON.stringify(external));
+  const draft = { ...original, chapters: project('Book', 'Local unsaved edits').chapters };
+  const loaded = await session.reload(draft);
+  assert.equal(session.entries.length, count); assert.notEqual(session.activeId, oldId);
+  assert.match(JSON.stringify(loaded.project), /Edited elsewhere/); assert.notEqual(loaded.project.id, 'Book'); assert.equal(loaded.project.historySequence, undefined);
+  assert.deepEqual(JSON.parse(await fs.readFile(loaded.preservedPath, 'utf8')), draft);
+  assert.deepEqual(JSON.parse(await fs.readFile(target, 'utf8')), external);
+  await session.active.files.persist(loaded.project); // No stale-hash conflict.
+  const restored = await new WorkspaceSession(directory).boot(); assert.equal(restored.project.id, loaded.project.id);
+});
+
+test('native reload reimports disk content and failed or racing reloads retain local edits', async t => {
+  const { directory, session } = await fixture(t), target = path.join(directory, 'Book.txt');
+  await fs.writeFile(target, 'Original'); const opening = await session.open(target);
+  await session.bind(project('Book', 'Original'), { openToken: opening.openToken });
+  const draft = project('Book', 'Unsaved draft'), oldId = session.activeId;
+  await fs.writeFile(target, 'External version'); const pending = await session.reload(draft);
+  assert.equal(Buffer.from(pending.bytes).toString(), 'External version'); assert.equal(session.activeId, oldId);
+  await fs.writeFile(target, 'Second external version');
+  await assert.rejects(session.bind(project('Imported', 'External version'), { openToken: pending.openToken }), /changed while opening/);
+  assert.equal(session.activeId, oldId); assert.deepEqual(session.active.store.project, draft);
+  const retry = await session.reload(draft), result = await session.bind(project('Imported', 'Second external version'), { openToken: retry.openToken });
+  assert.equal(result.binding.format, 'txt'); assert.equal(result.path, target); assert.match(await fs.readFile(result.preservedPath, 'utf8'), /Unsaved draft/);
+  await session.active.files.persist(result.project, { format: 'txt', data: 'Second external version' });
+  await fs.unlink(target); const id = session.activeId;
+  await assert.rejects(session.reload(result.project), /ENOENT/); assert.equal(session.activeId, id);
+});
+
+test('invalid disk documents and checkpoint failures leave the original reload tab recoverable', async t => {
+  const { directory, session } = await fixture(t), target = path.join(directory, 'Book.wraiter');
+  await fs.writeFile(target, JSON.stringify(project('Book'))); await session.open(target);
+  const before = session.activeId, draft = project('Book', 'Keep this draft');
+  await fs.writeFile(target, '{invalid'); await assert.rejects(session.reload(draft));
+  assert.equal(session.activeId, before); assert.deepEqual(session.active.store.project, draft);
+  await fs.writeFile(target, JSON.stringify(project('Book', 'External')));
+  session.checkpoint = async () => { throw new Error('Simulated full disk'); };
+  await assert.rejects(session.reload(draft), /full disk/); assert.equal(session.activeId, before); assert.deepEqual(session.active.store.project, draft);
+});
+
+test('numbering settings are independent, validated and reflected by native checkbox menu items', () => {
+  const prefs = mergeSettings(defaults, { showRowNumbers: true, showParagraphNumbers: true }), sent = [];
+  assert.equal(prefs.showPageNumbers, false); assert.throws(() => validateSettings({ showRowNumbers: 'yes' }), /Invalid/);
+  const menu = menuTemplate(value => sent.push(value), () => {}, {}, [], prefs);
+  const items = menu.find(item => item.label === '&View').submenu.find(item => item.label === 'Text numbering').submenu;
+  assert.deepEqual(items.map(item => [item.label, item.type, item.checked]), [['Row numbers', 'checkbox', true], ['Page numbers', 'checkbox', false], ['Paragraph numbers', 'checkbox', true]]);
+  items.forEach(item => item.click()); assert.deepEqual(sent, ['toggle-row-numbers', 'toggle-page-numbers', 'toggle-paragraph-numbers']);
 });

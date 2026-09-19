@@ -60,7 +60,7 @@ Shortcuts can be changed in **Settings → Keyboard shortcuts**. The tutorial fo
 ## What you can do
 
 - **Keep your writing organised.** Work with chapters and several manuscripts in tabs, with word counts, focus mode, themes and familiar formatting.
-- **Stay in control of AI suggestions.** Preview completions and rewritten selections before accepting them. Direct editing requests in the assistant panel apply an undoable batch of changes.
+- **Stay in control of AI suggestions.** Preview completions and rewritten selections before accepting them. Direct editing requests in the assistant panel apply an undoable batch of changes. Assistant conversations are saved per project, with a dropdown for returning to earlier chats.
 - **Proofread without surrendering the pen.** Review selected text, a chapter or the manuscript by severity and error type; edit, select and apply only the fixes you want. Detailed document statistics and local spelling underlines live in the same Tools menu.
 - **Give AI useful background.** Share writing-voice instructions and selected reference files. Keep private notes for yourself.
 - **Keep editing history.** Undo and redo survive restarts. Recovery saves and preceding-save backups help protect your work. Optional named checkpoints are available when Git is installed.
@@ -69,7 +69,7 @@ Shortcuts can be changed in **Settings → Keyboard shortcuts**. The tutorial fo
 
 ### Your writing and privacy
 
-Manuscripts and recovery files are stored on your computer. When you request cloud AI help, WRAITER sends the text needed for that task, along with enabled references and writing-voice instructions, to your selected provider. The writing assistant can read relevant manuscript passages to answer an editing request. **Private notes are excluded from AI requests and exports.**
+Manuscripts, assistant chats and recovery files are stored on your computer. When you request cloud AI help, WRAITER sends the text needed for that task, recent messages from the selected conversation, enabled references and writing-voice instructions to your selected provider. The writing assistant can read relevant manuscript passages to answer an editing request. **Private notes are excluded from AI requests and exports.** Chats are also excluded from manuscript exports.
 
 API keys, when used, are encrypted in your Windows user profile and are not saved in manuscripts. Your provider's own terms and data handling still apply. Local inference can work offline after its engine and model have been downloaded. Local recovery is not a cloud backup: keep a separate backup of important writing.
 

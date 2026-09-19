@@ -1,12 +1,12 @@
 # WRAITER user guide
 
-Detailed controls and behaviour for version 0.10.0. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
+Detailed controls and behaviour for version 0.11.0. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Projects and startup
 
 **File → Open recent** lists the last 12 opened or saved documents, including preserved unnamed drafts. Selecting a file that is already open activates its tab. Clear recent list removes the list entries without deleting files.
 
-**New**, **Open**, and the **+** beside the tabs add a project in the same window. Each tab has independent chapters, formatting, notes, file format, recovery and editing history. The assistant conversation stays with its tab while the app is open. Switching projects cancels unfinished AI requests and saves current edits first. Save As and Export cannot overwrite another tab's open file.
+**New**, **Open**, and the **+** beside the tabs add a project in the same window. Each tab has independent chapters, formatting, notes, file format, recovery, chat sessions and editing history. Assistant chats are saved with their project; use the chat dropdown to reopen an earlier conversation or **New chat** to begin another. Chat requests keep running against their originating project when you change chapter or project; its tab shows working and reply-ready indicators, and completed replies are saved there while completed edits are applied when you return. Inline completions still cancel on a project switch so they cannot appear in another document. Save As and Export cannot overwrite another tab's open file.
 
 Use **Ctrl+Tab** / **Ctrl+Shift+Tab** to cycle projects, and **Ctrl+W** or a tab's **×** to close it. These shortcuts can be changed in Settings. Closing an unnamed draft preserves it in Open Recent; named files remain on disk. Closing the last tab leaves a blank project.
 
@@ -32,6 +32,8 @@ Use the paragraph settings button at the right of the formatting toolbar for doc
 
 **Settings → Appearance → Document view** chooses Continuous (the default infinite page) or Divided pages. Both provide almost one viewport of workspace below the document, so the last line can sit higher on screen. The status-bar view button and View menu also switch modes; the choice survives restart. Divided pages use A4 proportions at the current column width and flow wrapped paragraphs automatically. Page gaps and numbers are view decorations, so switching views does not add text, paragraph breaks or undo actions. Oversized tables/objects stay intact on an expanded sheet. Export pagination follows its selected paper preset and can differ from the editing view.
 
+**View → Text numbering** has independent checkboxes for **Row numbers**, **Page numbers**, and **Paragraph numbers**. Small, muted numbers appear in the grey margin outside the paper, and the choices survive restart. Rows count visible wrapped lines; paragraphs count text blocks, including headings and list/table paragraphs. Numbering starts at 1 in each chapter. Page numbers follow the editor's page layout; Continuous view marks the corresponding virtual page starts. Numbers follow edits, zoom and resizing, and are excluded from document text, exports and undo history.
+
 **Ctrl+Enter** inserts a manual page break at the cursor, also available under **Edit → Insert page break**. It splits the current paragraph and starts the following paragraph on a new page. Backspace at that paragraph's start removes the break. Manual breaks remain visible as markers in Continuous view and persist through save, restart, undo/redo, ODT, DOCX, HTML and PDF. Plain text and Markdown disclose the formatting loss before native save. Page-break insertion has a customizable shortcut; an existing Ctrl+Enter binding is preserved during upgrade instead of being reassigned.
 
 ## Proofreading and statistics
@@ -48,7 +50,7 @@ AI proofreading is editorial assistance, not an authority: models can miss error
 
 ## Guided setup and first steps
 
-Run `release/WRAITER-0.10.0-Setup.exe`. Choose **Simple** (recommended) or **Advanced**, then an installation folder. WRAITER installs for your Windows account, adds shortcuts and offers to open the app. Installation continues with account setup on first launch; the mode selected in the installer is carried into that guide. The portable app uses the same first-run guide.
+Run `release/WRAITER-0.11.0-Setup.exe`. Choose **Simple** (recommended) or **Advanced**, then an installation folder. WRAITER installs for your Windows account, adds shortcuts and offers to open the app. Installation continues with account setup on first launch; the mode selected in the installer is carried into that guide. The portable app uses the same first-run guide.
 
 1. Choose **Codex** or **Claude Code**.
 2. **Check my account** looks for the installed helper and its saved sign-in. If missing, **Install** downloads and runs the provider's official Windows installer. No command typing is needed. Installation needs internet access and can be cancelled; an interrupted provider install may need a retry.
@@ -74,7 +76,7 @@ Official setup references: [Codex installation](https://learn.chatgpt.com/docs/c
 
 ## AI behaviour
 
-Enable AI using the toolbar or Ctrl+Shift+Space. Inline suggestions and selection revisions remain previews until accepted. A direct editing request in the side chat applies the completed batch automatically, with an **Undo assistant edit** button and a single persistent undo entry.
+Enable AI using the toolbar or Ctrl+Shift+Space. Inline suggestions and selection revisions remain previews until accepted. In the side chat, **Enter** sends and **Shift+Enter** inserts a new line. New messages follow the scroll position to the bottom. Conversations and their selected session are project data in WRAITER saves (and native-file companion state), but are excluded from manuscript exports and prose revision checkpoints. A direct editing request applies the completed batch automatically, with an **Undo assistant edit** button and a single persistent undo entry.
 
 | Action | Default shortcut |
 |---|---|
@@ -107,7 +109,7 @@ A three-dot indicator marks a pending request. When text typed during generation
 
 Set the document's content language on the status bar. In **Settings → Language**, optionally select a native language; it starts unset. Selecting a native-language word or phrase and requesting a rephrase asks the model to translate it into the document language. No local language-detection claim is made: the selected model interprets the phrase in context.
 
-The side chat can inspect chapters, search text, replace exact passages, normalize repeated spaces, rewrite passages, remove empty paragraphs, delete a requested complete paragraph, and rename chapters. For example, ask “Remove double spaces throughout the manuscript” or “Remove empty lines.” Empty-line cleanup removes the paragraph blocks themselves, preserving nonempty text and formatting. Required document, table-cell and list-item structure remains editable. Selecting text limits chat edits to that selection, including when the model requests a wider scope. Tool activity and the resulting changes appear in the panel. If the document changes while an editing request runs, its stale edits are discarded. Cancellation applies no partial batch. Ordinary questions can be answered without editing. The agent has document tools only; it cannot operate your filesystem or run shell commands. Complex tasks are bounded to eight model turns and twelve tool calls.
+The side chat can inspect chapters, search text, replace exact passages, normalize repeated spaces, rewrite passages, remove empty paragraphs, delete a requested complete paragraph, and rename chapters. For example, ask “Remove double spaces throughout the manuscript” or “Remove empty lines.” Empty-line cleanup removes the paragraph blocks themselves, preserving nonempty text and formatting. Required document, table-cell and list-item structure remains editable. Selecting text limits chat edits to that selection, including when the model requests a wider scope. Tool activity and the resulting changes appear in the panel. You can keep writing in untouched chapters while an editing request runs; WRAITER merges the completed batch over that work. If a chapter or title targeted by the assistant changed meanwhile, its stale edits are discarded rather than overwriting your text. Cancellation applies no partial batch. Ordinary questions can be answered without editing. The agent has document tools only; it cannot operate your filesystem or run shell commands. Complex tasks are bounded to eight model turns and twelve tool calls.
 
 ## Connections and task models
 
@@ -141,6 +143,8 @@ Runtime downloads come from [Ollama's official Windows releases](https://github.
 
 ## Editing history and Git versions
 
+If a save detects that another program changed the open file, the warning offers **Save a copy** and **Load modified version**. Loading replaces the current tab with the disk version and clears the conflict. WRAITER first preserves your current draft in **File → Open recent**, with “before reload” in its filename. The loaded version starts a fresh undo history so earlier edits cannot overwrite the external changes. If the file is missing, invalid or changes again during import, the current draft stays open.
+
 **View → Revision history → Every edit** lists text, formatting, chapter, and document-setting actions with timestamps and before/after details. Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z work across chapter switches and application restarts. Typing transactions stay separate; a multi-step replacement or assistant batch is one undo operation. New typing after undo starts a new branch, while abandoned edits remain visible in the audit trail. History begins with edits made in 0.3; earlier keystrokes cannot be reconstructed.
 
 The journal appends immutable events and flushes them before a recovery snapshot can reference them. If an interruption occurs between those writes, startup replays the complete later events. A corrupt or mismatched journal is preserved alongside a document snapshot before a fresh undo chain begins; the app reports this instead of replaying unrelated edits. Atomic history does not depend on Git.
@@ -149,7 +153,7 @@ Source history is stored in this application's repository. Manuscript history is
 
 Named saves, document switches, and editing checkpoints create versions. Automatic checkpoints occur after 20 seconds idle or two minutes of continuous editing. The **Checkpoints** tab lists them; **Save version** creates a labelled checkpoint. Restore saves the current version first and creates a new revision, preserving the intervening history. It is also undoable. Git must be installed for checkpoints; atomic editing history, ordinary saving, and recovery still work if it is unavailable.
 
-History and native-file companion state live in WRAITER's per-user application-data directory, rather than inside office/text files. Copying a document alone to another computer does not carry its local undo history or private notes. These local records are not a remote backup.
+History and native-file companion state live in WRAITER's per-user application-data directory, rather than inside office/text files. Copying a native office/text document alone to another computer does not carry its local undo history, private notes, or assistant chats; use a `.wraiter` save when that project metadata must travel with the manuscript. These local records are not a remote backup.
 
 ## Formats and present limits
 
@@ -167,7 +171,7 @@ Opening an office/text document keeps it attached to its original format. Save a
 
 Unsupported office features are detected where possible and described on opening. Until the first compatibility review, changed content is staged safely in recovery. Saving after review preserves the complete original under **Format originals** in application data, plus the preceding-save `.bak` beside the document. New unsupported formatting in a text format also prompts for review before writing. This is direct file-format support, not lossless preservation of every Word/Writer feature: page sections, named styles, headers/footers, comments, tracked changes, footnotes/endnotes, fields, floating objects and advanced layouts may be simplified or omitted. Unrecognized office features can still require manual comparison.
 
-**File → Export** offers full manuscript, one chapter, or selected text, with title/chapter-heading options. Formats include DOCX, ODT, all three PDFs, EPUB, plain text, BBCode `.txt`, Markdown and HTML. Exports exclude private notes, AI context and editing history. PDF export performs pagination; page view is a writing surface, not an exact print preview.
+**File → Export** offers full manuscript, one chapter, or selected text, with title/chapter-heading options. Formats include DOCX, ODT, all three PDFs, EPUB, plain text, BBCode `.txt`, Markdown and HTML. Exports exclude private notes, AI context, assistant chats and editing history. PDF export performs pagination; page view is a writing surface, not an exact print preview.
 
 The export dialog also offers **Discord chat**, **Formatted text · Telegram / email**, and Telegram bot **MarkdownV2** and **HTML**. Choose **Destination → Export to Clipboard** for any text-based format, or **Create file** to save it. Clipboard export follows the same manuscript/chapter/selection scope and heading options. It does not open a save dialog or change the manuscript. PDF, DOCX, ODT and EPUB require files.
 

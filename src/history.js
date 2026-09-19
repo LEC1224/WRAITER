@@ -3,7 +3,7 @@ import { Selection } from '@tiptap/pm/state';
 
 // The journal is independent of an editor instance. Every edit and cursor move is
 // an immutable event, so closing a document or changing chapters loses no undo.
-const IGNORED = new Set(['updatedAt', 'historySequence', 'snapshots', 'binding', 'fileBinding', 'nativeBinding']);
+const IGNORED = new Set(['updatedAt', 'historySequence', 'snapshots', 'chats', 'activeChatId', 'binding', 'fileBinding', 'nativeBinding']);
 export const HISTORY_REPLAY_META = 'wraiterHistoryReplay';
 export const HISTORY_SELECTION_META = 'wraiterHistorySelectionBefore';
 const clone = value => value === undefined ? undefined : structuredClone(value);

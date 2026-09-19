@@ -69,6 +69,30 @@ function validateReferences(references = []) {
     ids.add(reference.id);
   }
 }
+function validateChats(chats = [], activeChatId = null) {
+  if (!Array.isArray(chats) || chats.length > 200) invalid('Invalid chat history.');
+  const chatIds = new Set();
+  for (const chat of chats) {
+    if (!object(chat)) invalid('Invalid chat.');
+    string(chat.id, 'chat identifier', 200, true); string(chat.title, 'chat title', 200, true);
+    for (const field of ['createdAt', 'updatedAt']) if (chat[field] != null) string(chat[field], `chat ${field}`, 100, true);
+    if (chatIds.has(chat.id) || !Array.isArray(chat.messages) || chat.messages.length > 2000) invalid('Invalid or duplicated chat.');
+    chatIds.add(chat.id);
+    const messageIds = new Set();
+    for (const message of chat.messages) {
+      if (!object(message)) invalid('Invalid chat message.');
+      string(message.id, 'chat message identifier', 200, true); string(message.text, 'chat message text', 2 * 1024 * 1024);
+      if (!['user', 'assistant'].includes(message.role) || messageIds.has(message.id)) invalid('Invalid or duplicated chat message.');
+      messageIds.add(message.id);
+      if (message.createdAt != null) string(message.createdAt, 'chat message date', 100, true);
+      if (message.warning != null) string(message.warning, 'chat message warning', 10000);
+      if (message.historyEntryId != null) string(message.historyEntryId, 'chat edit identifier', 200, true);
+      if (message.edits != null && (!Number.isSafeInteger(message.edits) || message.edits < 0 || message.edits > 300000)) invalid('Invalid chat edit count.');
+      if (message.pending != null && typeof message.pending !== 'boolean') invalid('Invalid chat message state.');
+    }
+  }
+  if (activeChatId != null && (typeof activeChatId !== 'string' || !chatIds.has(activeChatId))) invalid('Invalid active chat.');
+}
 function validateChapters(chapters, budget) {
   if (!Array.isArray(chapters) || !chapters.length || chapters.length > 2000) invalid('The document has no valid chapter list.');
   const ids = new Set();
@@ -88,7 +112,7 @@ function validateProject(project) {
     const style = project.documentStyle;
     if (!object(style) || typeof style.fontFamily !== 'string' || style.fontFamily.length > 200 || !Number.isFinite(style.fontSize) || style.fontSize < 6 || style.fontSize > 96 || !Number.isFinite(style.lineHeight) || style.lineHeight < 1 || style.lineHeight > 3) invalid('Invalid document formatting defaults.');
   }
-  const budget = { count: 0 }; validateChapters(project.chapters, budget); validateReferences(project.references);
+  const budget = { count: 0 }; validateChapters(project.chapters, budget); validateReferences(project.references); validateChats(project.chats, project.activeChatId);
   if (project.snapshots != null) {
     if (!Array.isArray(project.snapshots) || project.snapshots.length > 20) invalid('Invalid snapshot history.');
     const ids = new Set();
@@ -101,7 +125,7 @@ function validateProject(project) {
     }
   }
   let json; try { json = JSON.stringify(project, null, 2); } catch { invalid('This document contains invalid JSON.'); }
-  if (Buffer.byteLength(json) > MAX_DOCUMENT_BYTES) throw new Error('This preview supports documents up to 60 MB, including snapshots and images.');
+  if (Buffer.byteLength(json) > MAX_DOCUMENT_BYTES) throw new Error('This preview supports documents up to 60 MB, including snapshots, chats, and images.');
   return project;
 }
 async function atomicWrite(file, data, backup = false) {

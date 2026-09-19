@@ -10,16 +10,20 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
   await fs.mkdir(output, { recursive: true }); const userData = await fs.mkdtemp(path.join(output, 'v06-tabs-')), errors = [], checks = [];
   const initial = { format: 'wraiter', version: 1, id: 'v06-alpha', title: 'Alpha project', language: 'en-US', chapters: [{ id: 'alpha-one', title: 'Opening', content: { type: 'doc', content: [paragraph('Alpha text.')] } }, { id: 'alpha-two', title: 'Second chapter', content: { type: 'doc', content: [paragraph('Alpha second chapter.')] } }] };
   const missing = path.join(userData, 'Missing.wraiter');
-  let completions = 0, cancelled = 0;
+  let completions = 0, cancelled = 0, agentDelay = 0;
   const server = http.createServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json');
     if (request.method === 'GET') return response.end('{"models":[{"name":"tab-test"}]}');
     let data = ''; for await (const chunk of request) data += chunk; const prompt = JSON.parse(data).prompt || '';
-    if (prompt.includes('CURRENT TOOL RESULTS:')) return response.end(JSON.stringify({ response: JSON.stringify({ message: 'A private answer for the Beta project.', done: true, tools: [] }) }));
+    if (prompt.includes('CURRENT TOOL RESULTS:')) {
+      const serialized = prompt.match(/CURRENT TOOL RESULTS:\n(.*?)\n\nRemaining document tools:/s)?.[1] || '[]', records = JSON.parse(serialized);
+      const answer = prompt.includes('Remove double spaces throughout this manuscript.') ? records.length ? { message: 'Removed repeated spaces from the Beta project.', done: true, tools: [] } : { message: 'Normalizing spaces.', done: false, tools: [{ name: 'normalize_spaces', arguments: { scope: 'all' } }] } : { message: 'A private answer for the Beta project.', done: true, tools: [] };
+      return setTimeout(() => response.end(JSON.stringify({ response: JSON.stringify(answer) })), agentDelay);
+    }
     completions++; const timer = setTimeout(() => response.end(JSON.stringify({ response: 'FOREIGN_COMPLETION_DO_NOT_INSERT' })), 5000);
     response.on('close', () => { clearTimeout(timer); if (!response.writableEnded) cancelled++; });
   }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ enabled: true, continuous: false, provider: 'ollama', baseUrl: `http://127.0.0.1:${server.address().port}`, model: 'tab-test', ollamaMode: 'raw', recent: [missing] }));
+  await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ setupComplete: true, tutorialComplete: true, enabled: true, continuous: false, provider: 'ollama', baseUrl: `http://127.0.0.1:${server.address().port}`, model: 'tab-test', ollamaMode: 'raw', recent: [missing] }));
   await fs.writeFile(path.join(userData, 'recovery.json'), JSON.stringify({ project: initial, path: null, expectedHash: null }));
   const env = { ...process.env, WRAITER_USER_DATA: userData }; delete env.ELECTRON_RUN_AS_NODE;
   const options = process.env.WRAITER_EXECUTABLE ? { executablePath: process.env.WRAITER_EXECUTABLE, args: [], env, timeout: 60000 } : { args: [root], env, timeout: 60000 };
@@ -66,11 +70,14 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
     await choose('Alpha project'); assert.equal(await editor.innerText(), 'Alpha second chapter.'); await choose('Gamma draft'); assert.equal(await editor.innerText(), 'An unnamed draft worth keeping.');
     checks.push('Restart restores tab order, the active project, chapter position, native binding and independent undo history.');
 
-    await choose('Beta project'); await command('toggle-assistant'); await page.getByRole('textbox', { name: 'Ask the writing assistant', exact: true }).fill('Give me a short answer about this project.'); await page.getByRole('button', { name: 'Send writing question', exact: true }).click(); await page.getByText('A private answer for the Beta project.', { exact: true }).waitFor();
-    await choose('Gamma draft'); assert.equal(await page.getByText('A private answer for the Beta project.', { exact: true }).count(), 0); await choose('Beta project'); await page.getByText('A private answer for the Beta project.', { exact: true }).waitFor();
+    agentDelay = 350; await choose('Beta project'); await append('  Background'); assert.equal(await editor.innerText(), 'Beta text. B1  Background'); await command('toggle-assistant'); await page.getByRole('textbox', { name: 'Ask the writing assistant', exact: true }).fill('Remove double spaces throughout this manuscript.'); await page.getByRole('button', { name: 'Send writing question', exact: true }).click();
+    await choose('Gamma draft'); assert.equal(await page.getByText('Removed repeated spaces from the Beta project.', { exact: true }).count(), 0); const betaTab = tabs().getByRole('tab', { name: 'Beta project', exact: true }); await waitFor(async () => await betaTab.locator('.tab-assistant-status.unread').count() === 1, 'Background assistant reply indicator');
+    const betaTabId = (await boot()).workspace.tabs.find(tab => tab.title === 'Beta project').id;
+    await waitFor(async () => JSON.stringify(JSON.parse(await fs.readFile(path.join(userData, 'Open projects', betaTabId, 'recovery.json'), 'utf8')).project.chats).includes('Removed repeated spaces from the Beta project.'), 'Background chat persisted before returning');
+    await choose('Beta project'); await page.getByText('Removed repeated spaces from the Beta project.', { exact: true }).waitFor(); await waitFor(async () => await editor.innerText() === 'Beta text. B1 Background', 'Background assistant edit applied to Beta'); agentDelay = 0;
     await editor.evaluate(element => { element.focus(); const range = document.createRange(); range.selectNodeContents(element); range.collapse(false); const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range); document.dispatchEvent(new Event('selectionchange')); }); await page.waitForTimeout(100); await page.keyboard.press('Tab'); await waitFor(() => completions === 1, 'Completion request started');
-    await choose('Alpha project'); await waitFor(() => cancelled === 1, 'Pending completion cancelled on tab switch'); assert.equal(await page.locator('.ghost-text').count(), 0); assert.ok(!JSON.stringify((await boot()).project).includes('FOREIGN_COMPLETION')); await choose('Beta project'); assert.equal(await editor.innerText(), 'Beta text. B1');
-    checks.push('Assistant conversations stay with their project, and switching tabs cancels a pending completion before it can affect another document.');
+    await choose('Alpha project'); await waitFor(() => cancelled === 1, 'Pending completion cancelled on tab switch'); assert.equal(await page.locator('.ghost-text').count(), 0); assert.ok(!JSON.stringify((await boot()).project).includes('FOREIGN_COMPLETION')); await choose('Beta project'); assert.equal(await editor.innerText(), 'Beta text. B1 Background');
+    checks.push('Assistant chat finishes and saves its reply in the originating project while another tab is active; inline completion still cancels on tab switch before it can affect another document.');
 
     await page.getByRole('button', { name: 'New project tab', exact: true }).click(); await activeTitle('Untitled manuscript'); await rename('Delta draft'); await append('Preserve this on clean startup.');
     await menu('Settings', 'General and startup…'); await page.getByRole('combobox', { name: 'When WRAITER starts', exact: true }).selectOption('new'); await page.screenshot({ path: path.join(output, 'v06-startup-settings.png') }); await page.getByRole('button', { name: 'Save settings', exact: true }).click(); await page.getByRole('dialog', { name: 'Settings', exact: true }).waitFor({ state: 'hidden' });

@@ -20,16 +20,17 @@ import ExportDialog from './ExportDialog.jsx';
 import HistoryPanel from './HistoryPanel.jsx';
 import { LAYOUTS, documentLayout } from './layouts.js';
 import { normalizeHistoryProject, prepareHistoryLoad, recordTransaction, recordProjectChange, applyHistory, historyStatus } from './history.js';
-import { applyAgentResult } from './agent-edits.js';
+import { applyAgentResult, rebaseAgentResult } from './agent-edits.js';
 import RephraseOptions from './RephraseOptions.jsx';
 import { insertPageBreak } from './pagination.js';
 import ProofreadingDialog from './ProofreadingDialog.jsx';
 import StatisticsDialog from './StatisticsDialog.jsx';
 import { applyProofreadingFixes } from './proofreading.js';
+import { MAX_CHATS, MAX_CHAT_MESSAGES, activeChat as getActiveChat, adoptChatMessages, chatTitle, normalizeProjectChats, persistedChat, withActiveChat, withChatMessage, withChatMessages, withNewChat } from './chats.js';
 
 const api = window.wraiter;
 const schema = getSchema(extensions);
-const DEFAULTS = { pageMode: 'continuous', theme: 'paper', font: 'Cambria', fontSize: 16, lineHeight: 1.5, measure: 720, zoom: 100, predictionWords: 35, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', goal: 500, spellcheck: true, language: 'en-US', nativeLanguage: '', provider: 'codex', baseUrl: '', model: '', enabled: false, continuous: false, hotkeys: DEFAULT_HOTKEYS };
+const DEFAULTS = { pageMode: 'continuous', showRowNumbers: false, showPageNumbers: false, showParagraphNumbers: false, theme: 'paper', font: 'Cambria', fontSize: 16, lineHeight: 1.5, measure: 720, zoom: 100, predictionWords: 35, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', goal: 500, spellcheck: true, language: 'en-US', nativeLanguage: '', provider: 'codex', baseUrl: '', model: '', enabled: false, continuous: false, hotkeys: DEFAULT_HOTKEYS };
 const providerNames = { local: 'Local models', ollama: 'Ollama', openai: 'OpenAI', compatible: 'Compatible API / xAI', anthropic: 'Claude API', codex: 'Codex', claude: 'Claude Code' };
 const errorText = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
@@ -68,7 +69,7 @@ function Modal({ title, subtitle, children, onClose, wide = false, className = '
 export default function App() {
   const [workspace, setWorkspace] = useState({ tabs: [], activeId: null }), [switching, setSwitching] = useState(false), [savingNamed, setSavingNamed] = useState(false);
   const tourRef = useRef(null);
-  const workspaceRef = useRef(workspace), tabCache = useRef(new Map()), transition = useRef(null), namedSave = useRef(false), namedSaveCompletion = useRef(Promise.resolve()), restoreScroll = useRef(null);
+  const workspaceRef = useRef(workspace), tabCache = useRef(new Map()), transition = useRef(null), namedSave = useRef(false), namedSaveCompletion = useRef(Promise.resolve()), restoreScroll = useRef(null), chatScrollRef = useRef(null);
   workspaceRef.current = workspace;
   const [project, setProject] = useState(null), [prefs, setPrefs] = useState(DEFAULTS), [activeId, setActiveId] = useState(null);
   const [path, setPath] = useState(null), [saveState, setSaveState] = useState('saved'), [saveError, setSaveError] = useState('');
@@ -89,6 +90,7 @@ export default function App() {
   const proposalRef = useRef(null); proposalRef.current = proposal;
   projectRef.current = project; editorRef.current = editor; prefsRef.current = prefs;
   const chapter = project?.chapters.find(c => c.id === activeId) || project?.chapters[0];
+  const chatSessions = [...(project?.chats || [])].sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
   const notify = useCallback(message => setToast(message), []);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 6500); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => { document.documentElement.dataset.theme = prefs.theme; }, [prefs.theme]);
@@ -98,6 +100,11 @@ export default function App() {
   useEffect(() => { api?.listFonts().then(setFonts).catch(() => {}); }, []);
   useEffect(() => { if (panel === 'history' && project) loadGitHistory(); }, [panel, project?.id]);
   useEffect(() => { document.getElementById(`project-tab-${workspace.activeId}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [workspace.activeId, focus]);
+  useEffect(() => {
+    if (panel !== 'assist' || (!messages.length && !agentActivity.length && !busy)) return;
+    const frame = requestAnimationFrame(() => { const body = chatScrollRef.current; if (body) body.scrollTop = body.scrollHeight; });
+    return () => cancelAnimationFrame(frame);
+  }, [panel, workspace.activeId, project?.activeChatId, messages.length, agentActivity.length, busy]);
 
   useEffect(() => {
     if (!api) return;
@@ -177,6 +184,30 @@ export default function App() {
       next.historySequence = history.sequence; projectRef.current = next; publishHistory(history); setProject(next);
     } catch (error) { notify(errorText(error)); }
   }, []);
+  function publishChatProject(next, selectedId = next.activeChatId) {
+    projectRef.current = next; setProject(next);
+    const selected = (next.chats || []).find(chat => chat.id === selectedId);
+    setMessages(selected?.messages || []);
+  }
+  function selectChat(chatId) {
+    const requestInThisTab = requestRef.current && (!requestRef.current.tabId || requestRef.current.tabId === workspaceRef.current.activeId);
+    if (requestInThisTab || !projectRef.current || chatId === projectRef.current.activeChatId) return;
+    const next = withActiveChat(projectRef.current, chatId);
+    if (next === projectRef.current) return;
+    const selected = (next.chats || []).find(chat => chat.id === chatId);
+    publishChatProject(next, chatId); setAgentActivity([]); setAiError('');
+    cacheTab(workspaceRef.current.activeId, { chatId, chat: selected, messages: selected?.messages || [], agentActivity: [] });
+  }
+  function startNewChat() {
+    const requestInThisTab = requestRef.current && (!requestRef.current.tabId || requestRef.current.tabId === workspaceRef.current.activeId);
+    if (requestInThisTab || !projectRef.current) return;
+    const current = getActiveChat(projectRef.current);
+    if (current && !current.messages.length) { setInstruction(''); setAgentActivity([]); setAiError(''); return; }
+    const created = withNewChat(projectRef.current);
+    if (!created.chat) { notify(`A project can keep up to ${MAX_CHATS} chats.`); return; }
+    publishChatProject(created.project, created.chat.id); setInstruction(''); setAgentActivity([]); setAiError('');
+    cacheTab(workspaceRef.current.activeId, { projectId: created.project.id, chatId: created.chat.id, chat: created.chat, messages: [], agentActivity: [], unread: false });
+  }
   async function updatePrefs(update) {
     try { const next = await api.settings(update); prefsRef.current = next; setPrefs(next); return next; }
     catch (error) { notify(errorText(error)); throw error; }
@@ -187,7 +218,10 @@ export default function App() {
   }
   const dismiss = useCallback(() => {
     clearTimeout(continuousTimer.current);
-    if (requestRef.current) { requestRef.current = null; cancellation.current = api.cancel().catch(() => {}); }
+    if (requestRef.current) {
+      const pending = requestRef.current; requestRef.current = null; cancellation.current = api.cancel().catch(() => {});
+      if (pending.mode === 'chat') appendTabMessage(pending.tabId, pending.chatId, { id: uid(), role: 'assistant', text: 'Request cancelled.' });
+    }
     setBusy(null); setProposal(null); setGhost(null);
     const current = editorRef.current;
     if (current && !current.isDestroyed && ghostKey.getState(current.state)) current.view.dispatch(current.state.tr.setMeta(ghostKey, null));
@@ -213,35 +247,104 @@ export default function App() {
     catch (error) { setSaveState('error'); setSaveError(errorText(error)); notify(errorText(error)); }
     finally { namedSave.current = false; setSavingNamed(false); finished(); }
   }
+  function cacheTab(id, update) {
+    const previous = tabCache.current.get(id) || {};
+    const next = { ...previous, ...update };
+    tabCache.current.set(id, next);
+    return next;
+  }
+  function appendTabMessage(id, chatId, message) {
+    const date = new Date().toISOString(), stamped = { createdAt: date, ...message };
+    const previous = tabCache.current.get(id) || {};
+    let nextMessages = [...(previous.chatId === chatId ? previous.messages || [] : []), stamped];
+    let cachedChat = previous.chat;
+    if (workspaceRef.current.activeId === id && projectRef.current) {
+      const nextProject = withChatMessage(projectRef.current, chatId, stamped, date);
+      const selected = (nextProject.chats || []).find(chat => chat.id === chatId);
+      nextMessages = selected?.messages || nextMessages; cachedChat = selected || cachedChat;
+      publishChatProject(nextProject, chatId);
+    } else if (cachedChat?.id === chatId) {
+      cachedChat = { ...cachedChat, title: chatTitle(nextMessages.find(item => item.role === 'user')?.text), updatedAt: date, messages: nextMessages };
+      api.persistChat(previous.projectId, persistedChat(cachedChat)).catch(error => notify(errorText(error)));
+    }
+    tabCache.current.set(id, { ...previous, chatId, chat: cachedChat, messages: nextMessages });
+    return nextMessages;
+  }
   async function rememberTab() {
     if (!workspaceRef.current.activeId || !projectRef.current) return;
     const current = editorRef.current;
+    const cached = tabCache.current.get(workspaceRef.current.activeId) || {};
     const view = { chapterId: activeId, selection: current && !current.isDestroyed ? { from: current.state.selection.from, to: current.state.selection.to } : undefined, scrollTop: document.querySelector('.writing-scroll')?.scrollTop || 0 };
-    tabCache.current.set(workspaceRef.current.activeId, { view, messages, instruction, panel, query, replacement, searchOpen, sessionStart: sessionStart.current, agentActivity });
+    const selected = getActiveChat(projectRef.current);
+    tabCache.current.set(workspaceRef.current.activeId, { ...cached, projectId: projectRef.current.id, view, chatId: selected?.id || null, chat: selected, messages, instruction, panel, query, replacement, searchOpen, sessionStart: sessionStart.current, agentActivity });
     await api.rememberProjectView(view);
   }
   async function installWorkspace(result) {
-    const nextWorkspace = result.workspace, cached = tabCache.current.get(nextWorkspace.activeId);
-    let next = normalizeHistoryProject(result.project || { ...newProject(), language: prefsRef.current.language }, schema);
-    const history = await loadHistory(next); next = history.project;
+    const nextWorkspace = result.workspace;
+    let cached = tabCache.current.get(nextWorkspace.activeId);
+    let next = normalizeProjectChats(normalizeHistoryProject(result.project || { ...newProject(), language: prefsRef.current.language }, schema));
+    let history = await loadHistory(next); next = history.project;
+    cached = tabCache.current.get(nextWorkspace.activeId) || cached;
+    next = normalizeProjectChats(next);
+    if (cached?.messages?.length && !cached.chatId) next = adoptChatMessages(next, cached.messages);
+    let cachedChatId = cached?.chatId && (next.chats || []).some(chat => chat.id === cached.chatId) ? cached.chatId : next.activeChatId;
+    if (cached?.chatId && !(next.chats || []).some(chat => chat.id === cached.chatId) && cached.chat) {
+      next = { ...next, chats: [...(next.chats || []), { ...cached.chat, messages: cached.messages || cached.chat.messages || [] }], activeChatId: cached.chatId };
+      cachedChatId = cached.chatId;
+    }
+    let cachedMessages = Array.isArray(cached?.messages) && cachedChatId === cached?.chatId ? cached.messages : (next.chats || []).find(chat => chat.id === cachedChatId)?.messages || [];
+    if (cachedChatId) next = withChatMessages(next, cachedChatId, cachedMessages);
+    let cachedActivity = cached?.agentActivity || [], pendingError = '';
+    if (cached?.pendingAgent) {
+      const pendingAgent = cached.pendingAgent;
+      try {
+        let applied;
+        try { applied = await applyAgentResult(next, pendingAgent.result, schema); }
+        catch (error) {
+          if (!pendingAgent.baseline) throw error;
+          const baselineApplied = await applyAgentResult(pendingAgent.baseline, pendingAgent.result, schema);
+          applied = rebaseAgentResult(pendingAgent.baseline, next, baselineApplied, pendingAgent.result);
+        }
+        let historyEntryId = null;
+        if (applied.changeCount) {
+          const recorded = recordProjectChange(history.journal, next, applied.project, { label: `AI: ${pendingAgent.instruction.slice(0, 140)}`, chapterId: pendingAgent.chapterId });
+          next = { ...applied.project, historySequence: recorded.sequence, updatedAt: new Date().toISOString() };
+          historyEntryId = recorded.entries.at(-1)?.id || null;
+          publishHistory(recorded);
+          history = { ...history, project: next, journal: recorded };
+        }
+        cachedMessages = cachedMessages.map(message => message.id === pendingAgent.messageId ? { ...message, pending: false, edits: applied.changeCount, historyEntryId } : message);
+      } catch (error) {
+        pendingError = errorText(error);
+        cachedMessages = cachedMessages.map(message => message.id === pendingAgent.messageId ? { ...message, pending: false, warning: pendingError } : message);
+      }
+      if (cachedChatId) next = withChatMessages(next, cachedChatId, cachedMessages);
+      cached = { ...cached, pendingAgent: null, unread: false, chatId: cachedChatId, chat: (next.chats || []).find(chat => chat.id === cachedChatId), messages: cachedMessages };
+      tabCache.current.set(nextWorkspace.activeId, cached);
+    } else if (cached?.unread) {
+      cached = { ...cached, unread: false };
+      tabCache.current.set(nextWorkspace.activeId, cached);
+    }
     const view = cached?.view || nextWorkspace.tabs.find(tab => tab.id === nextWorkspace.activeId)?.view || {};
     const chapterId = next.chapters.some(chapter => chapter.id === view.chapterId) ? view.chapterId : next.chapters[0].id;
     restoreSelection.current = view.selection ? { type: 'text', anchor: view.selection.from, head: view.selection.to } : null;
     restoreScroll.current = view.scrollTop || 0;
     workspaceRef.current = nextWorkspace; setWorkspace(nextWorkspace);
     projectRef.current = next; setProject(next); setPath(result.path); bindingRef.current = result.binding; setBinding(result.binding); setActiveId(chapterId); setEpoch(x => x + 1);
-    setMessages(cached?.messages || []); setInstruction(cached?.instruction || ''); setPanel(cached?.panel || null); setQuery(cached?.query || ''); setReplacement(cached?.replacement || ''); setSearchOpen(cached?.searchOpen || false); setAgentActivity(cached?.agentActivity || []);
-    setSaveError(''); setSaveState('saved'); setAiError(''); setRenameId(null); rejected.current = []; lastRequest.current = null; sessionStart.current = cached?.sessionStart ?? projectWords(next);
+    setMessages(cachedMessages); setInstruction(cached?.instruction || ''); setPanel(cached?.panel || null); setQuery(cached?.query || ''); setReplacement(cached?.replacement || ''); setSearchOpen(cached?.searchOpen || false); setAgentActivity(cachedActivity);
+    setBusy(requestRef.current?.mode === 'chat' ? requestRef.current.tabId === nextWorkspace.activeId ? 'chat' : 'background-chat' : null);
+    setSaveError(''); setSaveState('saved'); setAiError(pendingError); setRenameId(null); rejected.current = []; lastRequest.current = null; sessionStart.current = cached?.sessionStart ?? projectWords(next);
+    if (pendingError) notify(pendingError);
   }
-  function projectTransition(action) {
+  function projectTransition(action, recoveryOnly = false, preserveChat = false) {
     if (transition.current) return;
-    if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action));
+    if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action, recoveryOnly));
     setSwitching(true);
-    // Block editor input immediately; all pending edits and AI cancellation must
-    // finish before changing the backend's active document store.
+    // Block editor input immediately while saves and view state move to the
+    // destination tab. Chat requests may continue against their captured project.
     document.querySelector('.workspace')?.setAttribute('inert', '');
     const work = (async () => {
-      try { await dismiss(); await saveLocal(); await pendingSave.current; await rememberTab(); opening.current = true; await action(); }
+      try { clearTimeout(autosaveTimer.current); if (!preserveChat || requestRef.current?.mode !== 'chat') await dismiss(); if (!recoveryOnly) await saveLocal(); await pendingSave.current; await rememberTab(); opening.current = true; await action(); }
       catch (error) { notify(errorText(error)); }
       finally { opening.current = false; transition.current = null; setSwitching(false); document.querySelector('.workspace')?.removeAttribute('inert'); }
     })();
@@ -249,7 +352,7 @@ export default function App() {
   }
   function switchProject(id) {
     if (id === workspaceRef.current.activeId) return;
-    return projectTransition(async () => installWorkspace(await api.activateProject(id)));
+    return projectTransition(async () => installWorkspace(await api.activateProject(id)), false, true);
   }
   function closeProject(id = workspaceRef.current.activeId) {
     return projectTransition(async () => { const result = await api.closeProject(id); tabCache.current.delete(id); await installWorkspace(result); if (result.archivedPath) notify('Draft preserved in File → Open recent.'); });
@@ -272,10 +375,26 @@ export default function App() {
         await installWorkspace(attached);
         if (imported.warning) setModal({ type: 'notice', title: 'Document compatibility', text: imported.warning + '\n\nThe file remains attached in its original format. The first save will let you review these differences.' });
       } else await installWorkspace(result);
-    });
+    }, false, true);
+  }
+  function reloadDocument() {
+    return projectTransition(async () => {
+      const previousId = workspaceRef.current.activeId, captured = projectRef.current;
+      let result = await api.reloadProject(captured, historyRef.current?.events.slice(persistedHistory.current.get(captured.id) || 0) || []);
+      let warning;
+      if (result.import) {
+        const imported = await importDocument(result, extensions); warning = imported.warning;
+        const reloaded = { ...imported.project, chats: captured.chats || [], activeChatId: captured.activeChatId || null };
+        result = await api.bindNative(normalizeHistoryProject(reloaded, schema), { openToken: result.openToken, fidelity: imported.fidelity || { requiresReview: !!warning, warnings: warning ? [warning] : [] } });
+      }
+      tabCache.current.delete(previousId);
+      await installWorkspace(result);
+      notify('Modified version loaded. Your previous draft is available in File → Open recent.');
+      if (warning) setModal({ type: 'notice', title: 'Document compatibility', text: warning });
+    }, true);
   }
   async function createNew() {
-    return projectTransition(async () => { await installWorkspace(await api.newProject({ ...newProject(), language: prefsRef.current.language })); setModal(null); });
+    return projectTransition(async () => { await installWorkspace(await api.newProject({ ...newProject(), language: prefsRef.current.language })); setModal(null); }, false, true);
   }
   async function createTutorialDocument() {
     let result;
@@ -288,7 +407,7 @@ export default function App() {
     await projectTransition(async () => { result = await api.activateProject(id); await installWorkspace(result); });
     return result;
   }
-  function changeChapter(id) { dismiss(); setActiveId(id); setQuery(''); setRenameId(null); }
+  function changeChapter(id) { if (requestRef.current?.mode !== 'chat') dismiss(); setActiveId(id); setQuery(''); setRenameId(null); }
   function addChapter() {
     dismiss(); const next = { id: uid(), title: `Chapter ${project.chapters.length + 1}`, status: 'Draft', content: blankContent() };
     updateProject({ chapters: [...project.chapters, next] }); setActiveId(next.id); setRenameId(next.id);
@@ -317,7 +436,7 @@ export default function App() {
     try {
       if (!await createSnapshot('Before restoring a version')) return;
       const previous = await api.getGitRevision(revision);
-      const restored = { ...previous, id: projectRef.current.id, updatedAt: new Date().toISOString(), historySequence: historyRef.current.sequence };
+      const restored = { ...previous, id: projectRef.current.id, chats: projectRef.current.chats || [], activeChatId: projectRef.current.activeChatId || null, updatedAt: new Date().toISOString(), historySequence: historyRef.current.sequence };
       dismiss(); updateProject(restored, `Restore checkpoint ${revision.slice(0, 8)}`); setActiveId(previous.chapters[0].id); setEpoch(value => value + 1); setModal(null);
       await saveLocal(); await api.commitGitSnapshot(projectRef.current, `Restored version ${revision.slice(0, 8)}`);
       setGitHistory(await api.listGitHistory());
@@ -475,31 +594,73 @@ export default function App() {
     if (!prefsRef.current.enabled) { setModal({ type: 'settings', tab: 'connections' }); return; }
     await dismiss(); setAiError('');
     if (requestRef.current) return;
-    const baseline = projectRef.current, current = editorRef.current, id = uid(), pending = { id, mode: 'chat' };
+    let baseline = normalizeProjectChats(projectRef.current);
+    let selected = getActiveChat(baseline);
+    if (!selected) {
+      const created = withNewChat(baseline);
+      if (!created.chat) { notify(`A project can keep up to ${MAX_CHATS} chats.`); return; }
+      baseline = created.project; selected = created.chat;
+    }
+    if (selected.messages.length >= MAX_CHAT_MESSAGES - 1) { notify(`This chat has reached ${MAX_CHAT_MESSAGES.toLocaleString()} messages. Start a new chat to continue.`); return; }
+    const current = editorRef.current, id = uid(), tabId = workspaceRef.current.activeId, chapterId = activeId, chatId = selected.id;
+    const userMessage = { id, role: 'user', text, createdAt: new Date().toISOString() }, originMessages = [...selected.messages, userMessage];
+    baseline = withChatMessages(baseline, chatId, originMessages);
+    const pending = { id, mode: 'chat', tabId, chatId, projectId: baseline.id, projectTitle: baseline.title, chapterId };
     requestRef.current = pending; setBusy('chat'); setPanel('assist'); setAgentActivity([]);
-    setMessages(previous => [...previous, { id, role: 'user', text }]); setInstruction('');
+    publishChatProject(baseline, chatId);
+    cacheTab(tabId, { projectId: baseline.id, chatId, chat: getActiveChat(baseline), messages: originMessages, agentActivity: [], unread: false }); setInstruction('');
     try {
-      const result = await api.runAgent({ id, project: baseline, instruction: text, activeChapterId: activeId, selection: current && !current.state.selection.empty ? { chapterId: activeId, from: current.state.selection.from, to: current.state.selection.to } : undefined, conversation: messages.slice(-8).map(message => ({ role: message.role, text: message.text })) });
+      const agentProject = { ...baseline, chats: [], activeChatId: null };
+      const result = await api.runAgent({ id, project: agentProject, instruction: text, activeChapterId: chapterId, selection: current && !current.state.selection.empty ? { chapterId, from: current.state.selection.from, to: current.state.selection.to } : undefined, conversation: selected.messages.slice(-8).map(message => ({ role: message.role, text: message.text })) });
       if (requestRef.current !== pending) return;
+      const activity = result.activity || [], originTabActive = !transition.current && workspaceRef.current.activeId === tabId;
+      cacheTab(tabId, { agentActivity: activity });
+      if (originTabActive) setAgentActivity(activity);
       if (!result.edits?.length && !result.chapterTitles?.length) {
-        setAgentActivity(result.activity || []);
-        setMessages(previous => [...previous, { id: uid(), role: 'assistant', text: result.message }]);
+        appendTabMessage(tabId, chatId, { id: uid(), role: 'assistant', text: result.message });
+        cacheTab(tabId, { unread: !originTabActive });
+        if (!originTabActive) notify(`The assistant finished in “${baseline.title}”.`);
         tourRef.current?.emit('chat-finished');
         return;
       }
-      if (projectRef.current !== baseline) { notify('The document changed while the assistant was working. Its edits were not applied; ask again using the current text.'); return; }
       const applied = await applyAgentResult(baseline, result, schema);
-      if (projectRef.current !== baseline || requestRef.current !== pending) return;
-      if (applied.changeCount) {
-        const history = recordProjectChange(historyRef.current, baseline, applied.project, { label: `AI: ${text.slice(0, 140)}`, chapterId: activeId });
-        const next = { ...applied.project, historySequence: history.sequence, updatedAt: new Date().toISOString() };
-        restoreSelection.current = current?.state.selection.toJSON() || null;
+      if (requestRef.current !== pending) return;
+      const originActiveAfterValidation = !transition.current && workspaceRef.current.activeId === tabId;
+      if (!originActiveAfterValidation) {
+        const messageId = uid();
+        appendTabMessage(tabId, chatId, { id: messageId, role: 'assistant', text: result.message, pending: true });
+        cacheTab(tabId, { pendingAgent: { baseline, result, instruction: text, chapterId, chatId, messageId }, unread: true });
+        notify(`The assistant finished in “${baseline.title}”. Its edits will be applied when you return.`);
+        tourRef.current?.emit('chat-finished');
+        return;
+      }
+      let before = baseline, ready = applied;
+      if (projectRef.current !== baseline) {
+        before = projectRef.current;
+        try { ready = rebaseAgentResult(baseline, before, applied, result); }
+        catch (error) {
+          const warning = errorText(error);
+          appendTabMessage(tabId, chatId, { id: uid(), role: 'assistant', text: result.message, warning });
+          setAiError(warning); notify(warning); return;
+        }
+      }
+      if (ready.changeCount) {
+        const history = recordProjectChange(historyRef.current, before, ready.project, { label: `AI: ${text.slice(0, 140)}`, chapterId });
+        const next = { ...ready.project, historySequence: history.sequence, updatedAt: new Date().toISOString() };
+        const liveEditor = editorRef.current;
+        restoreSelection.current = liveEditor && !liveEditor.isDestroyed ? liveEditor.state.selection.toJSON() : null;
         projectRef.current = next; publishHistory(history); setProject(next); setEpoch(value => value + 1);
       }
-      setAgentActivity(result.activity || []);
-      setMessages(previous => [...previous, { id: uid(), role: 'assistant', text: result.message, edits: applied.changeCount, historyEntryId: applied.changeCount ? historyRef.current.entries.at(-1)?.id : null }]);
+      appendTabMessage(tabId, chatId, { id: uid(), role: 'assistant', text: result.message, edits: ready.changeCount, historyEntryId: ready.changeCount ? historyRef.current.entries.at(-1)?.id : null });
       tourRef.current?.emit('chat-finished');
-    } catch (error) { if (requestRef.current === pending) setAiError(errorText(error)); }
+    } catch (error) {
+      if (requestRef.current === pending) {
+        const detail = errorText(error), originIsActive = workspaceRef.current.activeId === tabId;
+        appendTabMessage(tabId, chatId, { id: uid(), role: 'assistant', text: 'The assistant could not complete this request.', warning: detail });
+        cacheTab(tabId, { unread: !originIsActive });
+        if (originIsActive) setAiError(detail); else notify(`The assistant request in “${baseline.title}” needs attention.`);
+      }
+    }
     finally { if (requestRef.current === pending) { requestRef.current = null; setBusy(null); } }
   }
   function rejectSuggestion() {
@@ -556,7 +717,15 @@ export default function App() {
   }
   function handleCommand(command) {
     if (command.startsWith('agent-progress:')) {
-      try { const activity = JSON.parse(command.slice(15)); if (requestRef.current?.id === activity.requestId) setAgentActivity(previous => { const found = previous.some(item => item.id === activity.id); return found ? previous.map(item => item.id === activity.id ? activity : item) : [...previous, activity]; }); } catch {}
+      try {
+        const activity = JSON.parse(command.slice(15)), pending = requestRef.current;
+        if (pending?.id === activity.requestId) {
+          const merge = previous => previous.some(item => item.id === activity.id) ? previous.map(item => item.id === activity.id ? activity : item) : [...previous, activity];
+          const cached = tabCache.current.get(pending.tabId) || {};
+          cacheTab(pending.tabId, { agentActivity: merge(cached.agentActivity || []) });
+          if (workspaceRef.current.activeId === pending.tabId) setAgentActivity(merge);
+        }
+      } catch {}
       return;
     }
     if (command.startsWith('reference-warning:')) { notify(command.slice(18)); return; }
@@ -565,6 +734,8 @@ export default function App() {
     if (command.startsWith('open-recent:')) { openDocument(command.slice(12)); return; }
     if (['setup', 'tutorial', 'about'].includes(command)) { setModal({ type: command }); return; }
     if (command.startsWith('settings-')) { setModal({ type: 'settings', tab: command.slice(9) }); return; }
+    const numberingKey = { 'toggle-row-numbers': 'showRowNumbers', 'toggle-page-numbers': 'showPageNumbers', 'toggle-paragraph-numbers': 'showParagraphNumbers' }[command];
+    if (numberingKey) { updatePrefs({ [numberingKey]: !prefsRef.current[numberingKey] }); return; }
     if (command === 'toggle-spellcheck') { updatePrefs({ spellcheck: !prefsRef.current.spellcheck }); return; }
     const current = editorRef.current;
     const actions = {
@@ -640,15 +811,16 @@ export default function App() {
   const editorCommand = command => { if (editor) command(editor.chain().focus()).run(); };
   const undoInfo = historyStatus(journal), layout = documentLayout(project);
   const chatSettings = { ...prefs, ...prefs.taskProfiles?.chat };
-  const localBusy = busy && (prefs.taskProfiles?.[busy]?.provider || prefs.provider) === 'local';
+  const busyTask = busy === 'background-chat' ? 'chat' : busy;
+  const localBusy = busyTask && (prefs.taskProfiles?.[busyTask]?.provider || prefs.provider) === 'local';
   const docStyle = project.documentStyle || { fontFamily: 'Cambria', fontSize: 12, lineHeight: 1.5 };
   const titleStyle = editor?.isActive('heading', { level: 1 }) ? 'heading1' : editor?.isActive('heading', { level: 2 }) ? 'heading2' : editor?.isActive('heading', { level: 3 }) ? 'heading3' : 'paragraph';
 
   return <div className={`app layout-${project.layout || 'story'} ${focus ? 'focus-mode' : ''}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight, '--writing-measure': `${prefs.measure}px`, '--document-zoom': (prefs.zoom || 100) / 100 }}>
     {!focus && <div className="project-tabs-bar"><div className="project-tabs" role="tablist" aria-label="Open projects">{workspace.tabs.map(tab => {
-      const active = tab.id === workspace.activeId, title = active ? project.title : tab.title;
+      const active = tab.id === workspace.activeId, title = active ? project.title : tab.title, assistantWorking = requestRef.current?.mode === 'chat' && requestRef.current.tabId === tab.id, assistantUnread = tabCache.current.get(tab.id)?.unread;
       return <div className={'project-tab' + (active ? ' selected' : '')} key={tab.id}>
-        <button role="tab" id={`project-tab-${tab.id}`} aria-selected={active} aria-controls="project-workspace" tabIndex={active ? 0 : -1} disabled={switching || savingNamed} title={(active ? path : tab.path) || 'Unnamed draft — saved in recovery'} onClick={() => switchProject(tab.id)} onKeyDown={event => { if (['ArrowLeft', 'ArrowRight'].includes(event.key)) { event.preventDefault(); cycleProject(event.key === 'ArrowRight' ? 1 : -1, true); } }}><FileText size={14} /><span>{title}</span>{active && ['pending', 'saving', 'error'].includes(saveState) && <span className={'tab-save-dot ' + saveState} aria-label={saveState === 'error' ? 'Save needs attention' : 'Saving changes'}>●</span>}</button>
+        <button role="tab" id={`project-tab-${tab.id}`} aria-selected={active} aria-controls="project-workspace" tabIndex={active ? 0 : -1} disabled={switching || savingNamed} title={(active ? path : tab.path) || 'Unnamed draft — saved in recovery'} onClick={() => switchProject(tab.id)} onKeyDown={event => { if (['ArrowLeft', 'ArrowRight'].includes(event.key)) { event.preventDefault(); cycleProject(event.key === 'ArrowRight' ? 1 : -1, true); } }}><FileText size={14} /><span>{title}</span>{active && ['pending', 'saving', 'error'].includes(saveState) && <span className={'tab-save-dot ' + saveState} aria-label={saveState === 'error' ? 'Save needs attention' : 'Saving changes'}>●</span>}{assistantWorking ? <LoaderCircle size={12} className="spin tab-assistant-status" aria-hidden="true" title="Assistant working" /> : assistantUnread ? <span className="tab-assistant-status unread" aria-hidden="true" title="Assistant reply ready">●</span> : null}</button>
         <IconButton icon={X} title={`Close project ${title}`} disabled={switching || savingNamed} onClick={() => closeProject(tab.id)} />
       </div>;
     })}</div><IconButton icon={Plus} title="New project tab" disabled={switching || savingNamed} onClick={createNew} /></div>}
@@ -679,31 +851,35 @@ export default function App() {
         </div>}
         {!focus && <div className="ai-toolbar" role="toolbar" aria-label="Writing assistance"><button className={prefs.enabled ? 'active' : ''} aria-pressed={prefs.enabled} onClick={() => handleCommand('toggle-ai')} title={formatShortcut(prefs.hotkeys?.toggleAI)}><PenLine size={14} />AI {prefs.enabled ? 'on' : 'off'}</button><button disabled={tour.isCurrent} title={tour.isCurrent ? "Automatic requests pause in the practice manuscript. Your saved preference is unchanged." : undefined} className={prefs.continuous ? 'active' : ''} aria-pressed={prefs.continuous} onClick={() => handleCommand('toggle-continuous')} title={formatShortcut(prefs.hotkeys?.toggleContinuous)}>Automatic suggestions {tour.isCurrent ? 'paused for tour' : prefs.continuous ? 'on' : 'off'}</button><span className="toolbar-divider" /><button disabled={!!busy} onClick={() => handleCommand('complete')}>Suggest <kbd>{formatShortcut(prefs.hotkeys?.complete ?? 'Tab')}</kbd></button><button disabled={!!busy || !selectedWords} onClick={() => askAI('correct')}><CheckCheck size={14} />Correct</button><button disabled={!!busy || !selectedWords} onClick={() => askAI('rewrite')}>Rephrase / translate</button><div className="toolbar-spacer" /><button onClick={() => setModal({ type: 'settings', tab: 'connections' })}><Settings2 size={14} />AI settings</button></div>}
         {searchOpen && <div className="search-bar"><Search size={15} /><input autoFocus aria-label="Find text" placeholder="Find in this chapter" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') nextMatch(); }} /><span>{matches} matches</span><IconButton icon={ArrowDown} title="Next match" onClick={nextMatch} /><input aria-label="Replacement text" placeholder="Replace with" value={replacement} onChange={e => setReplacement(e.target.value)} /><button onClick={() => replaceMatches(false)}>Replace</button><button onClick={() => replaceMatches(true)}>All</button><IconButton icon={X} title="Close search" onClick={() => { setSearchOpen(false); setQuery(''); }} /></div>}
-        {saveError && <div className="inline-warning"><Info size={16} /><span>{saveError}</span><button onClick={() => saveNamed(true)}>Save a copy</button></div>}
-        <div className={`writing-scroll ${prefs.pageMode === 'pages' ? 'divided-pages' : 'continuous-pages'}`}>
+        {saveError && <div className="inline-warning"><Info size={16} /><span>{saveError}</span><button disabled={switching || savingNamed} onClick={() => saveNamed(true)}>Save a copy</button>{path && /file changed outside WRAITER/i.test(saveError) && <button disabled={switching || savingNamed} title="Load the file from disk. Your current draft will be preserved in Open recent." onClick={reloadDocument}>Load modified version</button>}</div>}
+        <div className={`writing-scroll ${prefs.pageMode === 'pages' ? 'divided-pages' : 'continuous-pages'} ${prefs.showRowNumbers || prefs.showPageNumbers || prefs.showParagraphNumbers ? 'has-numbering' : ''}`} style={{ '--numbering-width': `${[prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers].filter(Boolean).length * 34}px` }}>
           <article className="writing-sheet">
             <div className="chapter-kicker"><span>CHAPTER {String(project.chapters.findIndex(c => c.id === chapter.id) + 1).padStart(2, '0')}</span><span className="kicker-line" /><select aria-label="Chapter status" value={chapter.status || 'Draft'} onChange={e => editChapter(chapter.id, { status: e.target.value })}><option>Draft</option><option>Notes</option><option>Revising</option><option>Final</option></select></div>
             <div className="chapter-title-row"><input className="chapter-title" aria-label="Chapter title" value={chapter.title} onChange={e => editChapter(chapter.id, { title: e.target.value })} /><div className="chapter-tools"><IconButton icon={ArrowUp} title="Move chapter earlier" disabled={project.chapters[0].id === chapter.id} onClick={() => reorderChapter(chapter.id, -1)} /><IconButton icon={ArrowDown} title="Move chapter later" disabled={project.chapters.at(-1).id === chapter.id} onClick={() => reorderChapter(chapter.id, 1)} /><IconButton icon={Trash2} title="Delete chapter" disabled={project.chapters.length === 1} onClick={() => setModal({ type: 'delete-chapter' })} /></div></div>
             {(project.showStatistics ?? layout.showStatistics) && <div className="chapter-meta">{chapterWords.toLocaleString()} words<span>·</span>{Math.max(1, Math.ceil(chapterWords / 220))} min read</div>}
             <ManuscriptEditor key={`${project.id}:${chapter.id}:${epoch}`} chapter={chapter} prefs={{ ...prefs, language: documentLanguage }} layoutSignature={JSON.stringify([docStyle, chapter.title, project.showStatistics])} onReady={handleEditorReady} onChange={onContentChanged} onSelection={onEditorSelection} onAction={onEditorAction} />
             {ghost && <div className="ghost-controls"><span>{ghost.kind === 'revision' ? 'Selected text · proposed replacement' : 'Suggested continuation'}</span><button onClick={() => acceptGhost()}><kbd>{formatShortcut(prefs.hotkeys?.accept ?? 'Tab')}</kbd> Accept</button><button onClick={retryAI}><RotateCcw size={13} />Another</button><button onClick={rejectSuggestion}><kbd>{formatShortcut(prefs.hotkeys?.dismiss ?? 'Escape')}</kbd> Dismiss</button></div>}
-            {busy && busy !== 'chat' && <div className="generation-inline" role="status">{localBusy && localProgress ? localProgress.message : 'Generating suggestion…'}<button onClick={dismiss}>Cancel</button></div>}
+            {busy && !['chat', 'background-chat'].includes(busy) && <div className="generation-inline" role="status">{localBusy && localProgress ? localProgress.message : 'Generating suggestion…'}<button onClick={dismiss}>Cancel</button></div>}
           </article>
         </div>
         <div className="writer-status writing-status"><div><span className="file-format-label">{binding?.format?.toUpperCase() || 'WRAITER'}</span><span>{selectedWords ? selectedWords + ' selected' : chapterWords.toLocaleString() + ' words'}</span><span className="status-dot">·</span><span>{totalWords.toLocaleString()} in document</span></div><div><select className="layout-select" aria-label="Document layout" value={project.layout || 'story'} onChange={event => { const chosen = LAYOUTS[event.target.value]; updateProject({ layout: event.target.value, showStatistics: chosen.showStatistics, documentStyle: { ...docStyle, fontFamily: chosen.fontFamily, fontSize: chosen.fontSize, lineHeight: chosen.lineHeight } }, 'Apply ' + chosen.name + ' layout'); }}>{Object.entries(LAYOUTS).map(([id, value]) => <option key={id} value={id}>{value.name}</option>)}</select><select className="language-select" aria-label="Content language" value={documentLanguage} onChange={e => updateProject({ language: e.target.value })}>{[...new Map([...LANGUAGES, [documentLanguage, languageName(documentLanguage)]]).entries()].map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select><button data-tour="page-view" onClick={() => handleCommand('page-view')}>{prefs.pageMode === 'pages' ? 'Divided pages' : 'Continuous view'}</button><select aria-label="Document zoom" value={prefs.zoom || 100} onChange={e => updatePrefs({ zoom: Number(e.target.value) })}>{[50, 75, 90, 100, 110, 125, 150, 175, 200].map(zoom => <option key={zoom} value={zoom}>{zoom}%</option>)}</select></div></div>
       </main>
       {!focus && panel && <aside className="inspector">
         <div className="inspector-heading"><div className="inspector-title">{panel === 'assist' ? <Sparkles size={17} /> : panel === 'references' ? <BookMarked size={17} /> : panel === 'notes' ? <PenLine size={17} /> : <History size={17} />}<span>{({ assist: 'Writing assistant', references: 'Reference library', notes: 'Notes & voice', history: 'Revision history' })[panel]}</span></div><IconButton icon={PanelRightClose} title="Close side panel" onClick={() => setPanel(null)} /></div>
-        {panel === 'assist' && <><div className="inspector-body">
+        {panel === 'assist' && <><div className="chat-session-bar"><select aria-label="Previous chats" value={project.activeChatId || ''} disabled={Boolean(busy && busy !== 'background-chat')} onChange={event => selectChat(event.target.value)}>{!chatSessions.length && <option value="">No previous chats</option>}{chatSessions.map(chat => <option key={chat.id} value={chat.id}>{chat.title}</option>)}</select><IconButton icon={Plus} title="New chat" disabled={Boolean(busy && busy !== 'background-chat')} onClick={startNewChat} /></div><div className="inspector-body" ref={chatScrollRef}>
           <div className="assist-actions"><button onClick={() => askAI('continue')} disabled={!!busy}><span className="assist-action-icon"><PenLine size={17} /></span><span><strong>Continue writing</strong><small>A suggestion at your cursor</small></span><kbd>Tab</kbd></button><button onClick={() => askAI('correct')} disabled={!!busy}><span className="assist-action-icon"><CheckCheck size={18} /></span><span><strong>Check this passage</strong><small>Spelling, grammar & punctuation</small></span><ChevronRight size={14} /></button><button onClick={() => askAI('rewrite')} disabled={!!busy}><span className="assist-action-icon"><WandSparkles size={17} /></span><span><strong>Find another phrasing</strong><small>A fresh take on selected text</small></span><ChevronRight size={14} /></button></div>
           <div className="context-summary"><div><BookOpen size={14} /><strong>Writing context</strong></div><p>{selectedWords ? `Chat edits are limited to ${selectedWords} selected words.` : 'Chat can work across all chapters.'} Inline suggestions use text near your cursor.{activeReferences.length ? ` ${activeReferences.length} reference${activeReferences.length > 1 ? 's' : ''} enabled.` : ''}</p><button onClick={() => setPanel('references')}>Manage references <ArrowUpRight size={12} /></button></div>
           {!prefs.enabled && <div className="connect-card"><span className="section-eyebrow">AI CONNECTION</span><p>Connect a local model or your preferred AI provider.</p><button className="primary-button" onClick={() => setModal({ type: 'settings', tab: 'connections' })}>AI connections <ArrowUpRight size={14} /></button><small>Writing and saving always work offline.</small></div>}
           {prefs.enabled && <div className="provider-badge"><span className="tiny-dot" /><span>{providerNames[chatSettings.provider]}<small>{chatSettings.model || 'Default model'}</small></span><IconButton icon={Settings2} title="Connection settings" onClick={() => setModal({ type: 'settings', tab: 'connections' })} /></div>}
           {aiError && <div className="ai-error" role="alert"><Info size={16} /><p>{aiError}</p><button onClick={() => setAiError('')}>Dismiss</button></div>}
           {proposal && <div className="revision-card"><div className="revision-heading"><Sparkles size={14} /><strong>Suggested revision</strong></div><small>ORIGINAL</small><p className="original-text">{proposal.original}</p><small>PROPOSED</small><p className="proposed-text">{proposal.text}</p>{proposal.changesStructure && <p className="small-muted">This changes paragraph structure or embedded content. Formatting inside the selection may be simplified; surrounding text stays intact.</p>}<div className="revision-actions"><button className="primary-button" onClick={acceptProposal}><Check size={14} />Accept</button><IconButton icon={RotateCcw} title="Another phrasing" onClick={retryAI} /><IconButton icon={X} title="Reject revision" onClick={rejectSuggestion} /></div></div>}
-          {agentActivity.length > 0 && <div className="agent-activity" aria-label="Assistant actions">{agentActivity.map((step, index) => <div className={'agent-step ' + step.state} key={step.id || index}><span>{step.label || step.tool}</span>{step.count != null && <small>{step.count}</small>}</div>)}</div>}{messages.map(message => <div className={'chat-message ' + message.role} key={message.id}><span>{message.role === 'user' ? 'YOU' : 'ASSISTANT'}</span><p>{message.text}</p>{message.edits > 0 && <div className="assistant-edit-result"><small>Applied {message.edits} edit{message.edits === 1 ? '' : 's'}</small><button className="secondary-button" disabled={journal?.activeIds[journal.cursor - 1] !== message.historyEntryId} onClick={() => travelHistory('undo')}>Undo assistant edit</button></div>}</div>)}
-          {busy && busy !== 'continue' && <div className="thinking"><LoaderCircle size={15} className="spin" />{localBusy && localProgress ? localProgress.message : busy === 'chat' ? 'Thinking it through…' : 'Reading your selection…'}<button onClick={dismiss}>Cancel</button></div>}
-        </div><div className="chat-composer"><textarea aria-label="Ask the writing assistant" placeholder="Ask a question or request an edit to your document…" value={instruction} onChange={e => setInstruction(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) askAI('chat'); }} /><div><span>{prefs.enabled ? providerNames[chatSettings.provider] : 'Choose a connection'}</span><button aria-label="Send writing question" disabled={!!busy || !instruction.trim()} onClick={() => askAI('chat')}><ArrowUp size={16} /></button></div><small>The assistant can inspect and edit your document. Edits are recorded in history and can be undone.</small></div></>}
+          <div className="chat-log" role="log" aria-live="polite" aria-relevant="additions">
+            {!messages.length && <div className="chat-empty"><MessageSquare size={22} /><p>Start a new conversation about this project.</p><small>Chats are saved with the project and stay separate from manuscript exports.</small></div>}
+            {agentActivity.length > 0 && <div className="agent-activity" aria-label="Assistant actions">{agentActivity.map((step, index) => <div className={'agent-step ' + step.state} key={step.id || index}><span>{step.label || step.tool}</span>{step.count != null && <small>{step.count}</small>}</div>)}</div>}
+            {messages.map(message => <div className={'chat-message ' + message.role} key={message.id}><span>{message.role === 'user' ? 'YOU' : 'ASSISTANT'}</span><p>{message.text}</p>{message.pending && <small className="chat-message-note">Edits are ready and will be applied when this project is active.</small>}{message.warning && <small className="chat-message-warning">{message.warning}</small>}{message.edits > 0 && <div className="assistant-edit-result"><small>Applied {message.edits} edit{message.edits === 1 ? '' : 's'}</small><button className="secondary-button" disabled={journal?.activeIds[journal.cursor - 1] !== message.historyEntryId} onClick={() => travelHistory('undo')}>Undo assistant edit</button></div>}</div>)}
+            {busy && busy !== 'continue' && <div className="thinking"><LoaderCircle size={15} className="spin" />{localBusy && localProgress ? localProgress.message : busy === 'chat' ? 'Thinking it through…' : busy === 'background-chat' ? `Finishing a request in “${requestRef.current?.projectTitle || 'another project'}”…` : 'Reading your selection…'}<button onClick={dismiss}>Cancel</button></div>}
+          </div>
+        </div><div className="chat-composer"><textarea aria-label="Ask the writing assistant" placeholder="Ask a question or request an edit to your document…" value={instruction} onChange={e => setInstruction(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (!busy && instruction.trim()) askAI('chat'); } }} /><div><span>{prefs.enabled ? providerNames[chatSettings.provider] : 'Choose a connection'}</span><button aria-label="Send writing question" disabled={!!busy || !instruction.trim()} onClick={() => askAI('chat')}><ArrowUp size={16} /></button></div><small><kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> new line. The assistant can inspect and edit your document; edits stay undoable.</small></div></>}
         {panel === 'references' && <div className="inspector-body reference-panel"><div className="panel-description"><h3>Reference files</h3><p>Add character sheets, research, or canon. Enabled references accompany AI requests; originals stay separate.</p></div><button className="primary-button full" onClick={async () => { try { const items = await api.reference(); if (!items.length) return; const next = [...(project.references || []), ...items.map(r => ({ ...r, id: uid(), enabled: true }))]; if (next.length > 20) { notify('Keep up to 20 references per manuscript.'); return; } updateProject({ references: next }); } catch (e) { notify(errorText(e)); } }}><Plus size={15} />Add reference files</button><p className="small-muted">Markdown and text files · refreshes saved edits<br />Up to 48,000 characters are sent per request.</p>{!(project.references || []).length && <div className="empty-state"><BookMarked size={32} /><p>No reference files attached.</p><small>Attach Markdown or text files to include them in AI context.</small></div>}{(project.references || []).map(reference => <div className="reference-card" key={reference.id}><div><BookMarked size={16} /><strong>{reference.name}</strong><IconButton icon={Trash2} title={`Remove ${reference.name}`} onClick={() => updateProject({ references: project.references.filter(r => r.id !== reference.id) })} /></div><p>{reference.text.slice(0, 130)}{reference.text.length > 130 ? '…' : ''}</p><label className="check-label"><input type="checkbox" checked={reference.enabled !== false} onChange={e => updateProject({ references: project.references.map(r => r.id === reference.id ? { ...r, enabled: e.target.checked } : r) })} />Include in AI context</label><button className="text-button" onClick={() => setModal({ type: 'reference', reference })}>Read reference <ArrowUpRight size={12} /></button></div>)}</div>}
         {panel === 'notes' && <div className="inspector-body notes-panel"><div className="panel-description"><h3>Notes</h3><p>Private notes and instructions for this manuscript.</p></div><label className="field-label">PRIVATE NOTES <small>Not sent to AI</small></label><textarea className="notes-textarea" aria-label="Private manuscript notes" placeholder="A scene to come back to. A question to leave open…" value={project.notes || ''} onChange={e => updateProject({ notes: e.target.value })} /><label className="field-label">YOUR WRITING VOICE <small>Included in AI context</small></label><textarea className="notes-textarea voice" aria-label="Writing voice instructions" placeholder="For example: British spelling. Keep dialogue informal. Preserve deliberate fragments. Never rename characters." value={project.style || ''} onChange={e => updateProject({ style: e.target.value })} /><p className="small-muted">These are your instructions. AI suggestions never update them automatically.</p></div>}
         {panel === 'history' && <><HistoryPanel journal={journal} gitHistory={gitHistory} onUndo={() => travelHistory('undo')} onRedo={() => travelHistory('redo')} onCheckpoint={() => createSnapshot()} onRestoreGit={item => setModal({ type: 'git-restore', item })} />{Boolean(project.snapshots?.length) && <details className="legacy-snapshots"><summary>Earlier embedded snapshots</summary>{project.snapshots.map(item => <button className="secondary-button" key={item.id} onClick={() => setModal({ type: 'restore', item })}>{item.name}</button>)}</details>}</>}
@@ -728,6 +904,6 @@ export default function App() {
     {modal?.type === 'restore' && <Modal title="Return to this revision?" subtitle="We’ll capture your current version first, so you can return to it later." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep writing</button><button className="primary-button" onClick={() => { const item = modal.item; dismiss(); updateProject({ title: item.title, chapters: structuredClone(item.chapters), notes: item.notes || '', style: item.style || '', language: item.language || project.language, documentStyle: item.documentStyle || project.documentStyle, references: structuredClone(item.references || []), snapshots: [snapshot(project, 'Before restoring a revision'), ...project.snapshots].slice(0, 20) }); setActiveId(item.chapters[0].id); setEpoch(x => x + 1); setModal(null); notify('Revision restored.'); }}>Restore revision</button></div></Modal>}
     {modal?.type === 'reference' && <Modal title={modal.reference.name} subtitle="Attached copy. Linked files refresh separately before each AI request." onClose={() => setModal(null)} wide><pre className="reference-reader">{modal.reference.text}</pre></Modal>}
     {modal?.type === 'notice' && <Modal title={modal.title} onClose={() => setModal(null)}><p className="notice-copy">{modal.text}</p><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Continue writing</button></div></Modal>}
-    {modal?.type === 'about' && <Modal title="WRAITER · 0.10.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Keep multiple projects in tabs, reopen recent files from the File menu, and choose whether to restore all tabs or start a clean project. Every project retains its own editing history. Continuous and divided pages, manual page breaks, and rated selection rephrasing remain available.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
+    {modal?.type === 'about' && <Modal title="WRAITER · 0.11.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Keep multiple projects in tabs, reopen recent files from the File menu, and choose whether to restore all tabs or start a clean project. Every project retains its own editing history and saved assistant conversations. Chat requests can finish in their originating project while you work elsewhere.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
   </div>;
 }

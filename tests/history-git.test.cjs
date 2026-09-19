@@ -10,7 +10,7 @@ function manuscript() {
 }
 
 test('Git fingerprint excludes editing-history cursors and save bindings while retaining manuscript changes', () => {
-  const initial = manuscript(), savedAgain = { ...initial, historySequence: 6, updatedAt: 'later', snapshots: [{ id: 'named version' }], nativeBinding: { path: 'D:/Books/Book.docx' }, fileBinding: { format: 'docx' }, binding: { hash: 'new file checksum' } };
+  const initial = manuscript(), savedAgain = { ...initial, historySequence: 6, updatedAt: 'later', snapshots: [{ id: 'named version' }], chats: [{ id: 'chat', title: 'Question', messages: [{ id: 'message', role: 'user', text: 'Hello' }] }], activeChatId: 'chat', nativeBinding: { path: 'D:/Books/Book.docx' }, fileBinding: { format: 'docx' }, binding: { hash: 'new file checksum' } };
   assert.equal(contentFingerprint(initial), contentFingerprint(savedAgain));
   assert.notEqual(contentFingerprint(initial), contentFingerprint({ ...initial, notes: 'A real note changed.' }));
   assert.notEqual(contentFingerprint(initial), contentFingerprint({ ...initial, documentStyle: { fontFamily: 'Arial', fontSize: 14 } }));

@@ -78,6 +78,18 @@ class WorkspaceSession {
     return this.snapshot({ warning: [...new Set(warnings)].join(' '), archivedPaths });
   }
   rememberView(view) { this.active.view = cleanView(view); }
+  async persistChat(projectId, chat) {
+    const entry = this.entries.find(item => item.store.project?.id === projectId);
+    if (!entry) throw new Error('This chat belongs to a project that is no longer open.');
+    const current = entry.store.project, chats = current.chats || [], index = chats.findIndex(item => item.id === chat?.id);
+    const nextChats = [...chats];
+    if (index < 0) nextChats.push(chat); else nextChats[index] = chat;
+    const next = { ...current, chats: nextChats, activeChatId: current.activeChatId || chat?.id || null, updatedAt: new Date().toISOString() };
+    validateProject(next);
+    const result = await entry.files.persist(next, null);
+    if (entry === this.active) await this.checkpoint();
+    return result;
+  }
   async activate(id) {
     if (!this.entries.some(entry => entry.id === id)) throw new Error('That project tab is no longer open.');
     const previous = this.activeId; this.activeId = id;
@@ -116,13 +128,40 @@ class WorkspaceSession {
   async bind(project, source) {
     const entry = this.pending.get(source?.openToken);
     if (!entry) throw new Error('Reopen this document before attaching its file.');
-    try { await entry.files.bind(project, source); return await this.adopt(entry); }
+    try { await entry.files.bind(project, source); return entry.reloadOf ? await this.finishReload(entry) : await this.adopt(entry); }
     finally { this.pending.delete(source.openToken); }
+  }
+  async reload(project) {
+    validateProject(project);
+    const previous = this.active;
+    if (!previous.store.currentPath || previous.store.project?.id !== project.id) throw new Error('This document is no longer attached to the active file.');
+    // Save recovery only: attempting a normal save would hit the very conflict
+    // this operation resolves, or overwrite the version the user wants to load.
+    await previous.store.writeRecovery(project, previous.store.currentPath, previous.store.expectedHash);
+    const entry = this.entry(); entry.reloadOf = previous.id;
+    const result = await entry.files.open(previous.store.currentPath);
+    if (result.import) { this.pending.set(result.openToken, entry); return result; }
+    return this.finishReload(entry);
+  }
+  async finishReload(entry) {
+    const index = this.entries.findIndex(item => item.id === entry.reloadOf), previous = this.entries[index];
+    if (!previous || this.activeId !== previous.id) throw new Error('Switch back to the original tab before reloading.');
+    if (hash(await readLimited(entry.store.currentPath)) !== entry.store.expectedHash) throw new Error('The file changed while reloading. Load the modified version again.');
+    // A new journal identity prevents old undo/recovery events from replaying
+    // over the externally edited content, even if the file carries the old ID.
+    const project = { ...entry.store.project, id: randomUUID() }; delete project.historySequence;
+    await entry.store.writeRecovery(project, entry.store.currentPath, entry.store.expectedHash);
+    const preservedPath = path.join(this.directory, 'Recovered drafts', `${safeFilename(previous.store.project.title)} - before reload - ${randomUUID()}.wraiter`);
+    await atomicWrite(preservedPath, JSON.stringify(previous.store.project, null, 2));
+    await entry.files.saveSidecar(project);
+    this.entries[index] = entry; this.activeId = entry.id;
+    try { await this.checkpoint(); return this.snapshot({ preservedPath }); }
+    catch (error) { this.entries[index] = previous; this.activeId = previous.id; throw error; }
   }
   async archiveDraft(entry) {
     const { project, currentPath, expectedHash } = entry.store;
     if (!project) return null;
-    if (!currentPath && project.title === 'Untitled manuscript' && (project.historySequence || 0) <= 1 && project.chapters.length === 1 && !project.notes && !project.style && !project.references?.length && !(project.chapters[0].content.content || []).some(node => node.type !== 'paragraph' || node.content?.length)) return null;
+    if (!currentPath && project.title === 'Untitled manuscript' && (project.historySequence || 0) <= 1 && project.chapters.length === 1 && !project.notes && !project.style && !project.references?.length && !(project.chats || []).some(chat => chat.messages?.length) && !(project.chapters[0].content.content || []).some(node => node.type !== 'paragraph' || node.content?.length)) return null;
     const dirty = !currentPath || (entry.files.binding ? contentHash(project) !== entry.files.binding.contentHash : hash(JSON.stringify(project, null, 2)) !== expectedHash);
     if (!dirty) return null;
     const target = path.join(this.directory, 'Recovered drafts', `${safeFilename(project.title)} - ${hash(project.id).slice(0, 12)}.wraiter`);

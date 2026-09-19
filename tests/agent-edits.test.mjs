@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Schema } from '@tiptap/pm/model';
 import { createRequire } from 'node:module';
-import { applyAgentResult } from '../src/agent-edits.js';
+import { applyAgentResult, rebaseAgentResult } from '../src/agent-edits.js';
 import { createHistory, recordProjectChange, applyHistory } from '../src/history.js';
 const { createDocumentTools, projectFingerprint } = createRequire(import.meta.url)('../electron/writing-agent.cjs');
 const schema = new Schema({ nodes: { doc: { content: 'block+' }, paragraph: { content: 'inline*', group: 'block', attrs: { textAlign: { default: null } } }, blockquote: { content: 'block+', group: 'block' }, text: { group: 'inline' }, hardBreak: { inline: true, group: 'inline' } }, marks: { bold: {}, italic: {}, link: { attrs: { href: {} } } } });
@@ -77,6 +77,18 @@ test('stale results reject the entire batch before any active or inactive chapte
   const edited = structuredClone(original); edited.chapters[1].title = 'Changed while thinking';
   await assert.rejects(applyAgentResult(edited, result, schema), /document changed/);
   assert.equal(schema.nodeFromJSON(edited.chapters[0].content).textContent, 'A  careful  writer.Second  line.');
+});
+
+test('completed edits rebase over untouched chapters but never overwrite a changed target', async () => {
+  const original = source(), tools = createDocumentTools(original); tools.execute('normalize_spaces', { scope: 'one' });
+  const result = resultFor(original, tools), applied = await applyAgentResult(original, result, schema);
+  const current = structuredClone(original); current.chapters[0].title = 'Renamed while thinking'; current.chapters[1].title = 'Elsewhere'; current.chapters[1].content = schema.node('doc', null, [paragraph(text('New work elsewhere.'))]).toJSON();
+  const rebased = rebaseAgentResult(original, current, applied, result);
+  assert.equal(rebased.project.chapters[0].title, 'Renamed while thinking');
+  assert.equal(schema.nodeFromJSON(rebased.project.chapters[0].content).textContent, 'A careful writer.Second line.');
+  assert.equal(schema.nodeFromJSON(rebased.project.chapters[1].content).textContent, 'New work elsewhere.');
+  const conflict = structuredClone(current); conflict.chapters[0].content = schema.node('doc', null, [paragraph(text('Changed target.'))]).toJSON();
+  assert.throws(() => rebaseAgentResult(original, conflict, applied, result), /document changed/);
 });
 
 test('agent handles hard breaks, empty paragraphs, and title edits without replacing surrounding structure', async () => {

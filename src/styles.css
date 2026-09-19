@@ -312,6 +312,9 @@ h1, h2, h3, p { margin-top: 0; }
 .inspector-title { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; min-width: 0; }
 .inspector-title > svg { color: var(--accent); flex-shrink: 0; }
 .inspector-title > span { white-space: nowrap; }
+.chat-session-bar { flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:8px 12px; border-bottom:1px solid var(--line); background:var(--panel); }
+.chat-session-bar select { min-width:0; flex:1; height:29px; padding:0 8px; border:1px solid var(--line-strong); border-radius:2px; background:var(--panel-raised); color:var(--text); font-size:11px; text-overflow:ellipsis; }
+.chat-session-bar .icon-button { width:29px; height:29px; flex:0 0 29px; border:1px solid var(--line-strong); background:var(--panel-raised); }
 .inspector-body { padding: 28px 22px 24px; overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; scrollbar-gutter: stable; }
 .assistant-intro { text-align: center; padding: 0 0 24px; }
 .assistant-emblem { display: inline-flex; justify-content: center; align-items: center; width: 46px; height: 46px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); background: var(--canvas); margin-bottom: 16px; }
@@ -368,6 +371,15 @@ h1, h2, h3, p { margin-top: 0; }
 .chat-message p { font-size: 12px; line-height: 1.8; margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .chat-message.user { background: var(--panel-soft); border: 1px solid var(--line); border-radius: 2px; padding: 13px; margin-top: 19px; }
 .chat-message.user > span { color: var(--muted); }
+.chat-message-note,.chat-message-warning { display:block; margin-top:8px; font-size:10px; line-height:1.5; }
+.chat-message-note { color:var(--muted); }
+.chat-message-warning { color:var(--danger); }
+.chat-empty { padding:24px 4px 12px; color:var(--muted); text-align:center; }
+.chat-empty > svg { color:var(--line-strong); }
+.chat-empty p { margin:9px 0 4px; font-size:12px; line-height:1.5; }
+.chat-empty small { display:block; color:var(--faint); font-size:10px; line-height:1.5; }
+.assistant-edit-result { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; }
+.assistant-edit-result > small { color:var(--muted); font-size:10px; }
 .panel-description h3 { color: var(--text); font: 600 16px/1.4 "Segoe UI", sans-serif; letter-spacing: normal; margin: 3px 0 13px; }
 .panel-description p { font-size: 11px; color: var(--muted); line-height: 1.8; margin-bottom: 23px; }
 .empty-state { color: var(--faint); text-align: center; padding: 44px 15px; }
@@ -618,6 +630,7 @@ kbd { font-size:11px; border-radius:2px; }
 .chat-composer > textarea { min-height:62px; height:75px; font-size:12px; border-radius:2px 2px 0 0; background:var(--panel-raised); padding:8px 9px 2px; }
 .chat-composer > div { padding:5px 6px 6px 9px; border-radius:0 0 2px 2px; background:var(--panel-raised); }
 .chat-composer > small { text-align:left; font-size:10px; line-height:1.5; }
+.chat-composer > small kbd { padding:0 3px; font-size:9px; }
 .ai-error { padding:10px; margin-top:13px; }
 .ai-error p { font-size:12px; line-height:1.5; }
 .revision-card { padding:11px; margin-top:13px; }
@@ -892,8 +905,15 @@ select.field-input { padding:5px 7px; }
 .project-tab .icon-button svg { width:13px; height:13px; }
 .project-tabs-bar > .icon-button { align-self:center; flex-shrink:0; }
 .tab-save-dot { font-size:8px; color:var(--muted); }.tab-save-dot.error { color:var(--danger); }
+.tab-assistant-status { flex:0 0 auto; color:var(--accent); }
+.tab-assistant-status.unread { font-size:8px; line-height:1; }
 .workspace[inert] { cursor:progress; opacity:.8; }
 .writing-sheet { position:relative; isolation:isolate; }
+.writing-scroll.has-numbering { padding-left:calc(16px + (var(--numbering-width) + 10px) * var(--document-zoom,1)); }
+.text-numbering { position:absolute; top:0; bottom:0; left:calc(-1 * var(--numbering-width,0px) - 10px); width:var(--numbering-width,0px); display:flex; pointer-events:none; user-select:none; color:color-mix(in srgb,var(--muted) 72%,var(--workspace)); font:10px/24px 'Segoe UI',sans-serif; font-variant-numeric:tabular-nums; z-index:1; }
+.numbering-column { position:relative; width:34px; flex-shrink:0; }
+.numbering-heading { position:absolute; top:12px; left:0; right:0; text-align:center; font-size:9px; }
+.text-number { position:absolute; left:0; right:6px; text-align:right; white-space:nowrap; }
 .divided-pages .writing-sheet { border:0; background:transparent; box-shadow:none; }
 .page-furniture { position:absolute; inset:0; z-index:-1; pointer-events:none; user-select:none; }
 .page-card { position:absolute; left:0; right:0; background:var(--canvas); border:1px solid var(--line-strong); box-shadow:var(--small-shadow); }

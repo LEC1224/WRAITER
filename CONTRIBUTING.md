@@ -47,6 +47,7 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | General editor workflows | `npm run test:app` |
 | Project tabs and startup | `npm run test:v06` |
 | Pagination and rephrasing alternatives | `npm run test:v05` |
+| External file reload and margin numbering | `npm run test:reload-numbering` |
 | Proofreading review, statistics or spelling tools | `npm run test:proofreading` |
 | Save/import/export | `npm run test:io` and `npm run test:v03` |
 | Clipboard export | `npm run test:clipboard` |

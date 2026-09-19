@@ -1,6 +1,6 @@
 {
   "name": "wraiter",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "description": "Desktop writing with integrated AI assistance.",
   "author": "WRAITER",
@@ -16,6 +16,7 @@
     "test:v03": "node tests/v03-app.cjs",
     "test:history-recovery": "node tests/history-recovery-ui.cjs",
     "test:pdf": "node tests/pdf-layout.cjs",
+    "test:pdf-export": "node tests/pdf-export.cjs",
     "test:office": "node tests/formats-interoperability.cjs",
     "test:io": "node tests/io-browser.cjs",
     "test:clipboard": "node tests/export-clipboard.cjs",
@@ -25,6 +26,7 @@
     "test:local-live": "node tests/local-live.cjs",
     "test:v05": "node tests/v05-app.cjs",
     "test:v06": "node tests/v06-app.cjs",
+    "test:reload-numbering": "node tests/reload-numbering-ui.cjs",
     "test:proofreading": "node tests/proofreading-ui.cjs",
     "test:onboarding": "node tests/onboarding-ui.cjs",
     "test:tutorial": "node tests/tutorial-ui.cjs",

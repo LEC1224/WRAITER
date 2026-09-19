@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage, shell, clipboard } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { hash, atomicWrite, readLimited, validateProject, validateRequest, DocumentStore, samePath, safeFilename } = require('./core.cjs');
 const providers = require('./providers.cjs');
 const { defaults, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, mergeSettings } = require('./preferences.cjs');
@@ -22,11 +23,13 @@ let win, closing = false, closePending = false, closeFinishing = false, closeTim
 let writeQueue = Promise.resolve();
 let prefs = {};
 const activeRequests = new Map();
-const cancelAll = async () => {
-  const controllers = [...activeRequests.values()];
+const cancelRequests = async (predicate = () => true) => {
+  const controllers = [...activeRequests.values()].filter(predicate);
   for (const controller of controllers) controller.abort();
   await Promise.all(controllers.map(controller => controller.finished));
 };
+const cancelAll = () => cancelRequests();
+const cancelForegroundRequests = () => cancelRequests(controller => controller.kind !== 'agent');
 const file = name => path.join(app.getPath('userData'), name);
 const serial = fn => { const result = writeQueue.then(async () => { try { return await fn(); } finally { await workspace?.checkpoint(); } }); writeQueue = result.catch(() => {}); return result; };
 function syncWorkspace() { store = workspace.active.store; documentFiles = workspace.active.files; }
@@ -146,11 +149,21 @@ app.whenReady().then(async () => {
   require('./setup.cjs').registerSetup({ ipcMain, app, dialog, shell, win: () => win, draftConnection });
   ipcMain.handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
   ipcMain.handle('workspace:view', (_e, view) => serial(async () => { workspace.rememberView(view); return true; }));
-  ipcMain.handle('workspace:activate', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.activate(id); syncWorkspace(); return result; }));
+  ipcMain.handle('workspace:reload', (_e, project, events = []) => serial(async () => {
+    await cancelAll();
+    validateProject(project);
+    if (store.project?.id !== project.id) throw new Error('This reload belongs to another document.');
+    if (events.length) await editJournal.append(project.id, events);
+    const result = await workspace.reload(project); syncWorkspace();
+    if (result.preservedPath) await rememberPath(result.preservedPath);
+    return result;
+  }));
+  ipcMain.handle('workspace:activate', (_e, id) => serial(async () => { await cancelForegroundRequests(); const result = await workspace.activate(id); syncWorkspace(); return result; }));
   ipcMain.handle('workspace:close', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.close(id); syncWorkspace(); if (result.archivedPath) await rememberPath(result.archivedPath); return result; }));
   ipcMain.handle('recent:list', () => [...(prefs.recent || [])]);
   ipcMain.handle('recent:clear', () => serial(async () => { const next = { ...prefs, recent: [] }; await atomicWrite(file('settings.json'), JSON.stringify(next)); prefs = next; updateMenu(); return []; }));
   ipcMain.handle('autosave', (_e, project, payload, events) => serial(async () => { const result = await persistDocument(project, payload, events); gitHistory.schedule(project); return result; }));
+  ipcMain.handle('chat:persist', (_e, projectId, chat) => serial(() => workspace.persistChat(projectId, chat)));
   ipcMain.handle('history:load', (_e, projectId) => serial(() => editJournal.read(projectId)));
   ipcMain.handle('history:append', (_e, projectId, events) => serial(() => editJournal.append(projectId, events)));
   ipcMain.handle('history:restart', (_e, project, initial, reason) => serial(async () => {
@@ -161,7 +174,7 @@ app.whenReady().then(async () => {
     await documentFiles.saveSidecar(store.project);
     return result;
   }));
-  ipcMain.handle('native:bind', (_e, project, source) => serial(async () => { const result = await workspace.bind(project, source); syncWorkspace(); await rememberPath(result.path); return result; }));
+  ipcMain.handle('native:bind', (_e, project, source) => serial(async () => { const result = await workspace.bind(project, source); syncWorkspace(); if (result.preservedPath) await rememberPath(result.preservedPath); await rememberPath(result.path); return result; }));
   ipcMain.handle('save:choose', async (_e, { title, format = documentFiles.binding?.format || 'wraiter', copy = true } = {}) => {
     if (typeof title !== 'string' || title.length > 2000 || !FORMATS.includes(format)) throw new Error('Invalid save format.');
     const filters = [format, ...FORMATS.filter(item => item !== format)].map(item => ({ name: ({ wraiter: 'WRAITER manuscript', odt: 'OpenDocument Text', docx: 'Word document', txt: 'Plain text', md: 'Markdown', html: 'HTML document' })[item], extensions: [item] }));
@@ -238,7 +251,7 @@ app.whenReady().then(async () => {
     }
     await atomicWrite(file('settings.json'), JSON.stringify(next));
     prefs = next;
-    if (['hotkeys', 'spellcheck'].some(key => key in update)) updateMenu();
+    if (['hotkeys', 'spellcheck', 'showRowNumbers', 'showPageNumbers', 'showParagraphNumbers'].some(key => key in update)) updateMenu();
     if ('language' in update) setDocumentLanguage(store.project?.language || prefs.language);
     return publicPrefs();
   }));
@@ -249,6 +262,7 @@ app.whenReady().then(async () => {
     const settings = resolveTask(prefs, request.mode);
     request = { ...request, language: request.language || store.project?.language || prefs.language, nativeLanguage: request.nativeLanguage ?? prefs.nativeLanguage };
     const controller = new AbortController();
+    controller.kind = 'generate';
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
     const timeout = setTimeout(() => controller.abort(), 180000);
     activeRequests.set(request.id, controller);
@@ -268,6 +282,7 @@ app.whenReady().then(async () => {
     request = validateProofreadRequest(request);
     if (store.project && store.project.id !== request.projectId) throw new Error('The requested document is no longer open.');
     const settings = resolveTask(prefs, 'proofread'), controller = new AbortController();
+    controller.kind = 'proofread';
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
     const timeout = setTimeout(() => controller.abort(), 240000); activeRequests.set(request.id, controller);
     try { return await runProofread(providers, settings, await getKey(settings), request, controller.signal); }
@@ -282,6 +297,7 @@ app.whenReady().then(async () => {
     validateProject(request.project);
     if (store.project && store.project.id !== request.project.id) throw new Error('The requested document is no longer open.');
     const settings = resolveTask(prefs, 'chat'), id = request.id || `agent-${Date.now()}`, controller = new AbortController();
+    controller.kind = 'agent';
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
     const timeout = setTimeout(() => controller.abort(), 240000); activeRequests.set(id, controller);
     try {
@@ -382,14 +398,23 @@ app.whenReady().then(async () => {
     const target = result.filePath.toLowerCase().endsWith(`.${extension}`) ? result.filePath : `${result.filePath}.${extension}`;
     if (workspace.findPath(target) || path.extname(target).toLowerCase() === '.wraiter') throw new Error('Choose an export filename separate from all open manuscripts.');
     if (format === 'pdf') {
-      const print = new BrowserWindow({ show: false, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true, javascript: false, partition: `wraiter-print-${Date.now()}` } });
-      print.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-      print.webContents.session.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !details.url.startsWith('data:') }));
+      // Long manuscripts and embedded images can exceed Chromium's data URL limit.
+      const directory = await fs.mkdtemp(path.join(app.getPath('temp'), 'wraiter-print-'));
+      const source = path.join(directory, 'document.html');
+      const sourceURL = pathToFileURL(source).href;
+      let print;
       try {
-        await print.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+        await fs.writeFile(source, html, 'utf8');
+        print = new BrowserWindow({ show: false, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true, javascript: false, partition: path.basename(directory) } });
+        print.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+        print.webContents.session.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !(details.url.startsWith('data:') || (details.resourceType === 'mainFrame' && details.url === sourceURL)) }));
+        await print.loadFile(source);
         const pdf = await print.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { top: 0, bottom: 0, left: 0, right: 0 }, displayHeaderFooter: false, preferCSSPageSize: true });
         await atomicWrite(target, pdf);
-      } finally { print.destroy(); }
+      } finally {
+        try { if (print && !print.isDestroyed()) print.destroy(); }
+        finally { await fs.rm(directory, { recursive: true, force: true }); }
+      }
     } else await atomicWrite(target, binary ? Buffer.from(data) : String(data));
     return target;
   });

@@ -113,13 +113,13 @@ test('project edits on all chapters undo together while preserving later redo af
   assert.deepEqual(contents(applyHistory(undone.project, journal, 'redo', schema).project), ['ALPHA', 'OMEGA']);
 });
 
-test('timestamps, save bindings, embedded snapshots and journal sequence do not create or break undo', () => {
+test('timestamps, chats, save bindings, embedded snapshots and journal sequence do not create or break undo', () => {
   let project = manuscript(), journal = createHistory(project);
-  const ignored = { ...project, updatedAt: 'new time', snapshots: [{ id: 'snapshot' }], historySequence: 77, nativeBinding: { path: 'C:/test.docx' } };
+  const ignored = { ...project, updatedAt: 'new time', snapshots: [{ id: 'snapshot' }], chats: [{ id: 'chat', title: 'Question', messages: [{ id: 'user', role: 'user', text: 'Keep this' }] }], activeChatId: 'chat', historySequence: 77, nativeBinding: { path: 'C:/test.docx' } };
   assert.equal(recordProjectChange(journal, project, ignored), journal);
   ({ project, journal } = edit(ignored, journal, state => state.tr.insertText('!', 6)));
   const undone = applyHistory(project, journal, 'undo', schema);
-  assert.deepEqual(undone.project.snapshots, ignored.snapshots); assert.deepEqual(undone.project.nativeBinding, ignored.nativeBinding);
+  assert.deepEqual(undone.project.snapshots, ignored.snapshots); assert.deepEqual(undone.project.chats, ignored.chats); assert.equal(undone.project.activeChatId, 'chat'); assert.deepEqual(undone.project.nativeBinding, ignored.nativeBinding);
   assert.equal(undone.project.historySequence, journal.sequence + 1);
 });
 

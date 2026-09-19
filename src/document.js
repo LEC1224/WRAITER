@@ -14,7 +14,7 @@ export function newProject(demo = false) {
         { type: 'paragraph', content: [{ type: 'text', text: 'Perhaps that was all a beginning needed to be.', marks: [{ type: 'italic' }] }] } ] } },
       { id: uid(), title: 'The road beyond', status: 'Notes', content: { type: 'doc', content: [paragraph('')] } }
     ] : [{ id: uid(), title: 'Chapter one', status: 'Draft', content: blankContent() }],
-    references: [], notes: '', style: '', snapshots: []
+    references: [], notes: '', style: '', snapshots: [], chats: [], activeChatId: null
   };
 }
 export function nodeText(node, separator = '\n', includeImages = false) {

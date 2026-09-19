@@ -29,12 +29,14 @@ async function mockServer(t, handle) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
-test('native validation preserves supported text, formatting, references, and snapshots', () => {
+test('native validation preserves supported text, formatting, references, snapshots, and chats', () => {
   const draft = project();
   draft.chapters[0].content.content.push(paragraph(' '), { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', attrs: { colspan: 1, rowspan: 1, colwidth: null }, content: [paragraph('Cell')] }] }] });
   draft.chapters[0].content.content[0].content[0].marks = [{ type: 'bold' }, { type: 'textStyle', attrs: { fontFamily: 'Georgia', fontSize: '20px', color: '#123456' } }];
   draft.references.push({ id: 'r1', name: 'World notes', text: 'A supplied fact.', enabled: true });
   draft.snapshots.push({ id: 's1', name: 'Before revision', title: draft.title, createdAt: new Date().toISOString(), chapters: structuredClone(draft.chapters), references: structuredClone(draft.references) });
+  draft.chats = [{ id: 'chat-1', title: 'Opening question', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), messages: [{ id: 'message-1', role: 'user', text: 'What should happen next?', createdAt: new Date().toISOString() }, { id: 'message-2', role: 'assistant', text: 'Let the silence answer.', edits: 0 }] }];
+  draft.activeChatId = 'chat-1';
   const before = JSON.stringify(draft);
   assert.equal(validateProject(draft), draft); assert.equal(JSON.stringify(draft), before);
 });
@@ -47,6 +49,8 @@ test('native validation rejects malformed nested text and snapshot data before m
     p => { p.chapters.push(structuredClone(p.chapters[0])); },
     p => { p.references = [null]; },
     p => { p.snapshots = [{ id: 'broken', chapters: [] }]; },
+    p => { p.chats = [{ id: 'broken', title: 'Broken', messages: [{ id: 'one', role: 'system', text: 'Injected' }] }]; p.activeChatId = 'broken'; },
+    p => { p.chats = [{ id: 'chat', title: 'Valid', messages: [] }]; p.activeChatId = 'missing'; },
     p => { p.chapters[0].content.content[0].content[0].marks = [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }]; },
     p => { p.chapters[0].content.content.push({ type: 'image', attrs: { src: 'https://external.example/track.png' } }); }
   ]) {
