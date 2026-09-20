@@ -1,4 +1,16 @@
-# WRAITER 0.9.0 validation
+# WRAITER validation
+
+## Version 0.11.0 · Public release · 2026-09-20
+
+- `npm test`: **180 passing tests**.
+- `npm run build`: passed with Vite 8.3.0.
+- `npm run test:proofreading`: passed the proofreading review, batch correction/undo, statistics, model selection, and spelling-highlight workflow.
+- `npm run test:v06`: passed all eight project-tab/startup groups, including saved chats completing in their originating project while another tab is active.
+- `npm run test:reload-numbering`: passed external WRAITER/native reload, draft preservation, fresh undo history, persistent row/page/paragraph numbering, zoom alignment, and history exclusion.
+- `npm run test:pdf-export`: passed large and small production PDF exports plus load/print failure cleanup without overwriting an existing export.
+- `WRAITER-0.11.0-Setup.exe`: **111,855,517 bytes**, product/file version **0.11.0**, SHA-256 `a8ea3d1e1da590d46578949c468b06855121b9b7acaafce7e1296a81dc751f4a`.
+- `WRAITER-0.11.0-Windows.exe`: **111,638,383 bytes**, product/file version **0.11.0**, SHA-256 `1bb8a3e40ecd219ee9d352ae5ad4bb094a13dbc11a50fb152fd2fc129d4cc7c5`.
+- Both executables are unsigned Windows x64 previews, as documented in the README. Tests used synthetic documents and local mock services; no author manuscript or live provider request was used for this release validation.
 
 ## First public release packaging · 2026-09-15
 

@@ -8,20 +8,44 @@ You do not need to know how to code. A guided setup helps you connect **Codex** 
 
 ## Download WRAITER
 
-**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.9.0/WRAITER-0.9.0-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
+**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.11.0/WRAITER-0.11.0-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
 
-Version **0.9.0** is the first public release. It is an early preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
+Version **0.11.0** is the current public preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
 
 | Choose a download | Who it is for |
 | --- | --- |
-| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.9.0/WRAITER-0.9.0-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
-| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.9.0/WRAITER-0.9.0-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
+| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.11.0/WRAITER-0.11.0-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
+| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.11.0/WRAITER-0.11.0-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
 
 Download one of these `.exe` files. GitHub's **Source code** downloads are for developers; they are not the installer.
 
 The preview is **not digitally signed**, so Windows may display an unknown-publisher or reputation warning. Release files are published only under [LEC1224/WRAITER](https://github.com/LEC1224/WRAITER/releases); checksums are included for people who want to verify their download.
 
 WRAITER is free under the MIT license. An eligible Codex or Claude Code account is separate, and AI requests use that provider's allowance or billing. Internet access is needed to connect those services. You can also write with AI turned off, or use a local AI model through the advanced settings.
+
+## See WRAITER in action
+
+These screenshots use a fictional sample manuscript, *The Glass Orchard*.
+
+### Can't think of the right next line? Just press tab to auto-complete
+<img src="docs/images/inline-suggestion.png" alt="WRAITER's AI toolbar above a chapter with a faint inline continuation at the cursor" width="1000" height="500">
+
+The faint italic words are a preview at the cursor—not a change to the manuscript. Press **Tab** to accept them or **Esc** to dismiss them while your normal writing controls stay in reach.
+
+### Find the right phrasing
+<img src="docs/images/selection-rephrase.png" alt="A selected phrase in WRAITER with an inline replacement preview and ranked rephrasing alternatives" width="1000" height="500">
+
+Select a word or passage and press **Tab**. WRAITER previews the leading alternative inside your sentence and offers more choices ranked for that context. Use **Up / Down** to compare them, **Enter** or **Tab** to accept, and **Esc** to keep your original wording.
+
+### Ask questions with the whole project in view
+<img src="docs/images/project-assistant.png" alt="WRAITER showing three chapters, the active manuscript and a project-aware assistant conversation" width="1000" height="500">
+
+Chapters stay organised on the left while the writing assistant opens on the right. It can answer questions or make requested edits using the manuscript, your writing-voice instructions and enabled references. Conversations stay with the project, and assistant edits remain undoable.
+
+### Proofread selectively
+<img src="docs/images/proofreading-review.png" alt="WRAITER's proofreading review with two selected findings, explanations and before-and-after diffs" width="1000" height="500">
+
+Proofread a selection, the current chapter or the whole manuscript. WRAITER groups findings by type, shows each proposed change beside the original and lets you apply only the fixes you choose.
 
 ## Your first few minutes
 
@@ -34,8 +58,7 @@ WRAITER is free under the MIT license. An eligible Codex or Claude Code account 
 Already want to write? Choose **Set up later**. You can return through **Help → Set up AI**.
 
 ## Learn by writing
-
-![WRAITER's practice manuscript, chapter list and tutorial guide beneath the real editor](docs/images/writing-tutorial.png)
+<img src="docs/images/writing-tutorial.png" alt="WRAITER's practice manuscript, chapter list and tutorial guide beneath the real editor" width="1000" height="500">
 
 The tutorial opens a short story that has already begun. You create its next chapter, and WRAITER adds an opening for you to continue. Press **Tab** and your connected AI suggests what could happen next.
 
@@ -141,7 +164,7 @@ Unit tests and these desktop suites use synthetic data and local test services. 
 
 **Live tests are opt-in:** `npm run test:tutorial:live` sends two requests through your saved Codex account and uses its allowance. It is not part of CI. See the contributor guide for local-model, PDF and office-format test prerequisites.
 
-The [validation report](TEST-REPORT.md) records checks and remaining limitations for this release. [Release notes](docs/releases/v0.9.0.md) describe the first public version. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts.
+The [validation report](TEST-REPORT.md) records checks and remaining limitations for this release. [Release notes](docs/releases/v0.11.0.md) describe the current version. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts.
 
 ## License and acknowledgements
 
