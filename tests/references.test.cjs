@@ -5,6 +5,15 @@ const path = require('node:path');
 const os = require('node:os');
 const { ReferenceLibrary, refreshReferences, MAX_REFERENCE_CHARACTERS } = require('../electron/references.cjs');
 
+test('editorial reference paging can retain complete enabled files while inline requests stay bounded', async () => {
+  const references = [{ name: 'Long canon', text: 'a'.repeat(60000) + 'LAST_FACT' }];
+  const inline = await refreshReferences(references);
+  assert.ok(!inline.references[0].text.includes('LAST_FACT'));
+  const editorial = await refreshReferences(references, { maxCharacters: 40 * 1024 * 1024 });
+  assert.ok(editorial.references[0].text.endsWith('LAST_FACT'));
+  assert.deepEqual(editorial.warnings, []);
+});
+
 async function temporary(t) {
   const parent = await fs.realpath(os.tmpdir());
   const directory = await fs.mkdtemp(path.join(parent, 'wraiter-reference-test-'));

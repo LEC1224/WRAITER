@@ -6,6 +6,7 @@ const http = require('node:http');
 const root = path.resolve(__dirname, '..');
 const { defaults } = require('../electron/preferences.cjs');
 const opening = "There was once a software called Wraiter, that was used to integrate AI in authors' workflows. One day";
+const isDocumentAgentRequest = body => body.messages?.some(message => message.role === 'user' && message.content?.startsWith('AUTHOR REQUEST:\n') && message.content.includes('\n\nCURRENT TOOL RESULTS:\n'));
 (async () => {
   const output = path.join(root, 'test-output'); await fs.mkdir(output, { recursive: true });
   const userData = await fs.mkdtemp(path.join(output, 'walkthrough-'));
@@ -18,7 +19,7 @@ const opening = "There was once a software called Wraiter, that was used to inte
       if (nextFailure) { nextFailure = false; res.writeHead(503); return res.end(JSON.stringify({ error: { message: 'Temporary test outage' } })); }
       const prompt = JSON.stringify(body);
       let text;
-      if (body.messages[0].content.includes('JSON document tools')) {
+      if (isDocumentAgentRequest(body)) {
         const user = body.messages[1].content;
         const records = JSON.parse(user.split('CURRENT TOOL RESULTS:\n')[1].split('\n\nRemaining document tools:')[0]);
         if (!records.length) text = JSON.stringify({ done: false, message: 'Reading the active chapter.', tools: [{ name: 'read_document', arguments: { scope: 'active' } }] });
@@ -88,7 +89,9 @@ const opening = "There was once a software called Wraiter, that was used to inte
     assert.match(await page.getByRole('textbox', { name: 'Ask the writing assistant' }).inputValue(), /Add one short/);
     await page.getByRole('button', { name: 'Send writing question', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.manuscript')?.textContent.includes('Even the full stop wanted'));
-    assert.ok(requests.filter(body => body.messages[0].content.includes('JSON document tools')).every(body => JSON.stringify(body).includes('Keep the tone playful') && !JSON.stringify(body).includes('Practice story background')));
+    const agentRequests = requests.filter(isDocumentAgentRequest);
+    assert.ok(agentRequests.length >= 3, 'The tutorial must exercise document reading, editing and completion.');
+    assert.ok(agentRequests.every(body => JSON.stringify(body).includes('Keep the tone playful') && !JSON.stringify(body).includes('Practice story background')));
     await page.screenshot({ path: path.join(output, 'walkthrough-chat.png') });
     // At the supported minimum window size, the dock and real chat remain usable.
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(960, 650));

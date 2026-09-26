@@ -1,5 +1,35 @@
 # WRAITER validation
 
+## Version 0.13.0 · Release verification · 2026-09-27
+
+- Fresh `npm test`: **195 passing tests**. `npm run package` passed, rebuilding the production frontend, Windows x64 installer, portable application, and third-party notices.
+- Packaged `test:editorial`, `test:large`, `test:history-recovery`, `test:v06`, `test:onboarding`, and `test:tutorial` passed using isolated profiles, synthetic manuscripts, and local scripted providers. Editorial checks include reports at normal/minimum window sizes, reverting while preserving unrelated edits, persistence across restart, and chapter restructuring with undo.
+- The large-manuscript fixture contains 120,000 words across four chapters. On this machine it opened in 2,395 ms, typed the test phrase in 327 ms, and returned to a warm project tab in 1,166 ms. Search and Select All retained offscreen content. These are local test measurements, not cross-machine guarantees.
+- `WRAITER-0.13.0-Setup.exe`: **112,984,600 bytes**, product version **0.13.0**, SHA-256 `458330a6da1a3c132be201910b3c8b317076a85ad5e1285e8dc38e94e30ff10c`.
+- `WRAITER-0.13.0-Windows.exe`: **112,738,548 bytes**, product version **0.13.0**, SHA-256 `3c399b779dbddacbb15014239828faa54c8501266a6f40978742514a9da4103c`.
+- These rebuilt artifacts supersede the local September 24 builds below. Checksums are in `release/WRAITER-0.13.0-SHA256SUMS.txt`. Executables remain unsigned; fresh-PC installation and live-provider editorial judgment were not tested.
+
+## Version 0.13.0 · Local Windows installer · 2026-09-24
+
+- Package metadata, lockfile, packaged application metadata and the About dialog all report **0.13.0**.
+- `npm run package`: passed. Built the Windows x64 NSIS installer and portable application, including notices for 109 application dependencies. Packaged editorial engine files match the source files.
+- `npm run test:editorial`, `npm run test:onboarding` and `npm run test:tutorial`: passed against `release/win-unpacked/WRAITER.exe`, using isolated profiles, synthetic manuscripts and local simulated providers.
+- The tutorial provider fixture now identifies the document-agent protocol instead of matching wording from the old system prompt. It also requires a complete read/edit/finish exchange so its context assertions cannot pass without agent requests. No application change was needed after packaging.
+- `WRAITER-0.13.0-Setup.exe`: **112,984,599 bytes**, product/file version **0.13.0**, SHA-256 `67180d303e9b6aecbf56382354c042b51bd17b63c8fff452b9844afb74128d25`.
+- `WRAITER-0.13.0-Windows.exe`: **112,738,553 bytes**, product/file version **0.13.0**, SHA-256 `0363870ca71fdff6bfd94019589008da259abdebbb4127485384056a385b64f2`.
+- Checksums are recorded in `release/WRAITER-0.13.0-SHA256SUMS.txt`. These are unsigned local builds; no GitHub release or installed-app update was performed. A fresh-PC installation and live-provider editorial judgment were not tested.
+
+## Editorial assistant · Local development validation · 2026-09-24
+
+- `npm test`: **195 passing tests**. New coverage includes nested and cross-paragraph BBCode, inline formatting preservation, bulk revisions, paragraph and chapter restructuring, table validation, selection boundaries, reference paging, stale-edit rejection, and reverting a batch while preserving unrelated later work.
+- `npm run build`: passed. The agent and renderer share the document schema and text-edit application logic; the main-process editor dependencies are included as production dependencies at their existing pinned versions.
+- `npm run test:app`, `npm run test:desktop`, and `npm run test:v06`: passed editor workflows, native integration, saved conversations, background assistant completion, project tabs and restart behaviour.
+- `npm run test:history-recovery`: passed both damaged-journal scenarios, preserved original manuscripts and journals, and verified new undo/redo history across restarts. Its fixture now skips first-run setup/tutorial so the recovery test edits its intended synthetic manuscript.
+- `npm run test:editorial`: passed against source and the packaged Windows executable. Verified native nested formatting, saved before-and-after reports, minimum-window layout, reverting after an unrelated edit, undoing a revert, report persistence after restart, chapter splitting and deleting the displayed chapter with undo.
+- `npx electron-builder --win --dir --config.directories.output=test-output/editorial-package`: passed. The local test executable is `test-output/editorial-package/win-unpacked/WRAITER.exe`; this is a development build, not a published release or installed update.
+- Visual QA: `test-output/editorial-report.png` and `test-output/editorial-report-small.png`. Workflow results: `test-output/editorial-ui-report.json`.
+- All AI workflow tests used synthetic manuscripts and local scripted provider responses. Live-provider editorial judgment and model choice of the new tools were not evaluated in this validation.
+
 ## Version 0.11.0 · Public release · 2026-09-20
 
 - `npm test`: **180 passing tests**.

@@ -248,6 +248,12 @@ h1, h2, h3, p { margin-top: 0; }
 .chapter-tools .icon-button svg { width: 13px; height: 13px; }
 .chapter-meta { display: flex; gap: 9px; margin: 12px 0 37px; font-size: 10px; color: var(--faint); }
 .manuscript { color: var(--ink); font-family: var(--writing-font, Georgia), serif; font-size: var(--writing-size, 19px); line-height: var(--writing-leading, 1.8); font-weight: 400; min-height: 180px; outline: none; cursor: text; overflow-wrap: break-word; caret-color: var(--accent); tab-size: 4; }
+/* Chromium can skip layout and paint for distant manuscript blocks while the
+   complete editable document stays mounted for selection, undo and search.
+   The learned intrinsic size keeps the scrollbar stable as blocks approach. */
+@supports (content-visibility: auto) {
+  .continuous-pages .manuscript > * { content-visibility: auto; contain-intrinsic-block-size: auto 2.6em; }
+}
 .manuscript:focus, .manuscript:focus-visible { outline: none; }
 .manuscript > :first-child { margin-top: 0; }
 .manuscript > :last-child { margin-bottom: 0; }
@@ -1077,3 +1083,24 @@ button.severity-pill:hover { background:color-mix(in srgb,var(--severity) 18%,va
   .app:has(.walkthrough:not(.compact)) .formatbar > * { flex-shrink: 0; }
   .app:has(.walkthrough:not(.compact)) .writing-sheet { padding-top: 20px; }
 }
+
+/* Recorded editorial changes remain inspectable from the saved conversation. */
+.assistant-change-summary { padding-left: 1.2rem; font-size: .85rem; line-height: 1.5; }
+.assistant-report-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.assistant-change-detail { border-top: 1px solid var(--line); padding: .75rem 0; }
+.assistant-change-detail > summary { cursor: pointer; font-weight: 600; }
+.assistant-change-comparison { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-top: .75rem; }
+.assistant-change-comparison > div { min-width: 0; }
+.assistant-change-comparison pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30rem; overflow: auto; }
+.assistant-change-prose { overflow: auto; overflow-wrap: anywhere; max-height: 30rem; padding: .6rem; border: 1px solid var(--line); }
+.assistant-change-prose p { white-space: pre-wrap; }
+.assistant-change-prose img { max-width: 100%; max-height: 16rem; object-fit: contain; }
+.assistant-change-prose table { border-collapse: collapse; width: 100%; }
+.assistant-change-prose td, .assistant-change-prose th { border: 1px solid var(--line); padding: .3rem; }
+.change-link { text-decoration: underline; }
+.change-page-break { display: block; border-top: 1px dashed currentColor; opacity: .7; }
+.assistant-change-footer { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-top: 1rem; }
+@media (max-width: 1000px) { .assistant-change-comparison { grid-template-columns: minmax(0, 1fr); } }
+
+.assistant-edit-result { display: block; }
+.assistant-report-actions { margin-top: .5rem; }

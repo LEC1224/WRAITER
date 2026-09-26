@@ -1,1 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="52" fill="#345b4b"/><path d="M69 183C74 91 133 49 194 49C197 112 157 170 88 187L130 122Z" fill="#f8f6ee"/><path d="M64 199L162 94" stroke="#f8f6ee" stroke-width="10" stroke-linecap="round"/><path d="M93 168L113 117M114 146L159 131" stroke="#345b4b" stroke-width="7" stroke-linecap="round"/><circle cx="196" cy="198" r="8" fill="#d9bc80"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Wraiter logo">
+  <rect width="256" height="256" rx="58" fill="#24313d"/>
+  <path d="M47 54 L80 198 L130 108 L173 198" fill="none" stroke="#f8f5ed" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M182 171 L206 179 L238 65 Q242 53 231 50 L227 49 Q216 46 213 59 Z" fill="#2d83cc"/>
+  <path d="M182 171 L206 179 L173 198 Z" fill="#d7aa55"/>
+  <circle cx="192.5" cy="178.5" r="3.4" fill="#24313d"/>
+  <path d="M191 181 L176 196" fill="none" stroke="#24313d" stroke-width="3.3" stroke-linecap="round"/>
+</svg>

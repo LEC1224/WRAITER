@@ -9,7 +9,7 @@ export const HISTORY_SELECTION_META = 'wraiterHistorySelectionBefore';
 const clone = value => value === undefined ? undefined : structuredClone(value);
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const id = () => globalThis.crypto.randomUUID();
-const valueFingerprints = new WeakMap(), projectFingerprints = new WeakMap();
+const valueFingerprints = new WeakMap(), projectFingerprints = new WeakMap(), structuralFingerprints = new WeakMap();
 
 export class HistoryMismatchError extends Error {
   constructor(message = 'This editing history no longer matches the document. The saved history has been preserved.') {
@@ -38,6 +38,71 @@ export function historyFingerprint(value) {
   return `${(a >>> 0).toString(16).padStart(8, '0')}${(b >>> 0).toString(16).padStart(8, '0')}:${text.length}`;
 }
 
+// Version two fingerprints are Merkle-style: a parent hashes the fingerprints
+// of its immediate children instead of rebuilding and rescanning one enormous
+// JSON string. ProseMirror nodes are persistent immutable trees, so typing in a
+// paragraph only invalidates that paragraph and its ancestors. The result is a
+// deterministic fingerprint that can also be reproduced from saved JSON.
+function digest(parts, weight = 1) {
+  let a = 0x811c9dc5, b = 0x9e3779b9;
+  for (const part of parts) {
+    const text = String(part);
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      a = Math.imul(a ^ code, 0x01000193);
+      b = Math.imul(b ^ code, 0x85ebca6b); b ^= b >>> 13;
+    }
+    a = Math.imul(a ^ 0x1f, 0x01000193);
+    b = Math.imul(b ^ 0x1f, 0x85ebca6b); b ^= b >>> 13;
+  }
+  return `v2:${(a >>> 0).toString(16).padStart(8, '0')}${(b >>> 0).toString(16).padStart(8, '0')}:${weight}`;
+}
+function fingerprintArray(items) {
+  const children = items.map(structuralFingerprint);
+  return digest(['array', items.length, ...children], 1 + children.reduce((sum, value) => sum + Number(value.slice(value.lastIndexOf(':') + 1)), 0));
+}
+function fingerprintEntries(entries) {
+  const sorted = entries.filter(([, value]) => value !== undefined).sort(([a], [b]) => a.localeCompare(b));
+  const children = sorted.map(([key, value]) => [key, structuralFingerprint(value)]);
+  return digest(['object', sorted.length, ...children.flat()], 1 + children.reduce((sum, [, value]) => sum + Number(value.slice(value.lastIndexOf(':') + 1)), 0));
+}
+function proseMirrorJSON(value) {
+  if (!value?.type?.name || typeof value.toJSON !== 'function') return null;
+  // Mark and Node both expose type/attrs/toJSON. Nodes additionally expose a
+  // Fragment with childCount/child; text nodes expose text.
+  if (value.content && Number.isSafeInteger(value.childCount)) {
+    const entries = [['type', value.type.name]];
+    if (value.attrs && Object.keys(value.attrs).length) entries.push(['attrs', value.attrs]);
+    if (value.childCount) entries.push(['content', Array.from({ length: value.childCount }, (_, index) => value.child(index))]);
+    if (value.marks?.length) entries.push(['marks', value.marks]);
+    if (value.isText) entries.push(['text', value.text]);
+    return entries;
+  }
+  const entries = [['type', value.type.name]];
+  if (value.attrs && Object.keys(value.attrs).length) entries.push(['attrs', value.attrs]);
+  return entries;
+}
+export function structuralFingerprint(value) {
+  if (value === undefined) return digest(['undefined'], 1);
+  if (value === null) return digest(['null'], 1);
+  if (typeof value !== 'object') return digest([typeof value, JSON.stringify(value)], typeof value === 'string' ? value.length + 1 : 1);
+  const cached = structuralFingerprints.get(value);
+  if (cached) return cached;
+  const pm = proseMirrorJSON(value);
+  const result = pm ? fingerprintEntries(pm) : Array.isArray(value) ? fingerprintArray(value) : fingerprintEntries(Object.entries(value).filter(([key, item]) => !(key === 'pageBreakBefore' && item == null)));
+  structuralFingerprints.set(value, result);
+  return result;
+}
+
+// Associate the JSON snapshot Tiptap must produce for persistence with its
+// already-persistent editor tree. This saves a second full traversal during the
+// same keystroke while retaining plain serializable project data.
+export function associateHistoryContent(content, documentNode) {
+  if (!content || typeof content !== 'object' || !documentNode) return content;
+  structuralFingerprints.set(content, structuralFingerprint(documentNode));
+  return content;
+}
+
 export function historyProjectContent(project) {
   return Object.fromEntries(Object.entries(project).filter(([key]) => !IGNORED.has(key)));
 }
@@ -49,16 +114,21 @@ function cachedFingerprint(value) {
   if (!valueFingerprints.has(value)) valueFingerprints.set(value, historyFingerprint(value));
   return valueFingerprints.get(value);
 }
-// Projects and chapter content are immutable React values. Hashing their fields
-// independently avoids rescanning every untouched chapter on each keystroke.
-function projectFingerprint(project) {
-  if (!projectFingerprints.has(project)) {
-    const fields = Object.keys(project).filter(key => !IGNORED.has(key) && project[key] !== undefined).sort().map(key => [key,
-      key === 'chapters' ? project.chapters.map(chapter => Object.keys(chapter).filter(name => chapter[name] !== undefined).sort().map(name => [name, cachedFingerprint(chapter[name])])) : cachedFingerprint(project[key])
-    ]);
-    projectFingerprints.set(project, historyFingerprint(fields));
-  }
+// The legacy hash remains readable forever. A journal naturally moves to v2 on
+// its next edit; no history migration or destructive reset is needed.
+function legacyProjectFingerprint(project) {
+  const fields = Object.keys(project).filter(key => !IGNORED.has(key) && project[key] !== undefined).sort().map(key => [key,
+    key === 'chapters' ? project.chapters.map(chapter => Object.keys(chapter).filter(name => chapter[name] !== undefined).sort().map(name => [name, cachedFingerprint(chapter[name])])) : cachedFingerprint(project[key])
+  ]);
+  return historyFingerprint(fields);
+}
+function projectFingerprint(project, expected = 'v2:') {
+  if (!String(expected).startsWith('v2:')) return legacyProjectFingerprint(project);
+  if (!projectFingerprints.has(project)) projectFingerprints.set(project, fingerprintEntries(Object.entries(project).filter(([key]) => !IGNORED.has(key))));
   return projectFingerprints.get(project);
+}
+function matchingFingerprint(value, expected) {
+  return String(expected).startsWith('v2:') ? structuralFingerprint(value) : historyFingerprint(proseMirrorJSON(value) ? value.toJSON() : value);
 }
 
 function validateEntry(entry) {
@@ -115,12 +185,12 @@ export function createHistory(project, saved = {}) {
   let journal = { version: 1, projectId: project.id, events: [clone(initial)], sequence: 1, entries: [], activeIds: [], cursor: 0, headFingerprint: initial.fingerprint, _lookup: new Map() };
   for (const event of events.slice(1)) journal = replayEvent(journal, clone(event), true);
   delete journal._lookup;
-  if (journal.headFingerprint !== projectFingerprint(project)) throw new HistoryMismatchError();
+  if (journal.headFingerprint !== projectFingerprint(project, journal.headFingerprint)) throw new HistoryMismatchError();
   return journal;
 }
 
 function verifyCurrent(journal, project) {
-  if (project.id !== journal.projectId || projectFingerprint(project) !== journal.headFingerprint) throw new HistoryMismatchError();
+  if (project.id !== journal.projectId || projectFingerprint(project, journal.headFingerprint) !== journal.headFingerprint) throw new HistoryMismatchError();
 }
 function appendEntry(journal, entry) {
   return replayEvent(journal, { version: 1, kind: 'edit', sequence: journal.sequence + 1, timestamp: entry.timestamp, beforeFingerprint: entry.beforeFingerprint, afterFingerprint: entry.afterFingerprint, entry });
@@ -148,10 +218,10 @@ export function recordTransaction(journal, { chapterId, transaction, beforeProje
   if (transaction.getMeta(HISTORY_REPLAY_META)) return journal;
   verifyCurrent(journal, beforeProject);
   const before = beforeProject.chapters.find(chapter => chapter.id === chapterId), after = afterProject.chapters.find(chapter => chapter.id === chapterId);
-  if (!before || !after || cachedFingerprint(before.content) !== historyFingerprint(transaction.before.toJSON())) throw new HistoryMismatchError('An editor transaction starts from a different chapter revision.');
+  if (!before || !after || structuralFingerprint(before.content) !== structuralFingerprint(transaction.before)) throw new HistoryMismatchError('An editor transaction starts from a different chapter revision.');
   const transactions = [transaction, ...appendedTransactions];
   const final = transactions.at(-1);
-  if (historyFingerprint(final.doc.toJSON()) !== cachedFingerprint(after.content)) throw new HistoryMismatchError('An editor transaction is missing part of the final chapter change.');
+  if (structuralFingerprint(final.doc) !== structuralFingerprint(after.content)) throw new HistoryMismatchError('An editor transaction is missing part of the final chapter change.');
   const expected = { ...beforeProject, chapters: beforeProject.chapters.map(chapter => chapter.id === chapterId ? { ...chapter, content: after.content } : chapter) };
   if (projectFingerprint(expected) !== projectFingerprint(afterProject)) throw new HistoryMismatchError('An editor transaction also changed manuscript metadata.');
   const forward = [], inverse = [];
@@ -168,7 +238,7 @@ export function recordTransaction(journal, { chapterId, transaction, beforeProje
     chapterTitle: after.title,
     summary: excerpt(forward.filter(step => step.slice).map(step => textOf(step.slice)).join(' ')) || excerpt(inverse.filter(step => step.slice).map(step => textOf(step.slice)).join(' ')),
     beforeFingerprint: journal.headFingerprint, afterFingerprint: projectFingerprint(afterProject),
-    beforeDocFingerprint: cachedFingerprint(before.content), afterDocFingerprint: cachedFingerprint(after.content),
+    beforeDocFingerprint: structuralFingerprint(before.content), afterDocFingerprint: structuralFingerprint(after.content),
     forward, inverse,
     selectionBefore: clone(transaction.getMeta(HISTORY_SELECTION_META) || null),
     selectionAfter: final.selection.toJSON()
@@ -199,7 +269,7 @@ function projectPatches(before, after) {
   return patches;
 }
 
-export function recordProjectChange(journal, before, after, { label = 'Edit manuscript', chapterId = null } = {}) {
+export function recordProjectChange(journal, before, after, { label = 'Edit manuscript', chapterId = null, revertsEntryId = null } = {}) {
   verifyCurrent(journal, before);
   if (after.id !== before.id || !Array.isArray(after.chapters) || !after.chapters.length || new Set(after.chapters.map(chapter => chapter.id)).size !== after.chapters.length) throw new HistoryMismatchError('A manuscript history entry must retain its identity and valid chapters.');
   const afterFingerprint = projectFingerprint(after);
@@ -208,6 +278,7 @@ export function recordProjectChange(journal, before, after, { label = 'Edit manu
     id: id(), kind: 'project', timestamp: new Date().toISOString(), label: String(label).slice(0, 200), chapterId,
     chapterTitle: after.chapters.find(chapter => chapter.id === chapterId)?.title,
     beforeFingerprint: journal.headFingerprint, afterFingerprint,
+    ...(revertsEntryId ? { revertsEntryId } : {}),
     patches: projectPatches(before, after)
   });
 }
@@ -237,14 +308,15 @@ function applyPatches(project, patches, direction) {
 }
 
 function applyEntry(project, entry, direction, schema) {
-  if (projectFingerprint(project) !== (direction === 'undo' ? entry.afterFingerprint : entry.beforeFingerprint)) throw new HistoryMismatchError('The document does not match the requested editing history entry.');
+  const expectedProject = direction === 'undo' ? entry.afterFingerprint : entry.beforeFingerprint;
+  if (projectFingerprint(project, expectedProject) !== expectedProject) throw new HistoryMismatchError('The document does not match the requested editing history entry.');
   let next, selection = null;
   if (entry.kind === 'steps') {
     const chapter = project.chapters.find(item => item.id === entry.chapterId);
     if (!chapter || !schema) throw new HistoryMismatchError('This chapter is unavailable for undo or redo.');
     let doc = schema.nodeFromJSON(chapter.content);
     const expectedDoc = direction === 'undo' ? entry.afterDocFingerprint : entry.beforeDocFingerprint;
-    if (historyFingerprint(doc.toJSON()) !== expectedDoc) throw new HistoryMismatchError('The chapter has changed outside its editing history.');
+    if (matchingFingerprint(doc, expectedDoc) !== expectedDoc) throw new HistoryMismatchError('The chapter has changed outside its editing history.');
     for (const json of direction === 'undo' ? entry.inverse : entry.forward) {
       const result = Step.fromJSON(schema, json).apply(doc);
       if (result.failed || !result.doc) throw new HistoryMismatchError('An editing history step could not be applied: ' + (result.failed || 'invalid document'));
@@ -256,7 +328,7 @@ function applyEntry(project, entry, direction, schema) {
     next = { ...project, chapters: project.chapters.map(item => item.id === entry.chapterId ? { ...item, content: doc.toJSON() } : item) };
   } else next = applyPatches(project, entry.patches, direction);
   const afterFingerprint = direction === 'undo' ? entry.beforeFingerprint : entry.afterFingerprint;
-  if (projectFingerprint(next) !== afterFingerprint) throw new HistoryMismatchError('The restored document did not match its recorded revision.');
+  if (projectFingerprint(next, afterFingerprint) !== afterFingerprint) throw new HistoryMismatchError('The restored document did not match its recorded revision.');
   next.updatedAt = new Date().toISOString();
   return { project: next, selection, afterFingerprint };
 }

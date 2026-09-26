@@ -1,25 +1,18 @@
+import { documentExtensions } from '../electron/editor-schema.mjs';
 import React, { useEffect, useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Placeholder from '@tiptap/extension-placeholder';
-import TextAlign from '@tiptap/extension-text-align';
-import { TextStyleKit } from '@tiptap/extension-text-style';
-import Highlight from '@tiptap/extension-highlight';
-import Image from '@tiptap/extension-image';
-import { TableKit } from '@tiptap/extension-table';
-import { GhostText, SearchHighlight, ParagraphFormat, ghostKey } from './extensions.js';
-import { DEFAULT_HOTKEYS, shortcutFromEvent } from './hotkeys.js';
-import { HISTORY_SELECTION_META } from './history.js';
-import { Pagination, paginationKey, removePageBreakAtCursor } from './pagination.js';
 
-export const extensions = [
-  StarterKit.configure({ undoRedo: false, heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: false } }),
-  TextStyleKit, TextAlign.configure({ types: ['heading', 'paragraph'] }),
-  Highlight.configure({ multicolor: true }), Image.configure({ allowBase64: true }), TableKit.configure({ table: { resizable: true } }),
-  Placeholder.configure({ placeholder: 'Start writing…' }), ParagraphFormat, GhostText, SearchHighlight, Pagination
-];
+import Placeholder from '@tiptap/extension-placeholder';
+import { GhostText, SearchHighlight, ghostKey } from './extensions.js';
+import { DEFAULT_HOTKEYS, shortcutFromEvent } from './hotkeys.js';
+import { associateHistoryContent, HISTORY_SELECTION_META } from './history.js';
+import { Pagination, paginationKey, removePageBreakAtCursor } from './pagination.js';
+import { WordCount, wordCountKey } from './word-count.js';
+
+export const extensions = [...documentExtensions, Placeholder.configure({ placeholder: 'Start writing…' }), GhostText, SearchHighlight, WordCount, Pagination];
 export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onReady, onChange, onSelection, onAction }) {
   const callbacks = useRef({ onReady, onChange, onSelection, onAction, prefs });
+  const toolbarFrame = useRef(0);
   callbacks.current = { onReady, onChange, onSelection, onAction, prefs };
   const editor = useEditor({
     extensions, content: chapter.content,
@@ -62,9 +55,14 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
         return true;
       }
     },
-    onUpdate: ({ editor, transaction, appendedTransactions }) => callbacks.current.onChange(editor.getJSON(), editor, transaction, { appendedTransactions }),
+    onUpdate: ({ editor, transaction, appendedTransactions }) => {
+      const content = associateHistoryContent(editor.getJSON(), editor.state.doc);
+      callbacks.current.onChange(content, editor, transaction, { appendedTransactions, wordCount: wordCountKey.getState(editor.state) });
+    },
     onSelectionUpdate: ({ editor }) => callbacks.current.onSelection(editor.state.selection),
-    onTransaction: () => callbacks.current.onAction('toolbar-refresh')
+    onTransaction: () => {
+      if (!toolbarFrame.current) toolbarFrame.current = requestAnimationFrame(() => { toolbarFrame.current = 0; callbacks.current.onAction('toolbar-refresh'); });
+    }
   });
   useEffect(() => {
     if (!editor) return;
@@ -73,6 +71,7 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
     callbacks.current.onReady(editor);
     return () => { editor.off('beforeTransaction', captureSelection); callbacks.current.onReady(null); };
   }, [editor]);
+  useEffect(() => () => cancelAnimationFrame(toolbarFrame.current), []);
   useEffect(() => { editor?.setOptions({ editorProps: { ...editor.options.editorProps, attributes: { ...editor.options.editorProps.attributes, spellcheck: String(prefs.spellcheck), lang: prefs.language } } }); }, [editor, prefs.spellcheck, prefs.language]);
   useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(paginationKey, { enabled: prefs.pageMode === 'pages', numbering: { row: prefs.showRowNumbers, page: prefs.showPageNumbers, paragraph: prefs.showParagraphNumbers }, revision: JSON.stringify([prefs.zoom, prefs.measure, prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers, layoutSignature]) }).setMeta('addToHistory', false)); }, [editor, prefs.pageMode, prefs.zoom, prefs.measure, prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers, layoutSignature]);
   return <EditorContent editor={editor} />;

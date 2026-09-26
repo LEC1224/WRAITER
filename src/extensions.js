@@ -23,22 +23,7 @@ export const GhostText = Extension.create({
     })];
   }
 });
-function cssPoints(value) {
-  if (!value) return null;
-  const match = String(value).trim().match(/^(-?[\d.]+)(px|pt|in|cm|mm|pc)?$/i);
-  if (!match) return null;
-  return Number(match[1]) * ({ px: 0.75, pt: 1, in: 72, cm: 72 / 2.54, mm: 72 / 25.4, pc: 12 }[match[2]?.toLowerCase() || 'pt'] || 1);
-}
-export const ParagraphFormat = Extension.create({
-  name: 'paragraphFormat',
-  addGlobalAttributes() { return [{ types: ['paragraph', 'heading'], attributes: {
-    pageBreakBefore: { default: null, keepOnSplit: false, parseHTML: element => ['page', 'always'].includes(element.style.breakBefore || element.style.pageBreakBefore) ? true : null, renderHTML: attrs => attrs.pageBreakBefore ? { style: 'break-before: page', 'data-page-break': 'true' } : {} },
-    lineHeight: { default: null, parseHTML: element => element.style.lineHeight || null, renderHTML: attrs => attrs.lineHeight ? { style: `line-height: ${attrs.lineHeight}` } : {} },
-    spaceAfter: { default: null, parseHTML: element => cssPoints(element.style.marginBottom), renderHTML: attrs => attrs.spaceAfter != null ? { style: `margin-bottom: ${attrs.spaceAfter}pt` } : {} },
-    firstLineIndent: { default: null, parseHTML: element => cssPoints(element.style.textIndent), renderHTML: attrs => attrs.firstLineIndent != null ? { style: `text-indent: ${attrs.firstLineIndent}pt` } : {} }
-  } }]; },
-  addCommands() { return { setParagraphFormat: attributes => ({ commands }) => commands.updateAttributes('paragraph', attributes) }; }
-});
+export { ParagraphFormat } from '../electron/editor-schema.mjs';
 export const SearchHighlight = Extension.create({
   name: 'searchHighlight',
   addProseMirrorPlugins() {

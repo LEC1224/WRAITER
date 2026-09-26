@@ -58,7 +58,7 @@ class EditJournal {
   }
   async restart(project, initial, reason = '') {
     validateProject(project);
-    if (initial?.kind !== 'init' || initial.version !== 1 || initial.sequence !== 1 || initial.projectId !== project.id || !/^[a-f0-9]{16}:\d+$/.test(initial.fingerprint || '') || typeof initial.timestamp !== 'string' || !Number.isFinite(Date.parse(initial.timestamp))) throw new Error('Invalid replacement history baseline.');
+    if (initial?.kind !== 'init' || initial.version !== 1 || initial.sequence !== 1 || initial.projectId !== project.id || !/^(?:v2:)?[a-f0-9]{16}:\d+$/.test(initial.fingerprint || '') || typeof initial.timestamp !== 'string' || !Number.isFinite(Date.parse(initial.timestamp))) throw new Error('Invalid replacement history baseline.');
     // Copy the exact prior journal and the current document before installing a
     // new baseline. A mismatch never authorizes replaying or deleting old edits.
     const target = this.filename(project.id), archive = `${target}.preserved-${Date.now()}-${require('node:crypto').randomUUID()}`;

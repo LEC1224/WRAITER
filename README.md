@@ -8,14 +8,14 @@ You do not need to know how to code. A guided setup helps you connect **Codex** 
 
 ## Download WRAITER
 
-**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.11.0/WRAITER-0.11.0-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
+**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.13.0/WRAITER-0.13.0-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
 
-Version **0.11.0** is the current public preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
+Version **0.13.0** is the current public preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
 
 | Choose a download | Who it is for |
 | --- | --- |
-| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.11.0/WRAITER-0.11.0-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
-| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.11.0/WRAITER-0.11.0-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
+| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.13.0/WRAITER-0.13.0-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
+| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.13.0/WRAITER-0.13.0-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
 
 Download one of these `.exe` files. GitHub's **Source code** downloads are for developers; they are not the installer.
 
@@ -83,7 +83,7 @@ Shortcuts can be changed in **Settings → Keyboard shortcuts**. The tutorial fo
 ## What you can do
 
 - **Keep your writing organised.** Work with chapters and several manuscripts in tabs, with word counts, focus mode, themes and familiar formatting.
-- **Stay in control of AI suggestions.** Preview completions and rewritten selections before accepting them. Direct editing requests in the assistant panel apply an undoable batch of changes. Assistant conversations are saved per project, with a dropdown for returning to earlier chats.
+- **Stay in control of AI suggestions.** Preview completions and rewritten selections before accepting them. Direct editing requests can revise prose, apply formatting and restructure paragraphs or chapters. Each completed request is one undoable batch with a saved before-and-after report and a revert control. Assistant conversations are saved per project, with a dropdown for returning to earlier chats.
 - **Proofread without surrendering the pen.** Review selected text, a chapter or the manuscript by severity and error type; edit, select and apply only the fixes you want. Detailed document statistics and local spelling underlines live in the same Tools menu.
 - **Give AI useful background.** Share writing-voice instructions and selected reference files. Keep private notes for yourself.
 - **Keep editing history.** Undo and redo survive restarts. Recovery saves and preceding-save backups help protect your work. Optional named checkpoints are available when Git is installed.
@@ -164,7 +164,7 @@ Unit tests and these desktop suites use synthetic data and local test services. 
 
 **Live tests are opt-in:** `npm run test:tutorial:live` sends two requests through your saved Codex account and uses its allowance. It is not part of CI. See the contributor guide for local-model, PDF and office-format test prerequisites.
 
-The [validation report](TEST-REPORT.md) records checks and remaining limitations for this release. [Release notes](docs/releases/v0.11.0.md) describe the current version. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts.
+The [validation report](TEST-REPORT.md) records checks and remaining limitations. [Release notes](docs/releases/v0.13.0.md) describe the improvements since version 0.11.0. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts.
 
 ## License and acknowledgements
 

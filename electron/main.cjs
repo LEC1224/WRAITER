@@ -158,7 +158,14 @@ app.whenReady().then(async () => {
     if (result.preservedPath) await rememberPath(result.preservedPath);
     return result;
   }));
-  ipcMain.handle('workspace:activate', (_e, id) => serial(async () => { await cancelForegroundRequests(); const result = await workspace.activate(id); syncWorkspace(); return result; }));
+  ipcMain.handle('workspace:activate', (_e, id, cached = {}) => serial(async () => {
+    await cancelForegroundRequests(); const result = await workspace.activate(id); syncWorkspace();
+    // A renderer may retain a bounded warm copy. If its manuscript identity and
+    // durable journal position match, avoid cloning the complete novel through
+    // Electron IPC merely to confirm that it is unchanged.
+    const warmMatch = cached && typeof cached === 'object' && typeof cached.projectId === 'string' && cached.projectId === result.project?.id && cached.historySequence === result.project?.historySequence;
+    return warmMatch ? { ...result, project: null, cachedProject: true } : result;
+  }));
   ipcMain.handle('workspace:close', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.close(id); syncWorkspace(); if (result.archivedPath) await rememberPath(result.archivedPath); return result; }));
   ipcMain.handle('recent:list', () => [...(prefs.recent || [])]);
   ipcMain.handle('recent:clear', () => serial(async () => { const next = { ...prefs, recent: [] }; await atomicWrite(file('settings.json'), JSON.stringify(next)); prefs = next; updateMenu(); return []; }));
@@ -301,7 +308,7 @@ app.whenReady().then(async () => {
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
     const timeout = setTimeout(() => controller.abort(), 240000); activeRequests.set(id, controller);
     try {
-      const refs = await referenceLibrary.refresh((request.project.references || []).filter(reference => reference.enabled !== false), { verifyContents: settings.provider === 'codex', signal: controller.signal });
+      const refs = await referenceLibrary.refresh((request.project.references || []).filter(reference => reference.enabled !== false), { verifyContents: settings.provider === 'codex', signal: controller.signal, maxCharacters: 40 * 1024 * 1024 });
       if (refs.warnings.length) win?.webContents.send('command', `reference-warning:${refs.warnings.join(' ')}`);
       return await runWritingAgent({ ...request, references: refs.references, settings, key: await getKey(settings), signal: controller.signal, onProgress: activity => win?.webContents.send('command', `agent-progress:${JSON.stringify({ requestId: id, ...activity })}`) });
     } catch (error) { throw new Error(controller.signal.aborted ? 'Assistant stopped. No pending edits were applied.' : error.message); }

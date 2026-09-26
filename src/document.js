@@ -27,7 +27,17 @@ export function nodeText(node, separator = '\n', includeImages = false) {
   return (node.content || []).map(n => nodeText(n, separator, includeImages)).join(node.type === 'tableRow' ? '\t' : block ? separator : '');
 }
 export const wordCount = text => (String(text || '').trim().match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu) || []).length;
-export const projectWords = project => project.chapters.reduce((sum, c) => sum + wordCount(nodeText(c.content)), 0);
+const contentWordCounts = new WeakMap();
+export function rememberContentWordCount(content, count) {
+  if (content && typeof content === 'object' && Number.isSafeInteger(count) && count >= 0) contentWordCounts.set(content, count);
+  return count;
+}
+export function contentWordCount(content) {
+  if (!content || typeof content !== 'object') return 0;
+  if (!contentWordCounts.has(content)) contentWordCounts.set(content, wordCount(nodeText(content)));
+  return contentWordCounts.get(content);
+}
+export const projectWords = project => project.chapters.reduce((sum, chapter) => sum + contentWordCount(chapter.content), 0);
 export function snapshot(project, name) {
   return { id: uid(), name: name || `Revision ${new Date().toLocaleString()}`, createdAt: new Date().toISOString(), title: project.title, chapters: structuredClone(project.chapters), notes: project.notes, style: project.style, language: project.language, documentStyle: structuredClone(project.documentStyle), references: structuredClone(project.references || []) };
 }

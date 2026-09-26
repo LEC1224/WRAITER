@@ -95,7 +95,7 @@ export const Pagination = Extension.create({
     props: { decorations: state => paginationKey.getState(state).decorations },
     view(view) {
       let sheet;
-      let frame = 0, working = false, disposed = false, width = 0;
+      let frame = 0, timer = 0, working = false, disposed = false, width = 0;
       const furniture = document.createElement('div'); furniture.className = 'page-furniture'; furniture.setAttribute('aria-hidden', 'true');
       const gutter = document.createElement('div'); gutter.className = 'text-numbering'; gutter.setAttribute('aria-hidden', 'true');
       function numberLines(state, scale, pages) {
@@ -123,8 +123,8 @@ export const Pagination = Extension.create({
         }
       }
       function layout() {
-        frame = 0; if (disposed || working || view.composing) { if (!disposed) schedule(); return; }
-        if (!sheet) { sheet = view.dom.closest('.writing-sheet'); if (!sheet) { schedule(); return; } sheet.prepend(furniture, gutter); resize.observe(sheet); }
+        frame = 0; if (disposed || working || view.composing) { if (!disposed) schedule(false); return; }
+        if (!sheet) { sheet = view.dom.closest('.writing-sheet'); if (!sheet) { schedule(false); return; } sheet.prepend(furniture, gutter); resize.observe(sheet); }
         working = true;
         const state = paginationKey.getState(view.state), scroller = sheet.closest('.writing-scroll'), oldScroll = scroller.scrollTop;
         try {
@@ -160,10 +160,25 @@ export const Pagination = Extension.create({
           working = false;
         }
       }
-      function schedule() { if (!frame && !disposed) frame = requestAnimationFrame(layout); }
-      const resize = new ResizeObserver(() => { const next = sheet.getBoundingClientRect().width; if (Math.abs(next - width) > 0.5) { width = next; schedule(); } });
-      const fonts = () => schedule(); document.fonts?.addEventListener('loadingdone', fonts); view.dom.addEventListener('load', fonts, true); schedule();
-      return { update(next, previous) { const current = paginationKey.getState(next.state), before = paginationKey.getState(previous); if (!working && (!next.state.doc.eq(previous.doc) || current.enabled !== before.enabled || current.revision !== before.revision)) schedule(); }, destroy() { disposed = true; cancelAnimationFrame(frame); resize.disconnect(); document.fonts?.removeEventListener('loadingdone', fonts); view.dom.removeEventListener('load', fonts, true); furniture.remove(); gutter.remove(); sheet?.style.removeProperty('min-height'); } };
+      function schedule(immediate = false) {
+        if (disposed) return;
+        if (immediate) {
+          clearTimeout(timer); timer = 0;
+          if (!frame) frame = requestAnimationFrame(layout);
+          return;
+        }
+        clearTimeout(timer);
+        timer = setTimeout(() => { timer = 0; if (!frame && !disposed) frame = requestAnimationFrame(layout); }, 180);
+      }
+      const resize = new ResizeObserver(() => { const next = sheet.getBoundingClientRect().width; if (Math.abs(next - width) > 0.5) { width = next; schedule(true); } });
+      const fonts = () => schedule(true); document.fonts?.addEventListener('loadingdone', fonts); view.dom.addEventListener('load', fonts, true); schedule(true);
+      return { update(next, previous) {
+        const current = paginationKey.getState(next.state), before = paginationKey.getState(previous);
+        if (working) return;
+        const configurationChanged = current.enabled !== before.enabled || current.revision !== before.revision;
+        if (configurationChanged) schedule(true);
+        else if (!next.state.doc.eq(previous.doc) && (current.enabled || Object.values(current.numbering || {}).some(Boolean))) schedule(false);
+      }, destroy() { disposed = true; clearTimeout(timer); cancelAnimationFrame(frame); resize.disconnect(); document.fonts?.removeEventListener('loadingdone', fonts); view.dom.removeEventListener('load', fonts, true); furniture.remove(); gutter.remove(); sheet?.style.removeProperty('min-height'); } };
     }
   })]; }
 });

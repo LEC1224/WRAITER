@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Feather, Plus, Search, ChevronDown, ChevronRight, ArrowLeft, ArrowUp, ArrowDown, ArrowUpRight, Check, X, Minus, Maximize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Settings2, FileText, FolderOpen, Download, Save, Copy, MoreHorizontal, Bold, Italic, Underline, Highlighter, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Quote, Image, Table2, Link2, Undo2, Redo2, Sparkles, WandSparkles, BookOpen, BookMarked, MessageSquare, Send, CircleStop, RotateCcw, CheckCheck, Sun, Moon, Contrast, Focus, Clock3, History, Trash2, FilePlus2, Keyboard, ShieldCheck, Circle, CheckCircle2, LoaderCircle, ExternalLink, SlidersHorizontal, Type, PenLine, GripVertical, Info, Eye, Laptop, ChevronUp, Target } from 'lucide-react';
 import ManuscriptEditor, { extensions } from './Editor.jsx';
 import { ghostKey, searchKey } from './extensions.js';
-import { newProject, uid, blankContent, nodeText, wordCount, projectWords, snapshot } from './document.js';
+import { newProject, uid, blankContent, nodeText, wordCount, contentWordCount, rememberContentWordCount, projectWords, snapshot } from './document.js';
 import { importDocument, exportPayload } from './io.js';
 import { revisionTransaction, proposalChangesStructure } from './revisions.js';
 import { closeHistory } from '@tiptap/pm/history';
@@ -18,6 +18,8 @@ import { LANGUAGES, languageName } from './languages.js';
 import FontPicker from './FontPicker.jsx';
 import ExportDialog from './ExportDialog.jsx';
 import HistoryPanel from './HistoryPanel.jsx';
+import AssistantChanges from './AssistantChanges.jsx';
+import { assistantChangeSummary, assistantEditState, revertAssistantEntry } from './editorial-report.js';
 import { LAYOUTS, documentLayout } from './layouts.js';
 import { normalizeHistoryProject, prepareHistoryLoad, recordTransaction, recordProjectChange, applyHistory, historyStatus } from './history.js';
 import { applyAgentResult, rebaseAgentResult } from './agent-edits.js';
@@ -69,17 +71,17 @@ function Modal({ title, subtitle, children, onClose, wide = false, className = '
 export default function App() {
   const [workspace, setWorkspace] = useState({ tabs: [], activeId: null }), [switching, setSwitching] = useState(false), [savingNamed, setSavingNamed] = useState(false);
   const tourRef = useRef(null);
-  const workspaceRef = useRef(workspace), tabCache = useRef(new Map()), transition = useRef(null), namedSave = useRef(false), namedSaveCompletion = useRef(Promise.resolve()), restoreScroll = useRef(null), chatScrollRef = useRef(null);
+  const workspaceRef = useRef(workspace), tabCache = useRef(new Map()), warmTabs = useRef(new Map()), transition = useRef(null), namedSave = useRef(false), namedSaveCompletion = useRef(Promise.resolve()), restoreScroll = useRef(null), chatScrollRef = useRef(null);
   workspaceRef.current = workspace;
   const [project, setProject] = useState(null), [prefs, setPrefs] = useState(DEFAULTS), [activeId, setActiveId] = useState(null);
   const [path, setPath] = useState(null), [saveState, setSaveState] = useState('saved'), [saveError, setSaveError] = useState('');
   const [panel, setPanel] = useState(null), [leftOpen, setLeftOpen] = useState(true), [focus, setFocus] = useState(false);
   const [modal, setModal] = useState(null), [menu, setMenu] = useState(false), [toast, setToast] = useState(''), [epoch, setEpoch] = useState(0);
-  const [editor, setEditor] = useState(null), [, refreshToolbar] = useState(0), [selection, setSelection] = useState({ from: 0, to: 0 });
+  const [editor, setEditor] = useState(null), [, refreshToolbar] = useState(0);
   const [query, setQuery] = useState(''), [replacement, setReplacement] = useState(''), [searchOpen, setSearchOpen] = useState(false);
   const [busy, setBusy] = useState(null), [proposal, setProposal] = useState(null), [ghost, setGhost] = useState(null), [aiError, setAiError] = useState('');
   const [instruction, setInstruction] = useState(''), [messages, setMessages] = useState([]), [renameId, setRenameId] = useState(null), [recents, setRecents] = useState([]);
-  const projectRef = useRef(project), editorRef = useRef(editor), prefsRef = useRef(prefs), requestRef = useRef(null), autosaveTimer = useRef(null), continuousTimer = useRef(null), rejected = useRef([]), lastRequest = useRef(null), pendingSave = useRef(Promise.resolve()), opening = useRef(false), cancellation = useRef(Promise.resolve());
+  const projectRef = useRef(project), editorRef = useRef(editor), prefsRef = useRef(prefs), requestRef = useRef(null), autosaveTimer = useRef(null), continuousTimer = useRef(null), rejected = useRef([]), lastRequest = useRef(null), pendingSave = useRef(Promise.resolve()), nativeEncodings = useRef(new WeakMap()), opening = useRef(false), cancellation = useRef(Promise.resolve());
   const sessionStart = useRef(null), [sessionWords, setSessionWords] = useState(0);
   const [fonts, setFonts] = useState(['Cambria', 'Calibri', 'Arial', 'Georgia', 'Times New Roman']), [gitHistory, setGitHistory] = useState({ available: true, entries: [] });
   const [localProgress, setLocalProgress] = useState(null);
@@ -145,7 +147,16 @@ export default function App() {
     return restored;
   }
   async function encodeNative(captured, format = bindingRef.current?.format) {
-    return format && format !== 'wraiter' ? exportPayload(captured, format, extensions, { nativeSave: true, fidelity: bindingRef.current?.format === format ? bindingRef.current?.fidelity : undefined }) : null;
+    if (!format || format === 'wraiter') return null;
+    const fidelity = bindingRef.current?.format === format ? bindingRef.current?.fidelity : undefined;
+    const key = JSON.stringify([format, fidelity || null]);
+    let cached = nativeEncodings.current.get(captured);
+    if (!cached) { cached = new Map(); nativeEncodings.current.set(captured, cached); }
+    if (!cached.has(key)) {
+      const work = exportPayload(captured, format, extensions, { nativeSave: true, fidelity }).catch(error => { cached.delete(key); throw error; });
+      cached.set(key, work);
+    }
+    return cached.get(key);
   }
 
   const saveLocal = useCallback(async () => {
@@ -277,13 +288,31 @@ export default function App() {
     const view = { chapterId: activeId, selection: current && !current.isDestroyed ? { from: current.state.selection.from, to: current.state.selection.to } : undefined, scrollTop: document.querySelector('.writing-scroll')?.scrollTop || 0 };
     const selected = getActiveChat(projectRef.current);
     tabCache.current.set(workspaceRef.current.activeId, { ...cached, projectId: projectRef.current.id, view, chatId: selected?.id || null, chat: selected, messages, instruction, panel, query, replacement, searchOpen, sessionStart: sessionStart.current, agentActivity });
+    // Keep a small LRU of fully parsed manuscripts and journals. Switching back
+    // to a recent novel should not normalize every chapter or replay its entire
+    // edit ledger again. Four warm projects bounds memory for tab-heavy users.
+    const id = workspaceRef.current.activeId, warm = warmTabs.current;
+    warm.delete(id); warm.set(id, { project: projectRef.current, history: historyRef.current });
+    while (warm.size > 4) warm.delete(warm.keys().next().value);
     await api.rememberProjectView(view);
   }
   async function installWorkspace(result) {
     const nextWorkspace = result.workspace;
     let cached = tabCache.current.get(nextWorkspace.activeId);
-    let next = normalizeProjectChats(normalizeHistoryProject(result.project || { ...newProject(), language: prefsRef.current.language }, schema));
-    let history = await loadHistory(next); next = history.project;
+    const warm = warmTabs.current.get(nextWorkspace.activeId);
+    let next, history;
+    const warmMatch = warm?.project?.id && (result.cachedProject || warm.project.id === result.project?.id && warm.project.historySequence === result.project?.historySequence);
+    if (warmMatch) {
+      // The main process remains authoritative for metadata/chat changes, while
+      // the immutable chapter objects retain renderer-side caches.
+      next = normalizeProjectChats(result.cachedProject ? warm.project : { ...result.project, chapters: warm.project.chapters });
+      history = { project: next, journal: warm.history, recoveredEvents: 0 };
+      publishHistory(warm.history);
+      warmTabs.current.delete(nextWorkspace.activeId); warmTabs.current.set(nextWorkspace.activeId, { project: next, history: warm.history });
+    } else {
+      next = normalizeProjectChats(normalizeHistoryProject(result.project || { ...newProject(), language: prefsRef.current.language }, schema));
+      history = await loadHistory(next); next = history.project;
+    }
     cached = tabCache.current.get(nextWorkspace.activeId) || cached;
     next = normalizeProjectChats(next);
     if (cached?.messages?.length && !cached.chatId) next = adoptChatMessages(next, cached.messages);
@@ -352,10 +381,12 @@ export default function App() {
   }
   function switchProject(id) {
     if (id === workspaceRef.current.activeId) return;
-    return projectTransition(async () => installWorkspace(await api.activateProject(id)), false, true);
+    const warm = warmTabs.current.get(id);
+    const identity = warm?.project ? { projectId: warm.project.id, historySequence: warm.project.historySequence } : undefined;
+    return projectTransition(async () => installWorkspace(await api.activateProject(id, identity)), false, true);
   }
   function closeProject(id = workspaceRef.current.activeId) {
-    return projectTransition(async () => { const result = await api.closeProject(id); tabCache.current.delete(id); await installWorkspace(result); if (result.archivedPath) notify('Draft preserved in File → Open recent.'); });
+    return projectTransition(async () => { const result = await api.closeProject(id); tabCache.current.delete(id); warmTabs.current.delete(id); await installWorkspace(result); if (result.archivedPath) notify('Draft preserved in File → Open recent.'); });
   }
   function cycleProject(direction, focusTab = false) {
     const current = workspaceRef.current, index = current.tabs.findIndex(tab => tab.id === current.activeId);
@@ -503,6 +534,19 @@ export default function App() {
     } catch (error) { notify(errorText(error)); }
   }
 
+  function revertAssistantEdit(entry) {
+    try {
+      const before = projectRef.current;
+      const reverted = revertAssistantEntry(before, entry, schema);
+      const history = recordProjectChange(historyRef.current, before, reverted.project, { label: 'Revert: ' + entry.label, revertsEntryId: entry.id });
+      const next = { ...reverted.project, historySequence: history.sequence };
+      dismiss(); projectRef.current = next; publishHistory(history); setProject(next);
+      if (!next.chapters.some(item => item.id === activeId)) setActiveId(next.chapters[0].id);
+      restoreSelection.current = null; setEpoch(value => value + 1);
+      notify('Assistant edit reverted. You can undo this revert too.');
+    } catch (error) { notify(errorText(error)); }
+  }
+
   function acceptGhost(part = 'all') {
     const current = editorRef.current, item = current && ghostKey.getState(current.state);
     if (!item?.text) return;
@@ -611,12 +655,12 @@ export default function App() {
     cacheTab(tabId, { projectId: baseline.id, chatId, chat: getActiveChat(baseline), messages: originMessages, agentActivity: [], unread: false }); setInstruction('');
     try {
       const agentProject = { ...baseline, chats: [], activeChatId: null };
-      const result = await api.runAgent({ id, project: agentProject, instruction: text, activeChapterId: chapterId, selection: current && !current.state.selection.empty ? { chapterId, from: current.state.selection.from, to: current.state.selection.to } : undefined, conversation: selected.messages.slice(-8).map(message => ({ role: message.role, text: message.text })) });
+      const result = await api.runAgent({ id, project: agentProject, instruction: text, activeChapterId: chapterId, selection: current && !current.state.selection.empty ? { chapterId, from: current.state.selection.from, to: current.state.selection.to } : undefined, conversation: selected.messages.map(message => ({ role: message.role, text: message.text })) });
       if (requestRef.current !== pending) return;
       const activity = result.activity || [], originTabActive = !transition.current && workspaceRef.current.activeId === tabId;
       cacheTab(tabId, { agentActivity: activity });
       if (originTabActive) setAgentActivity(activity);
-      if (!result.edits?.length && !result.chapterTitles?.length) {
+      if (!result.documentChanges?.length && !result.edits?.length && !result.chapterTitles?.length) {
         appendTabMessage(tabId, chatId, { id: uid(), role: 'assistant', text: result.message });
         cacheTab(tabId, { unread: !originTabActive });
         if (!originTabActive) notify(`The assistant finished in “${baseline.title}”.`);
@@ -649,7 +693,10 @@ export default function App() {
         const next = { ...ready.project, historySequence: history.sequence, updatedAt: new Date().toISOString() };
         const liveEditor = editorRef.current;
         restoreSelection.current = liveEditor && !liveEditor.isDestroyed ? liveEditor.state.selection.toJSON() : null;
-        projectRef.current = next; publishHistory(history); setProject(next); setEpoch(value => value + 1);
+        projectRef.current = next; publishHistory(history); setProject(next);
+        setActiveId(id => next.chapters.some(item => item.id === id) ? id : next.chapters[0].id);
+        if (result.documentChanges?.some(change => change.kind === 'order')) restoreSelection.current = null;
+        setEpoch(value => value + 1);
       }
       appendTabMessage(tabId, chatId, { id: uid(), role: 'assistant', text: result.message, edits: ready.changeCount, historyEntryId: ready.changeCount ? historyRef.current.entries.at(-1)?.id : null });
       tourRef.current?.emit('chat-finished');
@@ -695,6 +742,7 @@ export default function App() {
     if (['continue', 'rewrite', 'correct'].includes(action)) actionRef.current.askAI(action);
   }, []);
   function onContentChanged(content, current, transaction, options = {}) {
+    rememberContentWordCount(content, options.wordCount);
     setProposal(null); setGhost(ghostKey.getState(current.state)?.text ? ghostKey.getState(current.state) : null);
     if (requestRef.current && requestRef.current.mode !== 'chat' && appendedDuringRequest(requestRef.current, current) === null) dismiss();
     const before = projectRef.current;
@@ -707,8 +755,7 @@ export default function App() {
     } catch (error) { projectRef.current = next; setProject(next); setSaveError(errorText(error)); notify(errorText(error)); }
     if (!transaction.getMeta('assistAccept')) scheduleContinuous();
   }
-  function onEditorSelection(nextSelection) {
-    setSelection(nextSelection);
+  function onEditorSelection() {
     const current = editorRef.current;
     const item = current && !current.isDestroyed ? ghostKey.getState(current.state) : null;
     setGhost(item?.text ? item : null);
@@ -804,7 +851,7 @@ export default function App() {
 
   if (!api) return <div className="boot-screen"><Feather /><h1>WRAITER is a desktop application.</h1><p>Launch WRAITER.exe to use local files and writing assistance.</p></div>;
   if (!project) return <div className="boot-screen"><Feather size={38} /><h1>Opening WRAITER…</h1>{toast && <p>{toast}</p>}</div>;
-  const totalWords = projectWords(project), chapterWords = wordCount(nodeText(chapter.content));
+  const totalWords = projectWords(project), chapterWords = contentWordCount(chapter.content);
   const selectedWords = editor && !editor.isDestroyed ? wordCount(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')) : 0;
   const matches = searchOpen ? findMatches().length : 0;
   const activeReferences = (project.references || []).filter(r => r.enabled !== false);
@@ -830,7 +877,7 @@ export default function App() {
         <button className="sidebar-search" onClick={() => setSearchOpen(x => !x)}><Search size={15} />Find in chapter<kbd>{formatShortcut(prefs.hotkeys?.find)}</kbd></button>
         <div className="sidebar-section-label">MANUSCRIPT <IconButton icon={Plus} title="Add chapter" onClick={addChapter} /></div>
         <nav className="chapter-list" aria-label="Chapters">{project.chapters.map((item, index) => <div className={`chapter-item ${item.id === chapter.id ? 'selected' : ''}`} key={item.id}>
-          <button className="chapter-select" onClick={() => changeChapter(item.id)}><span className="chapter-number">{String(index + 1).padStart(2, '0')}</span><span className="chapter-item-text"><span>{item.title}</span><small>{wordCount(nodeText(item.content)).toLocaleString()} words</small></span>{item.status === 'Final' ? <CheckCircle2 size={13} /> : <span className={`chapter-status ${(item.status || 'Draft').toLowerCase()}`} />}</button>
+          <button className="chapter-select" onClick={() => changeChapter(item.id)}><span className="chapter-number">{String(index + 1).padStart(2, '0')}</span><span className="chapter-item-text"><span>{item.title}</span><small>{contentWordCount(item.content).toLocaleString()} words</small></span>{item.status === 'Final' ? <CheckCircle2 size={13} /> : <span className={`chapter-status ${(item.status || 'Draft').toLowerCase()}`} />}</button>
         </div>)}</nav>
         <button className="add-chapter" onClick={addChapter}><Plus size={15} />New chapter</button>
         <div className="sidebar-divider" />
@@ -876,11 +923,15 @@ export default function App() {
           <div className="chat-log" role="log" aria-live="polite" aria-relevant="additions">
             {!messages.length && <div className="chat-empty"><MessageSquare size={22} /><p>Start a new conversation about this project.</p><small>Chats are saved with the project and stay separate from manuscript exports.</small></div>}
             {agentActivity.length > 0 && <div className="agent-activity" aria-label="Assistant actions">{agentActivity.map((step, index) => <div className={'agent-step ' + step.state} key={step.id || index}><span>{step.label || step.tool}</span>{step.count != null && <small>{step.count}</small>}</div>)}</div>}
-            {messages.map(message => <div className={'chat-message ' + message.role} key={message.id}><span>{message.role === 'user' ? 'YOU' : 'ASSISTANT'}</span><p>{message.text}</p>{message.pending && <small className="chat-message-note">Edits are ready and will be applied when this project is active.</small>}{message.warning && <small className="chat-message-warning">{message.warning}</small>}{message.edits > 0 && <div className="assistant-edit-result"><small>Applied {message.edits} edit{message.edits === 1 ? '' : 's'}</small><button className="secondary-button" disabled={journal?.activeIds[journal.cursor - 1] !== message.historyEntryId} onClick={() => travelHistory('undo')}>Undo assistant edit</button></div>}</div>)}
+            {messages.map(message => {
+              const entry = journal?.entries.find(item => item.id === message.historyEntryId), editState = entry ? assistantEditState(journal, entry.id) : null;
+              const changeSummary = assistantChangeSummary(entry, project);
+              return <div className={'chat-message ' + message.role} key={message.id}><span>{message.role === 'user' ? 'YOU' : 'ASSISTANT'}</span><p>{message.text}</p>{message.pending && <small className="chat-message-note">Edits are ready and will be applied when this project is active.</small>}{message.warning && <small className="chat-message-warning">{message.warning}</small>}{message.edits > 0 && <div className="assistant-edit-result"><small>{editState === 'reverted' ? 'Reverted' : editState === 'undone' ? 'Undone' : 'Applied · one undo step'}</small>{changeSummary.length > 0 && <ul className="assistant-change-summary">{changeSummary.slice(0, 4).map((text, i) => <li key={i}>{text}</li>)}{changeSummary.length > 4 && <li>{changeSummary.length - 4} more changes in the report</li>}</ul>}<div className="assistant-report-actions"><button className="secondary-button" disabled={!entry} onClick={() => setModal({ type: 'assistant-changes', entryId: message.historyEntryId })}>Review changes</button><button className="secondary-button" disabled={journal?.activeIds[journal.cursor - 1] !== message.historyEntryId} onClick={() => travelHistory('undo')}>Undo assistant edit</button></div></div>}</div>;
+            })}
             {busy && busy !== 'continue' && <div className="thinking"><LoaderCircle size={15} className="spin" />{localBusy && localProgress ? localProgress.message : busy === 'chat' ? 'Thinking it through…' : busy === 'background-chat' ? `Finishing a request in “${requestRef.current?.projectTitle || 'another project'}”…` : 'Reading your selection…'}<button onClick={dismiss}>Cancel</button></div>}
           </div>
         </div><div className="chat-composer"><textarea aria-label="Ask the writing assistant" placeholder="Ask a question or request an edit to your document…" value={instruction} onChange={e => setInstruction(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (!busy && instruction.trim()) askAI('chat'); } }} /><div><span>{prefs.enabled ? providerNames[chatSettings.provider] : 'Choose a connection'}</span><button aria-label="Send writing question" disabled={!!busy || !instruction.trim()} onClick={() => askAI('chat')}><ArrowUp size={16} /></button></div><small><kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> new line. The assistant can inspect and edit your document; edits stay undoable.</small></div></>}
-        {panel === 'references' && <div className="inspector-body reference-panel"><div className="panel-description"><h3>Reference files</h3><p>Add character sheets, research, or canon. Enabled references accompany AI requests; originals stay separate.</p></div><button className="primary-button full" onClick={async () => { try { const items = await api.reference(); if (!items.length) return; const next = [...(project.references || []), ...items.map(r => ({ ...r, id: uid(), enabled: true }))]; if (next.length > 20) { notify('Keep up to 20 references per manuscript.'); return; } updateProject({ references: next }); } catch (e) { notify(errorText(e)); } }}><Plus size={15} />Add reference files</button><p className="small-muted">Markdown and text files · refreshes saved edits<br />Up to 48,000 characters are sent per request.</p>{!(project.references || []).length && <div className="empty-state"><BookMarked size={32} /><p>No reference files attached.</p><small>Attach Markdown or text files to include them in AI context.</small></div>}{(project.references || []).map(reference => <div className="reference-card" key={reference.id}><div><BookMarked size={16} /><strong>{reference.name}</strong><IconButton icon={Trash2} title={`Remove ${reference.name}`} onClick={() => updateProject({ references: project.references.filter(r => r.id !== reference.id) })} /></div><p>{reference.text.slice(0, 130)}{reference.text.length > 130 ? '…' : ''}</p><label className="check-label"><input type="checkbox" checked={reference.enabled !== false} onChange={e => updateProject({ references: project.references.map(r => r.id === reference.id ? { ...r, enabled: e.target.checked } : r) })} />Include in AI context</label><button className="text-button" onClick={() => setModal({ type: 'reference', reference })}>Read reference <ArrowUpRight size={12} /></button></div>)}</div>}
+        {panel === 'references' && <div className="inspector-body reference-panel"><div className="panel-description"><h3>Reference files</h3><p>Add character sheets, research, or canon. Enabled references accompany AI requests; originals stay separate.</p></div><button className="primary-button full" onClick={async () => { try { const items = await api.reference(); if (!items.length) return; const next = [...(project.references || []), ...items.map(r => ({ ...r, id: uid(), enabled: true }))]; if (next.length > 20) { notify('Keep up to 20 references per manuscript.'); return; } updateProject({ references: next }); } catch (e) { notify(errorText(e)); } }}><Plus size={15} />Add reference files</button><p className="small-muted">Markdown and text files · refreshes saved edits<br />Inline suggestions use up to 48,000 characters. Chat can read enabled references in sections.</p>{!(project.references || []).length && <div className="empty-state"><BookMarked size={32} /><p>No reference files attached.</p><small>Attach Markdown or text files to include them in AI context.</small></div>}{(project.references || []).map(reference => <div className="reference-card" key={reference.id}><div><BookMarked size={16} /><strong>{reference.name}</strong><IconButton icon={Trash2} title={`Remove ${reference.name}`} onClick={() => updateProject({ references: project.references.filter(r => r.id !== reference.id) })} /></div><p>{reference.text.slice(0, 130)}{reference.text.length > 130 ? '…' : ''}</p><label className="check-label"><input type="checkbox" checked={reference.enabled !== false} onChange={e => updateProject({ references: project.references.map(r => r.id === reference.id ? { ...r, enabled: e.target.checked } : r) })} />Include in AI context</label><button className="text-button" onClick={() => setModal({ type: 'reference', reference })}>Read reference <ArrowUpRight size={12} /></button></div>)}</div>}
         {panel === 'notes' && <div className="inspector-body notes-panel"><div className="panel-description"><h3>Notes</h3><p>Private notes and instructions for this manuscript.</p></div><label className="field-label">PRIVATE NOTES <small>Not sent to AI</small></label><textarea className="notes-textarea" aria-label="Private manuscript notes" placeholder="A scene to come back to. A question to leave open…" value={project.notes || ''} onChange={e => updateProject({ notes: e.target.value })} /><label className="field-label">YOUR WRITING VOICE <small>Included in AI context</small></label><textarea className="notes-textarea voice" aria-label="Writing voice instructions" placeholder="For example: British spelling. Keep dialogue informal. Preserve deliberate fragments. Never rename characters." value={project.style || ''} onChange={e => updateProject({ style: e.target.value })} /><p className="small-muted">These are your instructions. AI suggestions never update them automatically.</p></div>}
         {panel === 'history' && <><HistoryPanel journal={journal} gitHistory={gitHistory} onUndo={() => travelHistory('undo')} onRedo={() => travelHistory('redo')} onCheckpoint={() => createSnapshot()} onRestoreGit={item => setModal({ type: 'git-restore', item })} />{Boolean(project.snapshots?.length) && <details className="legacy-snapshots"><summary>Earlier embedded snapshots</summary>{project.snapshots.map(item => <button className="secondary-button" key={item.id} onClick={() => setModal({ type: 'restore', item })}>{item.name}</button>)}</details>}</>}
       </aside>}
@@ -904,6 +955,7 @@ export default function App() {
     {modal?.type === 'restore' && <Modal title="Return to this revision?" subtitle="We’ll capture your current version first, so you can return to it later." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep writing</button><button className="primary-button" onClick={() => { const item = modal.item; dismiss(); updateProject({ title: item.title, chapters: structuredClone(item.chapters), notes: item.notes || '', style: item.style || '', language: item.language || project.language, documentStyle: item.documentStyle || project.documentStyle, references: structuredClone(item.references || []), snapshots: [snapshot(project, 'Before restoring a revision'), ...project.snapshots].slice(0, 20) }); setActiveId(item.chapters[0].id); setEpoch(x => x + 1); setModal(null); notify('Revision restored.'); }}>Restore revision</button></div></Modal>}
     {modal?.type === 'reference' && <Modal title={modal.reference.name} subtitle="Attached copy. Linked files refresh separately before each AI request." onClose={() => setModal(null)} wide><pre className="reference-reader">{modal.reference.text}</pre></Modal>}
     {modal?.type === 'notice' && <Modal title={modal.title} onClose={() => setModal(null)}><p className="notice-copy">{modal.text}</p><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Continue writing</button></div></Modal>}
-    {modal?.type === 'about' && <Modal title="WRAITER · 0.11.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Keep multiple projects in tabs, reopen recent files from the File menu, and choose whether to restore all tabs or start a clean project. Every project retains its own editing history and saved assistant conversations. Chat requests can finish in their originating project while you work elsewhere.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
+    {modal?.type === 'assistant-changes' && <Modal title="Assistant changes" onClose={() => setModal(null)} wide><AssistantChanges entry={journal.entries.find(entry => entry.id === modal.entryId)} project={project} state={assistantEditState(journal, modal.entryId)} onRevert={() => revertAssistantEdit(journal.entries.find(entry => entry.id === modal.entryId))} /></Modal>}
+    {modal?.type === 'about' && <Modal title="WRAITER · 0.13.0" subtitle="Desktop writing with integrated AI assistance." onClose={() => setModal(null)}><p className="notice-copy">Keep multiple projects in tabs, reopen recent files from the File menu, and choose whether to restore all tabs or start a clean project. Every project retains its own editing history and saved assistant conversations. Chat requests can finish in their originating project while you work elsewhere.</p><p className="notice-copy">Choose a writing layout and export the full manuscript, a chapter or selected text to office formats, PDF, EPUB, BBCode and more. Office documents with unsupported features need a compatibility review before overwriting; the complete original is preserved.</p><p className="small-muted">Exact print-layout editing, comments, tracked changes, footnotes and direct Grok Build connections remain future work. Windows preview; macOS and Linux are not yet validated.</p></Modal>}
   </div>;
 }

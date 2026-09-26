@@ -45,6 +45,7 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | Settings, themes or hotkeys | `npm run test:settings` |
 | Native menus, IPC or provider routing | `npm run test:desktop` |
 | General editor workflows | `npm run test:app` |
+| Assistant document tools, change reports or reverting edits | `npm run test:editorial` |
 | Project tabs and startup | `npm run test:v06` |
 | Pagination and rephrasing alternatives | `npm run test:v05` |
 | External file reload and margin numbering | `npm run test:reload-numbering` |

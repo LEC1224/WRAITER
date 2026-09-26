@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { runWritingAgent, createDocumentTools, collectBlocks, parseReply, projectFingerprint } = require('../electron/writing-agent.cjs');
+const { runWritingAgent, createDocumentTools, collectBlocks, parseReply, projectFingerprint, MAX_ROUNDS } = require('../electron/writing-agent.cjs');
 const { generateStructured } = require('../electron/providers.cjs');
 const p = text => ({ type: 'paragraph', ...(text ? { content: [{ type: 'text', text }] } : {}) });
 const project = () => ({ format: 'wraiter', version: 1, id: 'agent-test', title: 'Synthetic manuscript', notes: 'PRIVATE_NOTES_NOT_SENT', style: 'PUBLIC_WRITING_VOICE', chapters: [{ id: 'one', title: 'First', content: { type: 'doc', content: [p('First  sentence.  Next one.'), p('')] } }, { id: 'two', title: 'Second', content: { type: 'doc', content: [p('A   second chapter.'), { type: 'codeBlock', content: [{ type: 'text', text: 'const  x = 1;' }] }] } }], references: [], snapshots: [] });
@@ -78,7 +78,7 @@ test('tool errors are returned to the model for repair, with a bounded action lo
   assert.deepEqual(result.activity.map(event => event.state), ['error', 'done']); assert.equal(result.edits.length, 1);
   let calls = 0;
   await assert.rejects(runWritingAgent({ project: project(), instruction: 'Inspect everything.', settings: {} }, async () => { calls++; return reply([call('read_document')]); }), /planning limit/);
-  assert.equal(calls, 8);
+  assert.equal(calls, MAX_ROUNDS);
 });
 
 test('a question is answered without edits and cancellation never returns a partially edited batch', async () => {

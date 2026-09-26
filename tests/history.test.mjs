@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Schema } from '@tiptap/pm/model';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
-import { createHistory, recordTransaction, recordProjectChange, applyHistory, historyStatus, timelineEntries, normalizeHistoryProject, recoverHistoryProject, prepareHistoryLoad, HistoryMismatchError, HISTORY_SELECTION_META, HISTORY_REPLAY_META } from '../src/history.js';
+import { createHistory, recordTransaction, recordProjectChange, applyHistory, historyStatus, timelineEntries, normalizeHistoryProject, recoverHistoryProject, prepareHistoryLoad, historyFingerprint, HistoryMismatchError, HISTORY_SELECTION_META, HISTORY_REPLAY_META } from '../src/history.js';
 
 const schema = new Schema({
   nodes: {
@@ -22,6 +22,13 @@ function edit(project, journal, makeTransaction, chapterId = 'chapter-a') {
   return { project: after, journal: recordTransaction(journal, { beforeProject: project, afterProject: after, chapterId, transaction }) };
 }
 const contents = project => project.chapters.map(chapter => schema.nodeFromJSON(chapter.content).textContent);
+const legacyProjectFingerprint = project => {
+  const ignored = new Set(['updatedAt', 'historySequence', 'snapshots', 'chats', 'activeChatId', 'binding', 'fileBinding', 'nativeBinding']);
+  const fields = Object.keys(project).filter(key => !ignored.has(key) && project[key] !== undefined).sort().map(key => [key,
+    key === 'chapters' ? project.chapters.map(chapter => Object.keys(chapter).filter(name => chapter[name] !== undefined).sort().map(name => [name, historyFingerprint(chapter[name])])) : historyFingerprint(project[key])
+  ]);
+  return historyFingerprint(fields);
+};
 
 test('undo and redo survive serialized sessions and cross chapter boundaries', () => {
   const original = manuscript(); let project = original, journal = createHistory(project);
@@ -293,4 +300,24 @@ test('malformed loaded entries cannot crash the history panel or expose unsuppor
     assert.deepEqual(result.project.chapters, project.chapters);
     assert.equal(result.journal.entries.length, 0);
   }
+});
+
+test('legacy full-document fingerprints remain undoable and transition safely on the next edit', () => {
+  const before = manuscript(), state = stateFor(before), transaction = state.tr.insertText('!', 6).setMeta(HISTORY_SELECTION_META, state.selection.toJSON());
+  const after = { ...before, chapters: before.chapters.map(chapter => chapter.id === 'chapter-a' ? { ...chapter, content: transaction.doc.toJSON() } : chapter) };
+  const modern = recordTransaction(createHistory(before), { beforeProject: before, afterProject: after, chapterId: 'chapter-a', transaction });
+  const events = structuredClone(modern.events), initial = legacyProjectFingerprint(before), changed = legacyProjectFingerprint(after);
+  events[0].fingerprint = initial;
+  events[1].beforeFingerprint = initial; events[1].afterFingerprint = changed;
+  events[1].entry.beforeFingerprint = initial; events[1].entry.afterFingerprint = changed;
+  events[1].entry.beforeDocFingerprint = historyFingerprint(before.chapters[0].content);
+  events[1].entry.afterDocFingerprint = historyFingerprint(after.chapters[0].content);
+  let journal = createHistory(after, { events });
+  let undone = applyHistory(after, journal, 'undo', schema);
+  assert.deepEqual(contents(undone.project), contents(before));
+  const nextState = stateFor(undone.project), nextTransaction = nextState.tr.insertText('?', 6).setMeta(HISTORY_SELECTION_META, nextState.selection.toJSON());
+  const nextProject = { ...undone.project, chapters: undone.project.chapters.map(chapter => chapter.id === 'chapter-a' ? { ...chapter, content: nextTransaction.doc.toJSON() } : chapter) };
+  journal = recordTransaction(undone.journal, { beforeProject: undone.project, afterProject: nextProject, chapterId: 'chapter-a', transaction: nextTransaction });
+  assert.match(journal.headFingerprint, /^v2:/);
+  assert.deepEqual(contents(applyHistory(nextProject, journal, 'undo', schema).project), contents(before));
 });

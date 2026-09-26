@@ -18,7 +18,7 @@ async function filesBelow(directory) {
   const output = path.join(root, 'test-output'); await fs.mkdir(output, { recursive: true }); const results = [];
   for (const scenario of ['unreadable-interior', 'valid-json-mismatch']) {
     const userData = await fs.mkdtemp(path.join(output, `history-recovery-${scenario}-`)); const initial = fixture(scenario); const errors = [];
-    await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ enabled: false, continuous: false }));
+    await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ setupComplete: true, tutorialComplete: true, enabled: false, continuous: false }));
     await fs.writeFile(path.join(userData, 'recovery.json'), JSON.stringify({ project: initial, path: null, expectedHash: null }));
     const env = { ...process.env, WRAITER_USER_DATA: userData }; delete env.ELECTRON_RUN_AS_NODE;
     const options = process.env.WRAITER_EXECUTABLE ? { executablePath: process.env.WRAITER_EXECUTABLE, args: [], env, timeout: 60000 } : { args: [root], env, timeout: 60000 };

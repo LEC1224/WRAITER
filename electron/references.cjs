@@ -35,7 +35,7 @@ async function linkedText(sourcePath, verifyContents, signal) {
   return text;
 }
 
-async function refreshReferences(references = [], { allowedPaths, verifyContents = false, signal } = {}) {
+async function refreshReferences(references = [], { allowedPaths, verifyContents = false, signal, maxCharacters = MAX_REFERENCE_CHARACTERS } = {}) {
   const result = [], warnings = []; let used = 0;
   const allowed = allowedPaths ? new Set([...allowedPaths].map(canonicalKey)) : null;
   for (const reference of references.slice(0, MAX_REFERENCE_FILES)) {
@@ -54,8 +54,8 @@ async function refreshReferences(references = [], { allowedPaths, verifyContents
       warnings.push(`${name} was skipped: ${reason}.`); continue;
     }
     const separator = result.length ? 2 : 0, header = name.length + 3;
-    const remaining = MAX_REFERENCE_CHARACTERS - used - separator - header;
-    if (remaining <= 0) { warnings.push('Reference context reached its 48,000-character limit; later material was omitted.'); break; }
+    const remaining = maxCharacters - used - separator - header;
+    if (remaining <= 0) { warnings.push(`Reference context reached its ${maxCharacters.toLocaleString('en-US')}-character limit; later material was omitted.`); break; }
     const boundedText = text.slice(0, remaining);
     result.push({ name, text: boundedText }); used += separator + header + boundedText.length;
     if (boundedText.length < text.length) warnings.push(`${name} was shortened to fit the reference context limit.`);
