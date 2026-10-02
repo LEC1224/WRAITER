@@ -1,7 +1,7 @@
 const claude = require('./claude-bridge.cjs');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
-const { buildPrompt, cleanResult } = require('./core.cjs');
+const { buildPrompt, cleanResult, getSuggestionLimit } = require('./core.cjs');
 const { parseRephraseOptions } = require('./rephrase-options.cjs');
 const { getBridge, disconnect, resolveCodex, codexEnvironment, COMPLETION_SCHEMA } = require('./codex-bridge.cjs');
 const { isLocalOllama, startOllama, stopOwnedOllama } = require('./ollama-service.cjs');
@@ -88,8 +88,9 @@ function outputLimit(settings, request) {
   // Agent replies contain a small action envelope, not a prose prediction. A
   // short autocomplete cap must not truncate a valid document-editing plan.
   if (request.mode === 'agent') return Math.trunc(bounded(settings.agentTokenCap, 6000, 2048, 32768));
-  const estimated = request.mode === 'chat' ? 2400 : request.mode === 'continue' ? Math.ceil((request.words || settings.predictionWords || 35) * 3 + 100) : Math.ceil(String(request.selection || '').length / 2 + 256);
-  return Math.trunc(bounded(settings.tokenCap, Math.max(256, estimated), 64, 32768));
+  if (request.mode === 'checkpoint') return 768;
+  const estimated = request.mode === 'chat' ? 2400 : request.mode === 'continue' ? Math.ceil((request.words || settings.predictionWords || 35) * 3 + 100) : request.alternatives ? Math.ceil((String(request.selection || '').length / 2 + 256) * getSuggestionLimit(request)) : Math.ceil(String(request.selection || '').length / 2 + 256);
+  return Math.trunc(bounded(settings.tokenCap, Math.min(32768, Math.max(256, estimated)), 64, 32768));
 }
 function ollamaContextWindow(text, outputTokens = 0) {
   const ascii = (String(text).match(/[\x00-\x7F]/g) || []).length;
@@ -112,7 +113,7 @@ async function runOllama(settings, prompt, request, signal) {
   const mode = settings.ollamaMode || 'chat'; // legacy callers; current preferences default to auto.
   const raw = async () => {
     const plainContinuation = request.mode === 'continue' && !request.references?.length && !request.style && !request.history?.length && !request.language;
-    const rawPrompt = plainContinuation ? String(request.before || '') : `${prompt.system}\n\n${prompt.user}\n\n${request.mode === 'continue' ? 'Continuation' : request.mode === 'chat' ? 'Answer' : 'Replacement'}:\n`;
+    const rawPrompt = plainContinuation ? String(request.before || '') : `${prompt.system}\n\n${prompt.user}\n\n${request.mode === 'continue' ? 'Continuation' : request.mode === 'chat' ? 'Answer' : request.mode === 'checkpoint' ? 'JSON label' : 'Replacement'}:\n`;
     const rawOptions = { ...options, num_ctx: settings.localContextLength || ollamaContextWindow(rawPrompt, tokens) };
     if (!settings.allowReasoning) rawOptions.stop = ['<think>', '</think>', 'Okay, let me', 'Hmm,', 'The user', 'I need to', 'Possible continuation:'];
     const data = await requestJSON(endpoint(settings.baseUrl, 'api/generate'), { method: 'POST', headers, body: JSON.stringify({ ...common, raw: true, prompt: rawPrompt, options: rawOptions }) }, signal);
@@ -123,7 +124,7 @@ async function runOllama(settings, prompt, request, signal) {
   if (mode === 'raw' || (mode === 'auto' && guidedUnavailable.has(guidedKey))) return raw();
   try {
     const guided = mode === 'auto' || mode === 'guided';
-    const chatMessages = guided ? [{ ...messages[0], content: `${messages[0].content}\nReturn JSON with exactly one string field named completion containing ${request.mode === 'agent' || request.alternatives ? 'the requested JSON object serialized as a JSON string' : 'the requested prose'}, with no commentary.` }, messages[1]] : messages;
+    const chatMessages = guided ? [{ ...messages[0], content: `${messages[0].content}\nReturn JSON with exactly one string field named completion containing ${request.mode === 'agent' || request.mode === 'checkpoint' || request.alternatives ? 'the requested JSON object serialized as a JSON string' : 'the requested prose'}, with no commentary.` }, messages[1]] : messages;
     const data = await requestJSON(endpoint(settings.baseUrl, 'api/chat'), { method: 'POST', headers, body: JSON.stringify({ ...common, messages: chatMessages, options, ...(guided ? { format: COMPLETION_SCHEMA } : {}) }) }, signal);
     if (data.done_reason === 'length' && request.mode !== 'continue') throw new Error('The model reached the output limit. Increase the token limit before accepting a partial revision.');
     if (!guided) return data.message?.content;
@@ -181,6 +182,10 @@ async function generate(settings, key, request, signal, suppliedPrompt) {
 async function generateStructured(settings, key, prompt, signal) {
   return generate(settings, key, { mode: 'agent', references: [], history: [] }, signal, prompt);
 }
+// The checkpoint prompt is built and bounded by checkpoint-summary.cjs, never by renderer IPC.
+async function generateCheckpoint(settings, key, prompt, signal) {
+  return generate(settings, key, { mode: 'checkpoint', references: [], history: [] }, signal, prompt);
+}
 async function probe(settings, key) {
   if (settings.provider === 'claude') return claude.status(settings);
   if (settings.provider === 'local') {
@@ -225,4 +230,4 @@ async function login(settings) {
   return (await getBridge(settings)).login();
 }
 async function shutdown() { await Promise.allSettled([disconnect(), stopOwnedOllama(), localModels?.shutdown()]); }
-module.exports = { generate, generateStructured, probe, connect, connectionStatus, login, disconnect, shutdown, endpoint, requestJSON, resolveCodex, codexArgs, codexEnvironment, spawnAndWait, outputLimit, ollamaContextWindow, runOllama, configureLocalModels };
+module.exports = { generate, generateStructured, generateCheckpoint, probe, connect, connectionStatus, login, disconnect, shutdown, endpoint, requestJSON, resolveCodex, codexArgs, codexEnvironment, spawnAndWait, outputLimit, ollamaContextWindow, runOllama, configureLocalModels };

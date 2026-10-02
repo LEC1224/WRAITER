@@ -1,5 +1,11 @@
 # Getting unstuck
 
+## Double-clicking a .wraiter file does not open it
+
+Install WRAITER 0.14.2 or later and leave **Associate .wraiter files with WRAITER** checked in the installer. This registers the document icon and the command Windows uses to open the file. If Windows retains a default app you previously selected, right-click the file, choose **Open with → Choose another app**, select **WRAITER**, and choose **Always**. Windows keeps the final default-app choice under your control.
+
+If WRAITER is showing setup or another dialog, close or finish it first; the requested manuscript waits until the editor is available. The portable application can open files passed to its executable, but does not install a Windows file association.
+
 ## Which download should I open?
 
 Choose **WRAITER-0.9.0-Setup.exe** from the [release page](https://github.com/LEC1224/WRAITER/releases/latest). It is the guided Windows installer. The file ending in **Windows.exe** is the portable version. GitHub's **Source code** archives contain development files, not an installed application.

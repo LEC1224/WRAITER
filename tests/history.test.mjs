@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Schema } from '@tiptap/pm/model';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
-import { createHistory, recordTransaction, recordProjectChange, applyHistory, historyStatus, timelineEntries, normalizeHistoryProject, recoverHistoryProject, prepareHistoryLoad, historyFingerprint, HistoryMismatchError, HISTORY_SELECTION_META, HISTORY_REPLAY_META } from '../src/history.js';
+import { createHistory, recordTransaction, recordProjectChange, applyHistory, historyStatus, timelineEntries, normalizeHistoryProject, recoverHistoryProject, prepareHistoryLoad, historyFingerprint, HistoryMismatchError, HISTORY_GROUP_BREAK_META, HISTORY_SELECTION_META, HISTORY_REPLAY_META } from '../src/history.js';
 
 const schema = new Schema({
   nodes: {
@@ -22,6 +22,18 @@ function edit(project, journal, makeTransaction, chapterId = 'chapter-a') {
   return { project: after, journal: recordTransaction(journal, { beforeProject: project, afterProject: after, chapterId, transaction }) };
 }
 const contents = project => project.chapters.map(chapter => schema.nodeFromJSON(chapter.content).textContent);
+function typeAtCaret(project, journal, text, breakBefore = false) {
+  for (const character of text) {
+    const state = stateFor(project), at = state.doc.content.size - 1;
+    const selected = state.apply(state.tr.setSelection(TextSelection.create(state.doc, at)));
+    const transaction = selected.tr.insertText(character).setMeta(HISTORY_SELECTION_META, selected.selection.toJSON());
+    if (breakBefore) { transaction.setMeta(HISTORY_GROUP_BREAK_META, true); breakBefore = false; }
+    const after = { ...project, chapters: project.chapters.map(chapter => chapter.id === 'chapter-a' ? { ...chapter, content: transaction.doc.toJSON() } : chapter) };
+    journal = recordTransaction(journal, { beforeProject: project, afterProject: after, chapterId: 'chapter-a', transaction });
+    project = after;
+  }
+  return { project, journal };
+}
 const legacyProjectFingerprint = project => {
   const ignored = new Set(['updatedAt', 'historySequence', 'snapshots', 'chats', 'activeChatId', 'binding', 'fileBinding', 'nativeBinding']);
   const fields = Object.keys(project).filter(key => !ignored.has(key) && project[key] !== undefined).sort().map(key => [key,
@@ -44,6 +56,86 @@ test('undo and redo survive serialized sessions and cross chapter boundaries', (
   ({ project, journal } = applyHistory(project, journal, 'redo', schema));
   ({ project, journal } = applyHistory(project, journal, 'redo', schema));
   assert.deepEqual(contents(project), ['Alpha!', 'Omega?']); assert.equal(historyStatus(journal).canRedo, false);
+});
+
+test('typing is undone a word at a time and grouped timeline rows survive restart', () => {
+  let project = manuscript(), journal = createHistory(project);
+  ({ project, journal } = typeAtCaret(project, journal, ' hello, world'));
+  assert.equal(contents(project)[0], 'Alpha hello, world');
+  assert.equal(journal.entries.length, 13, 'each source transaction remains in the recovery journal');
+  assert.equal(historyStatus(journal).totalEdits, 2);
+  assert.deepEqual(timelineEntries(journal).map(entry => entry.summary), ['world', 'hello,']);
+  journal = createHistory(structuredClone(project), { events: structuredClone(journal.events) });
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  assert.equal(contents(project)[0], 'Alpha hello,');
+  assert.equal(journal.cursor, 7);
+  assert.equal(historyStatus(journal).totalEdits, 2);
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  assert.equal(contents(project)[0], 'Alpha');
+  assert.equal(historyStatus(journal).canUndo, false);
+  journal = createHistory(structuredClone(project), { events: structuredClone(journal.events) });
+  ({ project, journal } = applyHistory(project, journal, 'redo', schema));
+  assert.equal(contents(project)[0], 'Alpha hello,');
+  ({ project, journal } = applyHistory(project, journal, 'redo', schema));
+  assert.equal(contents(project)[0], 'Alpha hello, world');
+});
+
+test('a new branch and caret move separate typing undo groups', () => {
+  let project = manuscript(), journal = createHistory(project);
+  ({ project, journal } = typeAtCaret(project, journal, 'foo'));
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  ({ project, journal } = typeAtCaret(project, journal, 'bar'));
+  assert.equal(historyStatus(journal).totalEdits, 2);
+  assert.equal(timelineEntries(journal).find(entry => entry.summary === 'foo').status, 'branched');
+  const state = stateFor(project), selected = state.apply(state.tr.setSelection(TextSelection.create(state.doc, 1)));
+  const transaction = selected.tr.insertText('X').setMeta(HISTORY_SELECTION_META, selected.selection.toJSON());
+  const after = { ...project, chapters: project.chapters.map(chapter => chapter.id === 'chapter-a' ? { ...chapter, content: transaction.doc.toJSON() } : chapter) };
+  journal = recordTransaction(journal, { beforeProject: project, afterProject: after, chapterId: 'chapter-a', transaction }); project = after;
+  assert.equal(historyStatus(journal).totalEdits, 3);
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  assert.equal(contents(project)[0], 'Alphabar');
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  assert.equal(contents(project)[0], 'Alpha');
+});
+
+test('a selection-only cursor move ends a group even if the cursor returns to the same place', () => {
+  let project = manuscript(), journal = createHistory(project);
+  ({ project, journal } = typeAtCaret(project, journal, 'foo'));
+  ({ project, journal } = typeAtCaret(project, journal, 'bar', true));
+  assert.equal(historyStatus(journal).totalEdits, 2);
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  assert.equal(contents(project)[0], 'Alphafoo');
+});
+
+test('backspace runs form word-sized edits and punctuation ends a typing group', () => {
+  let project = manuscript(), journal = createHistory(project);
+  ({ project, journal } = typeAtCaret(project, journal, '.word'));
+  assert.deepEqual(timelineEntries(journal).map(entry => entry.summary), ['word', '.']);
+  for (const character of 'drow') {
+    const state = stateFor(project), at = state.doc.content.size - 1;
+    const selected = state.apply(state.tr.setSelection(TextSelection.create(state.doc, at)));
+    const transaction = selected.tr.delete(at - 1, at).setMeta(HISTORY_SELECTION_META, selected.selection.toJSON());
+    const after = { ...project, chapters: project.chapters.map(chapter => chapter.id === 'chapter-a' ? { ...chapter, content: transaction.doc.toJSON() } : chapter) };
+    journal = recordTransaction(journal, { beforeProject: project, afterProject: after, chapterId: 'chapter-a', transaction }); project = after;
+  }
+  assert.equal(contents(project)[0], 'Alpha.');
+  assert.equal(timelineEntries(journal)[0].summary, 'word');
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  assert.equal(contents(project)[0], 'Alpha.word');
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  assert.equal(contents(project)[0], 'Alpha.');
+});
+
+test('a typing pause starts a fresh undo group', () => {
+  let project = manuscript(), journal = createHistory(project);
+  ({ project, journal } = typeAtCaret(project, journal, 'a'));
+  const events = structuredClone(journal.events);
+  events[1].entry.timestamp = new Date(Date.now() - 60_000).toISOString();
+  journal = createHistory(project, { events });
+  ({ project, journal } = typeAtCaret(project, journal, 'b'));
+  assert.equal(historyStatus(journal).totalEdits, 2);
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  assert.equal(contents(project)[0], 'Alphaa');
 });
 
 test('a replacement with multiple marked steps is one exact, reversible atomic edit', () => {

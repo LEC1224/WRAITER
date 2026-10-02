@@ -157,9 +157,9 @@ const waitFor = async (fn, label, timeout = 12000) => {
     await page.screenshot({ path: path.join(output, '02-dark.png') }); await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(960, 650)); await page.waitForTimeout(200);
     await page.screenshot({ path: path.join(output, '03-compact.png') }); assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false);
     events.push('Custom AI keys work; native custom Save fires once; dark theme and minimum-width layout persist.');
-    await menu('View', 'Revision history'); await page.getByRole('tab', { name: /^Checkpoints/ }).click(); const restoreCard = page.locator('.snapshot-card').filter({ hasText: 'Before AI editing' });
-    await restoreCard.getByRole('button', { name: 'Restore this version', exact: true }).click(); await page.getByRole('dialog').getByRole('button', { name: 'Restore version', exact: true }).click(); await page.getByRole('dialog').waitFor({ state: 'hidden' });
-    await page.getByRole('status').filter({ hasText: 'Earlier version restored' }).waitFor();
+    await menu('View', 'Revision history'); await page.getByRole('tab', { name: /^Checkpoints/ }).click(); const restoreCard = page.locator('.checkpoint-node').filter({ hasText: 'Before AI editing' });
+    await restoreCard.getByRole('button', { name: 'Continue here', exact: true }).click(); await page.getByRole('dialog', { name: 'Continue from this version?', exact: true }).getByRole('button', { name: 'Continue here', exact: true }).click(); await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    await page.getByRole('status').filter({ hasText: 'Version restored.' }).waitFor();
     await chapter2().click(); assert.equal(await visibleText(), 'Before. A quiet hour. After.');
     assert.ok((await page.evaluate(() => window.wraiter.listGitHistory())).entries.some(entry => entry.message === 'Before restoring a version'));
     events.push('Restoring a Git version first checkpoints the current manuscript and retains its history.');

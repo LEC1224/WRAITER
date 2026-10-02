@@ -6,23 +6,49 @@ const { hash, atomicWrite, readLimited, validateProject, validateRequest, Docume
 const providers = require('./providers.cjs');
 const { defaults, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, mergeSettings } = require('./preferences.cjs');
 const { GitHistory } = require('./git-history.cjs');
+const { summarizeCheckpoint, checkpointChanges } = require('./checkpoint-summary.cjs');
 const { listFonts, spellLanguage, menuTemplate } = require('./desktop.cjs');
+const { installContextMenu } = require('./context-menu.cjs');
 const { ReferenceLibrary } = require('./references.cjs');
 const { DocumentFiles, FORMATS, formatOf } = require('./document-files.cjs');
 const { EditJournal } = require('./edit-journal.cjs');
 const { runWritingAgent } = require('./writing-agent.cjs');
 const { LocalModels } = require('./local-models.cjs');
 const { WorkspaceSession } = require('./workspace-session.cjs');
+const { documentArguments } = require('./file-open.cjs');
 const { runProofread, validateProofreadRequest } = require('./proofreading.cjs');
 
 if (process.env.WRAITER_USER_DATA) app.setPath('userData', path.resolve(process.env.WRAITER_USER_DATA));
 app.setName('WRAITER');
-const primaryInstance = app.requestSingleInstanceLock();
+const pendingExternalFiles = documentArguments(process.argv, process.cwd(), process.defaultApp);
+const primaryInstance = app.requestSingleInstanceLock({ files: pendingExternalFiles });
 if (!primaryInstance) app.quit();
 let win, closing = false, closePending = false, closeFinishing = false, closeTimer, store, bootResult, gitHistory, fontList, referenceLibrary, documentFiles, editJournal, localModels, workspace, lastReferenceWarnings = '';
+let externalFilesReady = false;
+function notifyExternalFiles() {
+  if (externalFilesReady && pendingExternalFiles.length && win && !closing && !closePending) win.webContents.send('command', 'external-files-pending');
+}
+function queueExternalFiles(files) {
+  for (const target of files) if (!pendingExternalFiles.some(pending => samePath(pending, target))) pendingExternalFiles.push(target);
+  notifyExternalFiles();
+}
+app.on('second-instance', (_event, commandLine, workingDirectory, additionalData) => {
+  const files = Array.isArray(additionalData?.files)
+    ? documentArguments([process.execPath, ...additionalData.files], workingDirectory)
+    : documentArguments(commandLine, workingDirectory, process.defaultApp);
+  queueExternalFiles(files);
+  if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+});
+app.on('open-file', (event, target) => {
+  event.preventDefault();
+  queueExternalFiles(documentArguments([process.execPath, target], process.cwd()));
+});
 let writeQueue = Promise.resolve();
+let checkpointLabelQueue = Promise.resolve();
+let checkpointFallbackQueue = Promise.resolve();
 let prefs = {};
 const activeRequests = new Map();
+let foregroundPending = 0;
 const cancelRequests = async (predicate = () => true) => {
   const controllers = [...activeRequests.values()].filter(predicate);
   for (const controller of controllers) controller.abort();
@@ -30,6 +56,53 @@ const cancelRequests = async (predicate = () => true) => {
 };
 const cancelAll = () => cancelRequests();
 const cancelForegroundRequests = () => cancelRequests(controller => controller.kind !== 'agent');
+async function reserveForegroundRequest(id, controller, busyMessage) {
+  foregroundPending++;
+  try {
+    // Author-initiated writing assistance takes priority over a background label.
+    await cancelRequests(active => active.kind === 'checkpoint');
+    if (activeRequests.size) throw new Error(busyMessage);
+    activeRequests.set(id, controller);
+  } finally { foregroundPending--; }
+}
+async function describeCheckpoint(payload, waitForIdle = false) {
+  if (waitForIdle && activeRequests.size) {
+    let timeout;
+    try { await Promise.race([Promise.all([...activeRequests.values()].map(controller => controller.finished)), new Promise(resolve => { timeout = setTimeout(resolve, 30000); })]); }
+    finally { clearTimeout(timeout); }
+  }
+  const available = prefs.enabled && !activeRequests.size && !foregroundPending;
+  const settings = available ? resolveTask(prefs, 'checkpoint') : null;
+  let key = '';
+  if (settings) {
+    try { key = await getKey(settings); } catch { return summarizeCheckpoint(payload, null); }
+  }
+  if (!settings || activeRequests.size || foregroundPending) return summarizeCheckpoint(payload, null);
+  const id = `checkpoint-${require('node:crypto').randomUUID()}`;
+  const controller = new AbortController(); controller.kind = 'checkpoint';
+  let finished; controller.finished = new Promise(resolve => { finished = resolve; });
+  const timeout = setTimeout(() => controller.abort(), 180000);
+  activeRequests.set(id, controller);
+  try { return await summarizeCheckpoint(payload, settings, key, providers, controller.signal); }
+  finally { clearTimeout(timeout); activeRequests.delete(id); finished(); }
+}
+function queueCheckpointLabel({ id, before, after, revision, label, automatic = false }) {
+  const suppliedTitle = typeof label === 'string' ? label.trim() : '';
+  const authoritativeTitle = !automatic && suppliedTitle && !['Version checkpoint', 'Manual checkpoint'].includes(suppliedTitle) ? suppliedTitle : '';
+  const fallback = checkpointChanges(before, after).fallback;
+  // Persist the factual label at once, even if a previous model request is slow.
+  const saved = gitHistory.updateLabel(id, revision, { title: authoritativeTitle || fallback.title, summary: fallback.summary, location: fallback.location, chapterId: fallback.chapterId }).then(() => win?.webContents.send('command', 'git-history-updated'));
+  checkpointFallbackQueue = Promise.allSettled([checkpointFallbackQueue, saved]).then(() => {});
+  const work = checkpointLabelQueue.catch(() => {}).then(async () => {
+    await saved;
+    const result = await describeCheckpoint({ before, after }, true);
+    if (result.ai) {
+      await gitHistory.updateLabel(id, revision, { title: authoritativeTitle || result.title, summary: result.summary, location: result.location, chapterId: result.chapterId });
+      win?.webContents.send('command', 'git-history-updated');
+    }
+  });
+  checkpointLabelQueue = work.catch(error => console.error('Checkpoint label:', error.message));
+}
 const file = name => path.join(app.getPath('userData'), name);
 const serial = fn => { const result = writeQueue.then(async () => { try { return await fn(); } finally { await workspace?.checkpoint(); } }); writeQueue = result.catch(() => {}); return result; };
 function syncWorkspace() { store = workspace.active.store; documentFiles = workspace.active.files; }
@@ -94,12 +167,7 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
   win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
-  win.webContents.on('context-menu', (_event, params) => {
-    const items = params.dictionarySuggestions.slice(0, 5).map(label => ({ label, click: () => win.webContents.replaceMisspelling(label) }));
-    if (params.misspelledWord) items.push({ label: 'Add to dictionary', click: () => win.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord) }, { type: 'separator' });
-    items.push({ label: 'Undo', click: () => win.webContents.send('command', 'undo') }, { label: 'Redo', click: () => win.webContents.send('command', 'redo') }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' });
-    Menu.buildFromTemplate(items).popup({ window: win });
-  });
+  installContextMenu(win, { Menu, ipcMain, getPreferences: () => prefs });
   win.once('ready-to-show', () => win.show());
   win.on('close', event => {
     if (closing) return;
@@ -110,7 +178,7 @@ function createWindow() {
       if (closing || closeFinishing || !win) return;
       const result = await dialog.showMessageBox(win, { type: 'warning', message: 'The editor is not responding', detail: 'The last successful recovery is preserved. Closing now may lose typing that had not reached autosave.', buttons: ['Keep open', 'Close using last recovery'], defaultId: 0, cancelId: 0 });
       if (closing || closeFinishing || !win) return;
-      if (result.response === 1) { await writeQueue; await cancelAll(); await gitHistory.flush(); await providers.shutdown?.(); closing = true; win.close(); }
+      if (result.response === 1) { await writeQueue; await cancelAll(); await gitHistory.flush(); await checkpointFallbackQueue; await providers.shutdown?.(); closing = true; win.close(); }
       else closePending = false;
     }, 10000);
   });
@@ -142,7 +210,7 @@ app.whenReady().then(async () => {
   editJournal = new EditJournal(app.getPath('userData'));
   localModels = new LocalModels(app.getPath('userData'), { notify: value => win?.webContents.send('local-progress', value) });
   providers.configureLocalModels(localModels);
-  gitHistory = new GitHistory(app.getPath('userData'));
+  gitHistory = new GitHistory(app.getPath('userData'), { onCheckpoint: queueCheckpointLabel });
   if (store.project) gitHistory.record(store.project, 'Recovered manuscript').catch(error => console.error('Git history:', error.message));
   updateMenu();
   createWindow();
@@ -234,6 +302,18 @@ app.whenReady().then(async () => {
     return openPath(result.filePaths[0]);
   }));
   ipcMain.handle('open-recent', (_e, target) => { if (!(prefs.recent || []).includes(target)) throw new Error('This document is not in the recent list.'); return serial(() => openPath(target)); });
+  // Keep shell requests queued until the renderer can save its current edits.
+  // Only OS-supplied paths in this queue are authorized by this IPC endpoint.
+  ipcMain.handle('external-files:ready', () => { externalFilesReady = true; notifyExternalFiles(); return true; });
+  ipcMain.handle('external-files:next', () => pendingExternalFiles[0] || null);
+  ipcMain.handle('external-files:open', (_e, target) => serial(async () => {
+    if (typeof target !== 'string' || target !== pendingExternalFiles[0]) throw new Error('This file was not requested by Windows.');
+    return openPath(target);
+  }));
+  ipcMain.handle('external-files:complete', (_e, target) => {
+    if (target !== pendingExternalFiles[0]) throw new Error('This file is no longer pending.');
+    pendingExternalFiles.shift(); return true;
+  });
   ipcMain.handle('reference', async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Add reference material', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Text references', extensions: ['txt', 'md'] }] });
     if (result.canceled) return [];
@@ -264,16 +344,16 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('generate', async (_e, request) => {
     if (!prefs.enabled) throw new Error('Enable writing assistance in Connections first.');
-    if (activeRequests.size) throw new Error('A request is already running. Cancel it before starting another.');
     request = validateRequest(request);
     const settings = resolveTask(prefs, request.mode);
     request = { ...request, language: request.language || store.project?.language || prefs.language, nativeLanguage: request.nativeLanguage ?? prefs.nativeLanguage };
+    if (request.alternatives) request.suggestionCounts = { translation: settings.translationSuggestions, correction: settings.correctionSuggestions, rephrase: settings.rephraseSuggestions };
     const controller = new AbortController();
     controller.kind = 'generate';
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
     const timeout = setTimeout(() => controller.abort(), 180000);
-    activeRequests.set(request.id, controller);
     try {
+      await reserveForegroundRequest(request.id, controller, 'A request is already running. Cancel it before starting another.');
       const refreshed = await referenceLibrary.refresh(request.references || [], { verifyContents: settings.provider === 'codex', signal: controller.signal });
       const warnings = refreshed.warnings.join(' ');
       if (warnings && warnings !== lastReferenceWarnings) win?.webContents.send('command', `reference-warning:${warnings}`);
@@ -281,38 +361,37 @@ app.whenReady().then(async () => {
       return await providers.generate(settings, await getKey(settings), { ...request, references: refreshed.references }, controller.signal);
     }
     catch (error) { throw new Error(controller.signal.aborted ? 'Request cancelled or timed out.' : error.message); }
-    finally { clearTimeout(timeout); activeRequests.delete(request.id); finished(); }
+    finally { clearTimeout(timeout); if (activeRequests.get(request.id) === controller) activeRequests.delete(request.id); finished(); }
   });
   ipcMain.handle('proofread:run', async (_event, request) => {
     if (!prefs.enabled) throw new Error('Enable an AI connection before proofreading.');
-    if (activeRequests.size) throw new Error('Finish or cancel the current AI request first.');
     request = validateProofreadRequest(request);
     if (store.project && store.project.id !== request.projectId) throw new Error('The requested document is no longer open.');
     const settings = resolveTask(prefs, 'proofread'), controller = new AbortController();
     controller.kind = 'proofread';
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
-    const timeout = setTimeout(() => controller.abort(), 240000); activeRequests.set(request.id, controller);
-    try { return await runProofread(providers, settings, await getKey(settings), request, controller.signal); }
+    const timeout = setTimeout(() => controller.abort(), 240000);
+    try { await reserveForegroundRequest(request.id, controller, 'Finish or cancel the current AI request first.'); return await runProofread(providers, settings, await getKey(settings), request, controller.signal); }
     catch (error) { throw new Error(controller.signal.aborted ? 'Proofreading stopped or timed out.' : error.message); }
-    finally { clearTimeout(timeout); activeRequests.delete(request.id); finished(); }
+    finally { clearTimeout(timeout); if (activeRequests.get(request.id) === controller) activeRequests.delete(request.id); finished(); }
   });
   ipcMain.handle('cancel', cancelAll);
   ipcMain.handle('agent:run', async (_event, request) => {
     if (!prefs.enabled) throw new Error('Enable AI writing assistance first.');
-    if (activeRequests.size) throw new Error('Finish or cancel the current AI request first.');
     if (!request || typeof request.instruction !== 'string' || !request.instruction.trim() || request.instruction.length > 16000) throw new Error('Enter a writing request.');
     validateProject(request.project);
     if (store.project && store.project.id !== request.project.id) throw new Error('The requested document is no longer open.');
     const settings = resolveTask(prefs, 'chat'), id = request.id || `agent-${Date.now()}`, controller = new AbortController();
     controller.kind = 'agent';
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
-    const timeout = setTimeout(() => controller.abort(), 240000); activeRequests.set(id, controller);
+    const timeout = setTimeout(() => controller.abort(), 240000);
     try {
+      await reserveForegroundRequest(id, controller, 'Finish or cancel the current AI request first.');
       const refs = await referenceLibrary.refresh((request.project.references || []).filter(reference => reference.enabled !== false), { verifyContents: settings.provider === 'codex', signal: controller.signal, maxCharacters: 40 * 1024 * 1024 });
       if (refs.warnings.length) win?.webContents.send('command', `reference-warning:${refs.warnings.join(' ')}`);
       return await runWritingAgent({ ...request, references: refs.references, settings, key: await getKey(settings), signal: controller.signal, onProgress: activity => win?.webContents.send('command', `agent-progress:${JSON.stringify({ requestId: id, ...activity })}`) });
     } catch (error) { throw new Error(controller.signal.aborted ? 'Assistant stopped. No pending edits were applied.' : error.message); }
-    finally { clearTimeout(timeout); activeRequests.delete(id); finished(); }
+    finally { clearTimeout(timeout); if (activeRequests.get(id) === controller) activeRequests.delete(id); finished(); }
   });
   ipcMain.handle('probe', (_e, draft) => providerProbe(draft));
   ipcMain.handle('provider:models', (_e, draft) => providerProbe(draft));
@@ -374,10 +453,20 @@ app.whenReady().then(async () => {
   ipcMain.handle('document:language', (_e, language) => setDocumentLanguage(language));
   ipcMain.handle('git:list', () => store.project ? gitHistory.list(store.project.id) : { available: true, entries: [] });
   ipcMain.handle('git:revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.revision(store.project.id, revision); });
-  ipcMain.handle('git:snapshot', (_e, project, label) => serial(async () => {
-    await persistDocument(project);
-    return gitHistory.record(project, label || 'Manual checkpoint', true);
-  }));
+  ipcMain.handle('git:activate-revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.activateRevision(store.project.id, revision); });
+  ipcMain.handle('git:label', (_e, revision, metadata) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.updateLabel(store.project.id, revision, metadata); });
+  ipcMain.handle('checkpoint:summarize', (_e, payload) => {
+    if (!store.project || payload?.after?.id !== store.project.id) throw new Error('The requested manuscript is no longer open.');
+    return describeCheckpoint(payload);
+  });
+  ipcMain.handle('git:snapshot', async (_e, project, label) => {
+    const result = await serial(async () => {
+      await persistDocument(project);
+      return gitHistory.record(project, label || 'Manual checkpoint', true);
+    });
+    if (result.committed) queueCheckpointLabel({ id: project.id, before: result.before, after: project, revision: result.revision, label: label || 'Manual checkpoint' });
+    return result;
+  });
   ipcMain.handle('choose-codex', async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Choose codex.exe', properties: ['openFile'], filters: [{ name: 'Codex executable', extensions: ['exe'] }] });
     return result.canceled ? null : result.filePaths[0];
@@ -437,11 +526,11 @@ app.whenReady().then(async () => {
     }
     await cancelAll();
     await gitHistory.flush();
+    await checkpointFallbackQueue;
     await providers.shutdown?.();
     closing = true; win?.close(); return true;
   });
   ipcMain.on('window', (_e, action) => { if (action === 'minimize') win.minimize(); else if (action === 'maximize') win.isMaximized() ? win.unmaximize() : win.maximize(); else if (action === 'close') win.close(); });
 });
 app.on('window-all-closed', () => app.quit());
-app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } });
 app.on('before-quit', () => { for (const controller of activeRequests.values()) controller.abort(); });

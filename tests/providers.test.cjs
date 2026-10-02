@@ -85,6 +85,20 @@ test('Ollama guided completion honours selected task controls and returns only i
   assert.match(body.messages[1].content, /\/no_think/); assert.ok(body.options.num_ctx >= 2048 && body.options.num_ctx <= 32768);
 });
 
+test('guided rephrasing returns the original rating and model notes in the same request as translations', async t => {
+  const alternatives = [
+    { text: 'updrafts', rating: 3, description: 'Concise weather terminology for rising air.' },
+    { text: 'rising air currents', rating: 2, description: 'More descriptive, emphasizing the movement of the air.' }
+  ];
+  const api = await server(t, () => ({ data: { message: { content: JSON.stringify({ completion: JSON.stringify({ currentRating: 1, alternatives }) }) } } }));
+  const result = await generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'test-rewriter', ollamaMode: 'guided' }, '', { mode: 'rewrite', selection: 'uppåtvindar', language: 'en-US', nativeLanguage: 'sv-SE', alternatives: true }, new AbortController().signal);
+  assert.deepEqual(result, { currentRating: 1, alternatives });
+  assert.equal(api.seen.length, 1);
+  assert.match(api.seen[0].body.messages[1].content, /"description":/);
+  assert.match(api.seen[0].body.messages[1].content, /"currentRating":/);
+  assert.ok(api.seen[0].body.options.num_predict >= 768);
+});
+
 test('Ollama Auto falls back to raw once per unsupported model, preserves forward-only continuation', async t => {
   const api = await server(t, record => record.url === '/api/chat' ? { status: 400, data: { error: 'Structured format is not supported' } } : { data: { response: 'fresh prose' } });
   const settings = { provider: 'ollama', baseUrl: api.baseUrl, model: 'raw-model', ollamaMode: 'auto' };
@@ -113,6 +127,12 @@ test('per-task API model and output caps are sent to the selected endpoint, Astr
 
 test('output limits scale for selections, stay bounded, and stop partial corrections being accepted', async t => {
   assert.ok(outputLimit({}, { mode: 'correct', selection: 'x'.repeat(6000) }) > 3000);
+  const rewrite = { mode: 'rewrite', selection: 'x'.repeat(6000), alternatives: true };
+  assert.ok(outputLimit({}, rewrite) > outputLimit({}, { ...rewrite, alternatives: false }) * 2);
+  assert.equal(outputLimit({ tokenCap: 512 }, rewrite), 512, 'the author\'s explicit token limit remains in control');
+  assert.equal(outputLimit({}, { ...rewrite, selection: 'x'.repeat(64000) }), 32768);
+  assert.ok(outputLimit({}, { ...rewrite, suggestionCounts: { translation: 4, rephrase: 8 } }) > outputLimit({}, rewrite));
+  assert.ok(outputLimit({}, { mode: 'correct', alternatives: true, selection: 'x'.repeat(100), suggestionCounts: { translation: 1, correction: 5 } }) > outputLimit({}, { mode: 'correct', alternatives: true, selection: 'x'.repeat(100), suggestionCounts: { translation: 1, correction: 1 } }));
   assert.equal(outputLimit({ tokenCap: 500 }, { mode: 'chat' }), 500);
   assert.equal(ollamaContextWindow('short', 256), 2048);
   assert.equal(ollamaContextWindow('x'.repeat(20000), 1024), 8192);

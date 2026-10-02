@@ -8,14 +8,16 @@ You do not need to know how to code. A guided setup helps you connect **Codex** 
 
 ## Download WRAITER
 
-**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.13.0/WRAITER-0.13.0-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
+**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.16.0/WRAITER-0.16.0-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
 
-Version **0.13.0** is the current public preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
+Version **0.16.0** is the current public preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
+
+This release includes the wording descriptions, vibe guidance, phrase ratings and suggestion-count settings shown below, alongside the latest manuscript revision tools. See the [0.16.0 release notes](docs/releases/v0.16.0.md) for what changed since 0.13.0.
 
 | Choose a download | Who it is for |
 | --- | --- |
-| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.13.0/WRAITER-0.13.0-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
-| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.13.0/WRAITER-0.13.0-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
+| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.16.0/WRAITER-0.16.0-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
+| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.16.0/WRAITER-0.16.0-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
 
 Download one of these `.exe` files. GitHub's **Source code** downloads are for developers; they are not the installer.
 
@@ -25,25 +27,46 @@ WRAITER is free under the MIT license. An eligible Codex or Claude Code account 
 
 ## See WRAITER in action
 
-These screenshots use a fictional sample manuscript, *The Glass Orchard*.
+These screenshots show the real interface with a fictional sample manuscript, *The Long Way Home*, and example AI responses. The tutorial uses its own practice story.
 
-### Can't think of the right next line? Just press tab to auto-complete
-<img src="docs/images/inline-suggestion.png" alt="WRAITER's AI toolbar above a chapter with a faint inline continuation at the cursor" width="1000" height="500">
+### Keep the story and its context together
+<img src="docs/images/writing-workspace.png" alt="WRAITER with three chapters on the left, a manuscript in the centre, and private notes and writing-voice instructions on the right" width="1000">
 
-The faint italic words are a preview at the cursor—not a change to the manuscript. Press **Tab** to accept them or **Esc** to dismiss them while your normal writing controls stay in reach.
+Move between chapters, format your prose, and keep references and revision notes beside the manuscript. **Notes & voice** separates private notes from the instructions you choose to share with AI, such as viewpoint, spelling or writing style.
 
-### Find the right phrasing
-<img src="docs/images/selection-rephrase.png" alt="A selected phrase in WRAITER with an inline replacement preview and ranked rephrasing alternatives" width="1000" height="500">
+### Keep writing when you get stuck
+<img src="docs/images/inline-suggestion.png" alt="A chapter with an italic continuation preview after the words Mara turned toward the orchard" width="980">
 
-Select a word or passage and press **Tab**. WRAITER previews the leading alternative inside your sentence and offers more choices ranked for that context. Use **Up / Down** to compare them, **Enter** or **Tab** to accept, and **Esc** to keep your original wording.
+Press **Tab** at the cursor to request a continuation. The faint italic words preview what could come next. Press **Tab** again to accept them or **Esc** to dismiss them; you can also accept just one word or character at a time.
+
+### Compare wording, meaning and tone
+<img src="docs/images/selection-rephrase.png" alt="Alternatives for rising air, with a short explanation under each choice and a three-star current phrase rating marked Tied highest" width="760">
+
+Select a word or passage and press **Tab** to find another phrasing, or translate a word from your native language into the manuscript's language. Each option can include a short model-written description of its emphasis, tone or meaning, so you can see why you might choose it.
+
+The **Current phrase rating** uses the same three-star scale as the alternatives. **Highest rated** or **Tied highest** indicates when the model considers your existing wording as strong as the suggestions. Stars reflect the model's judgement of this context; omitted ratings appear as **Unrated**.
+
+WRAITER previews a replacement inside your sentence. Use **Up / Down** to compare choices, **Enter** or **Tab** to accept, and **Esc** to keep your original wording. **More alternatives** requests another set.
+
+### Describe the feeling you want
+<img src="docs/images/describe-vibe.png" alt="Describe your vibe text field filled with a request for the reader to experience avian navigation through the character's eyes" width="440">
+
+Choose **Describe your vibe** beside **More alternatives** and write what you are looking for. For example: “I want the reader to feel the sense of avian navigation through her eyes.”
+
+**Find alternatives** asks the model for fresh choices guided by that direction. You can describe a viewpoint, mood, level of formality or detail you want to bring out, then compare the results in the same sentence.
+
+### Choose how many suggestions you want
+<img src="docs/images/suggestion-count-settings.png" alt="Writing AI settings with separate targets of four translation suggestions, two correction suggestions and five rephrasing suggestions" width="860">
+
+In **Settings → Writing AI → Selection suggestions**, set separate targets of **1–8** for translations, corrections and rephrasings. The defaults are **3 translations, 1 correction and 3 rephrasings**. The model may return fewer useful choices; corrections stay focused on spelling, punctuation and necessary grammar.
 
 ### Ask questions with the whole project in view
-<img src="docs/images/project-assistant.png" alt="WRAITER showing three chapters, the active manuscript and a project-aware assistant conversation" width="1000" height="500">
+<img src="docs/images/project-assistant.png" alt="A manuscript beside a saved assistant conversation about Mara's viewpoint, with an action showing that eight passages were read" width="1000">
 
 Chapters stay organised on the left while the writing assistant opens on the right. It can answer questions or make requested edits using the manuscript, your writing-voice instructions and enabled references. Conversations stay with the project, and assistant edits remain undoable.
 
 ### Proofread selectively
-<img src="docs/images/proofreading-review.png" alt="WRAITER's proofreading review with two selected findings, explanations and before-and-after diffs" width="1000" height="500">
+<img src="docs/images/proofreading-review.png" alt="Proofreading review with spelling and grammar findings, before-and-after diffs and an Apply 2 selected button" width="956">
 
 Proofread a selection, the current chapter or the whole manuscript. WRAITER groups findings by type, shows each proposed change beside the original and lets you apply only the fixes you choose.
 
@@ -58,7 +81,7 @@ Proofread a selection, the current chapter or the whole manuscript. WRAITER grou
 Already want to write? Choose **Set up later**. You can return through **Help → Set up AI**.
 
 ## Learn by writing
-<img src="docs/images/writing-tutorial.png" alt="WRAITER's practice manuscript, chapter list and tutorial guide beneath the real editor" width="1000" height="500">
+<img src="docs/images/writing-tutorial.png" alt="WRAITER's separate practice manuscript with an inline continuation and the tutorial lesson beneath the editor" width="1000">
 
 The tutorial opens a short story that has already begun. You create its next chapter, and WRAITER adds an opening for you to continue. Press **Tab** and your connected AI suggests what could happen next.
 
@@ -83,16 +106,20 @@ Shortcuts can be changed in **Settings → Keyboard shortcuts**. The tutorial fo
 ## What you can do
 
 - **Keep your writing organised.** Work with chapters and several manuscripts in tabs, with word counts, focus mode, themes and familiar formatting.
-- **Stay in control of AI suggestions.** Preview completions and rewritten selections before accepting them. Direct editing requests can revise prose, apply formatting and restructure paragraphs or chapters. Each completed request is one undoable batch with a saved before-and-after report and a revert control. Assistant conversations are saved per project, with a dropdown for returning to earlier chats.
+- **Format without breaking your flow.** Copy and paste formatting between passages, clear formatting from the toolbar, and choose preset or custom highlight colours. Translucent text backgrounds stay readable in every theme.
+- **Act on a passage with a right-click.** Copy/paste or clear its formatting, add a comment, rephrase or correct selected text, ask the writing assistant, or continue from the cursor. Accept or dismiss AI previews from the same menu.
+- **Revise across chapters.** Search the whole manuscript or current chapter, match case or whole words, and jump through results grouped by chapter. Preview every replacement before applying a batch with one undo step.
+- **Keep revision notes beside the text.** Attach private comments to passages, return to their locations, and resolve or reopen them. Comments follow edits and travel with a saved `.wraiter` manuscript.
+- **Stay in control of AI suggestions.** Compare continuations, rephrasings, translations and corrections before accepting them. Direct editing requests can revise prose, apply formatting and restructure paragraphs or chapters. Each completed request is one undoable batch with a saved before-and-after report and a revert control. Assistant conversations are saved per project, with a dropdown for returning to earlier chats.
 - **Proofread without surrendering the pen.** Review selected text, a chapter or the manuscript by severity and error type; edit, select and apply only the fixes you want. Detailed document statistics and local spelling underlines live in the same Tools menu.
 - **Give AI useful background.** Share writing-voice instructions and selected reference files. Keep private notes for yourself.
-- **Keep editing history.** Undo and redo survive restarts. Recovery saves and preceding-save backups help protect your work. Optional named checkpoints are available when Git is installed.
+- **Keep editing history.** Ctrl+Z/Y group typing into word-sized edits and survive restarts. Recovery saves and preceding-save backups help protect your work. With Git installed, the history sidebar shows your current path newest first, while a complete tree shows every branch; a model chosen in Settings can summarize meaningful changes.
 - **Use familiar documents.** Open and save WRAITER, Word (`.docx`), LibreOffice (`.odt`), plain text, Markdown and HTML files. Export PDF, EPUB, office documents or text for publishing and sharing.
 - **Choose your AI.** Start with Codex or Claude Code; advanced connections include local models, Ollama, OpenAI and Claude APIs, and compatible services. Autocomplete, correction, rephrasing, proofreading and project assistance can use different models.
 
 ### Your writing and privacy
 
-Manuscripts, assistant chats and recovery files are stored on your computer. When you request cloud AI help, WRAITER sends the text needed for that task, recent messages from the selected conversation, enabled references and writing-voice instructions to your selected provider. The writing assistant can read relevant manuscript passages to answer an editing request. **Private notes are excluded from AI requests and exports.** Chats are also excluded from manuscript exports.
+Manuscripts, assistant chats and recovery files are stored on your computer. When you request cloud AI help, WRAITER sends the text needed for that task, any vibe guidance you enter, recent messages from the selected conversation, enabled references and writing-voice instructions to your selected provider. The writing assistant can read relevant manuscript passages to answer an editing request. **Private notes and passage comments are excluded from AI requests and exports.** Chats are also excluded from manuscript exports.
 
 API keys, when used, are encrypted in your Windows user profile and are not saved in manuscripts. Your provider's own terms and data handling still apply. Local inference can work offline after its engine and model have been downloaded. Local recovery is not a cloud backup: keep a separate backup of important writing.
 
@@ -164,7 +191,7 @@ Unit tests and these desktop suites use synthetic data and local test services. 
 
 **Live tests are opt-in:** `npm run test:tutorial:live` sends two requests through your saved Codex account and uses its allowance. It is not part of CI. See the contributor guide for local-model, PDF and office-format test prerequisites.
 
-The [validation report](TEST-REPORT.md) records checks and remaining limitations. [Release notes](docs/releases/v0.13.0.md) describe the improvements since version 0.11.0. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts.
+The [validation report](TEST-REPORT.md) records checks and remaining limitations. [0.16.0 release notes](docs/releases/v0.16.0.md) describe the current version; [0.13.0 release notes](docs/releases/v0.13.0.md) cover the previous public release. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts.
 
 ## License and acknowledgements
 

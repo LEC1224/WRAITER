@@ -11,7 +11,7 @@ export const GhostText = Extension.create({
       state: { init: () => null, apply(tr, value) { const meta = tr.getMeta(ghostKey); if (meta !== undefined) return meta; if (value?.kind === 'loading' && tr.docChanged) return { ...value, pos: tr.mapping.map(value.pos) }; return tr.docChanged || tr.selectionSet ? null : value; } },
       props: { decorations(state) {
         const ghost = ghostKey.getState(state);
-        if (!ghost) return null;
+        if (!ghost || ghost.kind === 'assessment') return null;
         const decorations = [Decoration.widget(ghost.pos, () => {
           const span = document.createElement('span'); span.className = ghost.kind === 'loading' ? 'ai-loading' : `ghost-text ${ghost.kind === 'revision' ? 'revision-preview' : ''}`;
           span.textContent = ghost.kind === 'loading' ? '···' : `${ghost.kind === 'revision' ? ' → ' : ''}${ghost.text}`;
@@ -30,9 +30,10 @@ export const SearchHighlight = Extension.create({
     return [new Plugin({ key: searchKey,
       state: { init: () => '', apply: (tr, value) => tr.getMeta(searchKey) ?? value },
       props: { decorations(state) {
-        const query = searchKey.getState(state);
+        const value = searchKey.getState(state), options = typeof value === 'string' ? { query: value } : value || {};
+        const query = options.query;
         if (!query) return null;
-        const decorations = findTextMatches(state.doc, query).map(match => Decoration.inline(match.from, match.to, { class: 'search-match' }));
+        const decorations = findTextMatches(state.doc, query, 2000, options).map(match => Decoration.inline(match.from, match.to, { class: 'search-match' }));
         return DecorationSet.create(state.doc, decorations);
       } }
     })];

@@ -5,7 +5,7 @@ import { LANGUAGES } from './languages.js';
 import LocalModels from './LocalModels.jsx';
 
 const api = window.wraiter;
-const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['proofread', 'Proofreading review'], ['chat', 'Project assistant']];
+const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['proofread', 'Proofreading review'], ['chat', 'Project assistant'], ['checkpoint', 'Version summaries']];
 const PROVIDERS = { local: 'Local models (managed)', codex: 'Codex account', claude: 'Claude Code account', ollama: 'Ollama (local)', openai: 'OpenAI API', anthropic: 'Claude API', compatible: 'Compatible API / xAI' };
 const PRESETS = { claude: { baseUrl: '', model: '', claudePath: '' }, local: { baseUrl: '', model: '' }, codex: { baseUrl: '', model: '', codexPath: '' }, ollama: { baseUrl: 'http://localhost:11434', model: '' }, openai: { baseUrl: 'https://api.openai.com/v1', model: '' }, anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: '' }, compatible: { baseUrl: 'https://api.x.ai/v1', model: '' } };
 const errorText = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
@@ -18,7 +18,7 @@ function NumberField({ label, value, min, max, step = 1, onChange, help }) {
 
 export default function Settings({ initialTab, initialTask, prefs, updatePrefs, onClose, notify, fonts = [], Modal }) {
   const [tab, setTab] = useState(['general', 'appearance', 'language', 'connections', 'local', 'ai', 'hotkeys'].includes(initialTab) ? initialTab : 'appearance');
-  const [draft, setDraft] = useState(() => ({ ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
+  const [draft, setDraft] = useState(() => ({ translationSuggestions: 3, correctionSuggestions: 1, rephraseSuggestions: 3, ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
   const [task, setTask] = useState(TASKS.some(([which]) => which === initialTask) ? initialTask : 'continue');
   const [keyEdits, setKeyEdits] = useState({});
   const [connections, setConnections] = useState({});
@@ -73,10 +73,11 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
 
   async function save(close) {
     if (conflicts.length) { setSaveError('Resolve the shortcut conflicts before saving.'); setTab('hotkeys'); return; }
-    const ranges = { zoom: [50, 200], measure: [400, 1600], goal: [0, 1000000], predictionWords: [1, 500], contextWords: [50, 16000], tokenCap: [64, 32768], temperature: [0, 2] };
+    const ranges = { zoom: [50, 200], measure: [400, 1600], goal: [0, 1000000], predictionWords: [1, 500], translationSuggestions: [1, 8], correctionSuggestions: [1, 8], rephraseSuggestions: [1, 8], contextWords: [50, 16000], tokenCap: [64, 32768], temperature: [0, 2] };
     for (const [name, [min, max]] of Object.entries(ranges)) {
       if (!Number.isFinite(draft[name]) || draft[name] < min || draft[name] > max) { setSaveError('Check the number fields. Every value must be within its displayed range.'); return; }
     }
+    if (['translationSuggestions', 'correctionSuggestions', 'rephraseSuggestions'].some(name => !Number.isInteger(draft[name]))) { setSaveError('Suggestion counts must be whole numbers from 1 to 8.'); return; }
     setSaving(true); setSaveError('');
     try {
       const continuation = profileFor(draft, 'continue');
@@ -123,7 +124,7 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
         <div className="settings-section"><h3>Selection behaviour</h3><p className="notice-copy">Select text and press {formatShortcut(draft.hotkeys.complete)}. Text in the document's language receives a rephrasing suggestion. A word or phrase in your native language receives a translation into the document's language. Review and accept the suggested replacement before it changes the manuscript.</p><p className="small-muted">LLM correction uses the current document's language, including the selected English spelling variant. The local dictionary is independent of the AI correction model.</p></div>
       </div>}
       {tab === 'connections' && <>
-        <p className="small-muted settings-introduction">Choose a connection and model for each task. Connections using the same provider address share its saved API key.</p>
+        <p className="small-muted settings-introduction">Choose a connection and model for each task. Connections using the same provider address share its saved API key. Version summaries label meaningful checkpoints from excerpts of changed text.</p>
         <div className="task-profiles">
           <div className="task-profile-row header" aria-hidden="true"><span>Task</span><span>Connection</span><span>Model</span><span /></div>
           {TASKS.map(([which, label]) => {
@@ -156,14 +157,22 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
           {connection && pending !== identity && <div className={'connection-status ' + (connection.error ? 'error' : connection.needsLogin ? '' : 'success')} role="status">{connection.error ? <Info size={15} /> : <CheckCircle2 size={15} />}<span>{connection.message || (connection.connected ? 'Connected.' : 'Connection checked.')}{connection.models?.length && !/models? available/i.test(connection.message || '') ? ' ' + connection.models.length + ' models available.' : ''}</span></div>}
           {profile.provider === 'claude' && <label>Claude Code executable (optional)<input className="field-input" aria-label="Claude Code executable path" value={profile.claudePath || ''} onChange={e => setProfile(task, { claudePath: e.target.value })} placeholder="Automatic detection" /></label>}
           {profile.provider === 'codex' && <details><summary>Advanced: executable location</summary><p className="small-muted">Detected automatically from your Codex installation. Override only if you use a custom installation.</p><div className="input-with-button"><input className="field-input" aria-label="Codex executable path" value={profile.codexPath || ''} placeholder="Automatic detection" onChange={event => setProfile(task, { codexPath: event.target.value })} /><button className="secondary-button" type="button" onClick={async () => { try { const chosen = await api.chooseCodex(); if (chosen) setProfile(task, { codexPath: chosen }); } catch (error) { setSaveError(errorText(error)); } }}>Browse</button></div></details>}
-          <p className="small-muted">{profile.provider === 'local' ? 'Local processing uses the selected model folder and memory controls.' : profile.provider === 'ollama' ? 'Text is sent to this Ollama address. A localhost address keeps model processing on this computer.' : 'Selected text, surrounding context, and enabled references are sent to the chosen provider when assistance runs.'}</p>
+          <p className="small-muted">{task === 'checkpoint' ? 'Version summaries use short excerpts of changed text, chapter titles, and the manuscript title. References are not sent.' : profile.provider === 'local' ? 'Local processing uses the selected model folder and memory controls.' : profile.provider === 'ollama' ? 'Text is sent to this Ollama address. A localhost address keeps model processing on this computer.' : 'Selected text, surrounding context, and enabled references are sent to the chosen provider when assistance runs.'}</p>
         </div>
       </>}
       {tab === 'ai' && <>
         <label className="check-label"><input type="checkbox" checked={!!draft.enabled} onChange={event => set('enabled', event.target.checked)} />Enable AI writing assistance</label>
         <label className="check-label"><input type="checkbox" checked={!!draft.continuous} onChange={event => set('continuous', event.target.checked)} />Suggest automatically after a writing pause</label>
+        <h3>Selection suggestions</h3>
         <div className="form-grid">
-          <NumberField label="Suggestion length (words)" value={draft.predictionWords} min={1} max={500} onChange={value => set('predictionWords', value)} help="1–500 words. Also used when retrying a suggestion." />
+          <NumberField label="Translation suggestions" value={draft.translationSuggestions} min={1} max={8} onChange={value => set('translationSuggestions', value)} />
+          <NumberField label="Correction suggestions" value={draft.correctionSuggestions} min={1} max={8} onChange={value => set('correctionSuggestions', value)} />
+          <NumberField label="Rephrasing suggestions" value={draft.rephraseSuggestions} min={1} max={8} onChange={value => set('rephraseSuggestions', value)} />
+        </div>
+        <p className="small-muted">Aim for 1–8 alternatives for the selected text. The model may offer fewer useful choices. Corrections stay limited to spelling, punctuation, and grammar.</p>
+        <h3>Continuations and model controls</h3>
+        <div className="form-grid">
+          <NumberField label="Suggestion length (words)" value={draft.predictionWords} min={1} max={500} onChange={value => set('predictionWords', value)} help="1–500 words for continuations, including retries." />
           <NumberField label="Context budget (words)" value={draft.contextWords} min={50} max={16000} step={50} onChange={value => set('contextWords', value)} help="50–16,000 words of manuscript before the cursor. References have a separate limit." />
           <NumberField label="Maximum output tokens" value={draft.tokenCap} min={64} max={32768} step={64} onChange={value => set('tokenCap', value)} help="64–32,768. Caps the output requested from a model." />
           <NumberField label="Temperature" value={draft.temperature} min={0} max={2} step={0.05} onChange={value => set('temperature', value)} help="0–2. Lower values give more predictable suggestions." />

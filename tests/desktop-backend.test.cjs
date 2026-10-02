@@ -38,6 +38,26 @@ test('settings reject malformed task profiles, languages, and out-of-range AI kn
   for (const settings of [{ taskProfiles: [] }, { taskProfiles: { __bad: {} } }, { taskProfiles: { correct: { provider: 'other' } } }, { hotkeys: { badAction: 'Q' } }, { fontSize: Infinity }, { nativeLanguage: '<script>' }, { contextWords: 0 }, { tokenCap: 100000 }, { allowReasoning: 'yes' }]) assert.throws(() => validateSettings(settings), /invalid|unknown/i);
   assert.equal(validateSettings({ nativeLanguage: '', predictionWords: 500, ollamaMode: 'guided' }).predictionWords, 500);
 });
+test('suggestion targets have independent defaults and survive partial settings updates', () => {
+  const migrated = mergeSettings(defaults, { predictionWords: 60 });
+  assert.equal(migrated.translationSuggestions, 3);
+  assert.equal(migrated.correctionSuggestions, 1);
+  assert.equal(migrated.rephraseSuggestions, 3);
+  const first = mergeSettings(migrated, { translationSuggestions: 4, correctionSuggestions: 2, rephraseSuggestions: 5 });
+  const second = mergeSettings(first, { translationSuggestions: 8, theme: 'dark' });
+  assert.equal(second.translationSuggestions, 8);
+  assert.equal(second.correctionSuggestions, 2);
+  assert.equal(second.rephraseSuggestions, 5);
+  assert.equal(second.predictionWords, 60);
+  assert.equal(resolveTask(second, 'correct').correctionSuggestions, 2);
+  assert.equal(resolveTask(second, 'rewrite').rephraseSuggestions, 5);
+});
+test('suggestion settings accept only whole targets from one through eight', () => {
+  for (const field of ['translationSuggestions', 'correctionSuggestions', 'rephraseSuggestions']) {
+    for (const value of [1, 3, 8]) assert.equal(validateSettings({ [field]: value })[field], value);
+    for (const value of [0, 9, -1, 1.5, '3', '', null, true, NaN, Infinity]) assert.throws(() => validateSettings({ [field]: value }), /invalid|whole numbers/i);
+  }
+});
 test('native menu owns document hotkeys and leaves editor AI shortcuts to renderer', () => {
   const sent = []; let closed = false;
   const menu = menuTemplate(command => sent.push(command), () => { closed = true; }, { ...DEFAULT_HOTKEYS, save: 'Ctrl+Alt+W' });

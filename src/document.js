@@ -39,7 +39,7 @@ export function contentWordCount(content) {
 }
 export const projectWords = project => project.chapters.reduce((sum, chapter) => sum + contentWordCount(chapter.content), 0);
 export function snapshot(project, name) {
-  return { id: uid(), name: name || `Revision ${new Date().toLocaleString()}`, createdAt: new Date().toISOString(), title: project.title, chapters: structuredClone(project.chapters), notes: project.notes, style: project.style, language: project.language, documentStyle: structuredClone(project.documentStyle), references: structuredClone(project.references || []) };
+  return { id: uid(), name: name || `Revision ${new Date().toLocaleString()}`, createdAt: new Date().toISOString(), title: project.title, chapters: structuredClone(project.chapters), notes: project.notes, style: project.style, language: project.language, documentStyle: structuredClone(project.documentStyle), references: structuredClone(project.references || []), ...(project.comments ? { comments: structuredClone(project.comments) } : {}) };
 }
 export function exportText(project) { return [project.title, ...project.chapters.flatMap(c => [c.title, nodeText(c.content, '\n', true)])].join('\n\n'); }
 export function inlineMarkup(node, format = 'md') {

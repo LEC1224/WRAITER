@@ -43,10 +43,17 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | Installer guide or AI setup | `npm run test:onboarding` |
 | Interactive tutorial or inline AI | `npm run test:tutorial` |
 | Settings, themes or hotkeys | `npm run test:settings` |
+| Selection descriptions, vibe guidance or phrase ratings | `npm run test:rephrase-vibe` |
+| Translation, correction or rephrasing suggestion targets | `npm run test:suggestion-counts` |
 | Native menus, IPC or provider routing | `npm run test:desktop` |
+| Editor right-click menu and its selection, formatting or AI actions | `npm run test:context-menu` |
 | General editor workflows | `npm run test:app` |
+| Toolbar formatting, highlight colours or their theme contrast | `npm run test:formatting` |
+| Whole-manuscript search, anchored comments or format copy/paste | `npm run test:revision-tools` |
 | Assistant document tools, change reports or reverting edits | `npm run test:editorial` |
 | Project tabs and startup | `npm run test:v06` |
+| Explorer file opening and single-instance handling | `npm run test:file-open` |
+| Windows installer file associations | `npm run test:installer` |
 | Pagination and rephrasing alternatives | `npm run test:v05` |
 | External file reload and margin numbering | `npm run test:reload-numbering` |
 | Proofreading review, statistics or spelling tools | `npm run test:proofreading` |
@@ -58,6 +65,8 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 Use synthetic manuscripts in tests. Do not weaken validation, replace production AI with canned tutorial output, or send real manuscripts to providers in automated checks. Add a focused regression test for a consequential bug or new behaviour; documentation-only changes do not need new tests.
 
 `npm run test:pdf` also needs Python with PyMuPDF. `npm run test:office` needs LibreOffice for independent format validation. See the test scripts for environment-specific prerequisites.
+
+`npm run test:installer` uses the cached electron-builder NSIS compiler (or `WRAITER_MAKENSIS`) and exercises the real wizard and registry macros in a private test registry subtree. It does not change your Windows file associations.
 
 The following tests are deliberately outside the default suite and CI:
 

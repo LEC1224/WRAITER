@@ -14,6 +14,7 @@ const list = (value, label, max = 1000) => { if (!Array.isArray(value) || value.
 const text = (value, label, max = 100000) => { if (typeof value !== 'string' || value.length > max) throw new Error(`Invalid ${label}.`); return value; };
 const readTools = new Set(['read_document', 'search_document', 'read_structure', 'read_reference', 'read_conversation']);
 const textTools = new Set(['replace_all', 'replace_text', 'rewrite_passage', 'normalize_spaces', 'remove_empty_paragraphs', 'delete_paragraph', 'rename_chapter']);
+const providerMarks = marks => (marks || []).filter(mark => mark.type !== 'commentAnchor').map(mark => structuredClone(mark));
 
 export function createEditorialTools(project, options = {}) {
   let current = structuredClone(project), revision = 0, selection = options.selection ? { ...options.selection } : null;
@@ -53,17 +54,23 @@ export function createEditorialTools(project, options = {}) {
     if (JSON.stringify(current).length - JSON.stringify(initial).length > 4 * 1024 * 1024) throw new Error('This request would add more than 4 MB of document content. Split it into smaller requests.');
   }
   function encodeNode(node) {
+    // This is a provider-facing projection. Private passage anchors stay in the
+    // local manuscript, asset store, and complete before/after change buffers.
+    const projected = { ...node };
+    if (node.attrs) projected.attrs = structuredClone(node.attrs);
+    if (node.marks) { const marks = providerMarks(node.marks); if (marks.length) projected.marks = marks; else delete projected.marks; }
     if (node.type === 'image') {
       const assetId = createHash('sha256').update(JSON.stringify(node)).digest('hex').slice(0, 20);
       assets.set(assetId, structuredClone(node));
-      const { src, ...attrs } = node.attrs || {};
-      return { type: 'image', assetId, attrs };
+      const { src, ...attrs } = projected.attrs || {};
+      return { type: 'image', assetId, attrs, ...(projected.marks ? { marks: projected.marks } : {}) };
     }
-    return { ...node, ...(node.content ? { content: node.content.map(encodeNode) } : {}) };
+    return { ...projected, ...(node.content ? { content: node.content.map(encodeNode) } : {}) };
   }
   function decodeNode(node) {
     if (typeof node === 'string') return paragraph(node);
     if (!node || typeof node !== 'object') throw new Error('Invalid document block.');
+    if (node.marks !== undefined) list(node.marks, 'block formatting marks', 64).forEach(requireMark);
     if (node.type === 'image' && node.assetId) {
       if (!assets.has(node.assetId)) throw new Error('Read the image in the document structure before reusing it.');
       return { ...structuredClone(assets.get(node.assetId)), attrs: { ...assets.get(node.assetId).attrs, ...(node.attrs || {}) } };
@@ -71,6 +78,7 @@ export function createEditorialTools(project, options = {}) {
     return { ...node, ...(node.content ? { content: list(node.content, 'block content', 300000).map(decodeNode) } : {}) };
   }
   function requireMark(mark) {
+    if (mark?.type === 'commentAnchor') throw new Error('Private comments cannot be added or changed by the writing assistant.');
     if (!mark || !schema.marks[mark.type]) throw new Error('Unsupported character formatting.');
     const attrs = mark.attrs || {};
     const allowed = schema.marks[mark.type].spec.attrs || {};
@@ -116,9 +124,9 @@ export function createEditorialTools(project, options = {}) {
         const lower = block.range.from + item.offset, upper = lower + item.text.length;
         const runs = (block.node.content || []).flatMap(node => {
           const length = node.type === 'text' ? node.text.length : 1, from = Math.max(offset, lower), to = Math.min(offset + length, upper), start = offset; offset += length;
-          return from < to ? [{ from: from - block.range.from, to: to - block.range.from, type: node.type, ...(node.type === 'text' ? { text: node.text.slice(from - start, to - start) } : {}), marks: node.marks || [] }] : [];
+          return from < to ? [{ from: from - block.range.from, to: to - block.range.from, type: node.type, ...(node.type === 'text' ? { text: node.text.slice(from - start, to - start) } : {}), marks: providerMarks(node.marks) }] : [];
         });
-        return { ...item, blockId: token(item.blockId), attrs: block.node.attrs || {}, runs };
+        return { ...item, blockId: token(item.blockId), attrs: structuredClone(block.node.attrs || {}), runs };
       });
       return { ...result, revision };
     },
@@ -154,6 +162,7 @@ export function createEditorialTools(project, options = {}) {
     format_text(args) {
       const marks = list(args.marks || [], 'formatting marks', 20), remove = list(args.remove || [], 'removed formatting', 20);
       marks.forEach(requireMark);
+      if (remove.includes('commentAnchor')) throw new Error('Private comments cannot be removed by the writing assistant.');
       if (remove.some(name => !schema.marks[name])) throw new Error('Unsupported removed formatting.');
       const targets = [];
       for (const block of blocks(args, true)) {

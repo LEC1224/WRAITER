@@ -27,13 +27,18 @@ const isDocumentAgentRequest = body => body.messages?.some(message => message.ro
           const block = records[0].result.blocks.at(-1);
           text = JSON.stringify({ done: false, message: 'Adding a sentence.', tools: [{ name: 'rewrite_passage', arguments: { blockId: block.blockId, before: block.text, after: block.text + ' Even the full stop wanted to know what happened next.', scope: 'active' } }] });
         } else text = JSON.stringify({ done: true, message: 'Added a playful sentence to the active chapter.', tools: [] });
-      } else text = /alternatives/i.test(prompt) ? JSON.stringify({ alternatives: [{ text: 'application', rating: 3 }, { text: 'program', rating: 2 }, { text: 'tool', rating: 2 }] }) : /wasnt/.test(prompt) ? 'The writer had a notebook full of ideas, but she wasn’t sure where to begin.' : 'a writer discovered a door hidden inside an unfinished sentence. She opened it and stepped into the story.';
+      } else text = /wasnt/.test(prompt) ? 'The writer had a notebook full of ideas, but she wasn’t sure where to begin.' : /alternatives/i.test(prompt) ? JSON.stringify({ alternatives: [{ text: 'application', rating: 3 }, { text: 'program', rating: 2 }, { text: 'tool', rating: 2 }] }) : 'a writer discovered a door hidden inside an unfinished sentence. She opened it and stepped into the story.';
       setTimeout(() => { if (!res.destroyed) res.end(JSON.stringify({ choices: [{ message: { content: text } }] })); }, delay);
     });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}/v1`;
   await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ ...defaults, setupComplete: true, tutorialComplete: true, enabled: true, continuous: false, provider: 'compatible', baseUrl, model: 'tutorial-test', taskProfiles: {} }));
+  // Begin with an existing manuscript. Typing the fixture through the editor
+  // before the tour would legitimately send it to the version-summary model,
+  // confusing that separate request with tutorial context isolation.
+  const original = { format: 'wraiter', version: 1, id: 'tutorial-original', title: 'Untitled manuscript', language: 'en-US', chapters: [{ id: 'opening', title: 'Chapter one', status: 'Draft', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'My original manuscript must stay exactly as it is.' }] }] } }] };
+  await fs.writeFile(path.join(userData, 'recovery.json'), JSON.stringify({ project: original, path: null, expectedHash: null }));
   const env = { ...process.env, WRAITER_USER_DATA: userData }; delete env.ELECTRON_RUN_AS_NODE;
   let app, page; const errors = [];
   const launch = async () => { app = await electron.launch({ ...(process.env.WRAITER_EXECUTABLE ? { executablePath: process.env.WRAITER_EXECUTABLE, args: [] } : { args: [root] }), env, timeout: 60000 }); page = await app.firstWindow(); page.on('pageerror', e => errors.push(e.message)); await page.getByRole('textbox', { name: 'Manuscript editor', exact: true }).waitFor(); };
@@ -44,7 +49,7 @@ const isDocumentAgentRequest = body => body.messages?.some(message => message.ro
   const next = name => page.getByRole('button', { name, exact: true }).click();
   try {
     await launch();
-    await editor().fill('My original manuscript must stay exactly as it is.');
+    assert.equal(await editor().innerText(), 'My original manuscript must stay exactly as it is.');
     await command('tutorial'); await step('welcome');
     assert.equal(await page.getByRole('dialog').count(), 0);
     assert.equal(await page.getByRole('tab', { name: /Learning WRAITER/ }).count(), 1);

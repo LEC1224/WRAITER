@@ -1,23 +1,41 @@
 import { documentExtensions } from '../electron/editor-schema.mjs';
 import React, { useEffect, useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
+import { Fragment, Slice } from '@tiptap/pm/model';
 
 import Placeholder from '@tiptap/extension-placeholder';
 import { GhostText, SearchHighlight, ghostKey } from './extensions.js';
 import { DEFAULT_HOTKEYS, shortcutFromEvent } from './hotkeys.js';
-import { associateHistoryContent, HISTORY_SELECTION_META } from './history.js';
+import { associateHistoryContent, HISTORY_GROUP_BREAK_META, HISTORY_SELECTION_META } from './history.js';
 import { Pagination, paginationKey, removePageBreakAtCursor } from './pagination.js';
 import { WordCount, wordCountKey } from './word-count.js';
 
 export const extensions = [...documentExtensions, Placeholder.configure({ placeholder: 'Start writing…' }), GhostText, SearchHighlight, WordCount, Pagination];
+// Ordinary text copying does not duplicate a note or expose its internal ID.
+function withoutCommentAnchors(slice) {
+  const clean = node => {
+    const marks = node.marks.filter(mark => mark.type.name !== 'commentAnchor');
+    return (node.isLeaf ? node : node.copy(Fragment.fromArray(Array.from({ length: node.childCount }, (_, index) => clean(node.child(index)))))).mark(marks);
+  };
+  return new Slice(Fragment.fromArray(Array.from({ length: slice.content.childCount }, (_, index) => clean(slice.content.child(index)))), slice.openStart, slice.openEnd);
+}
 export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onReady, onChange, onSelection, onAction }) {
   const callbacks = useRef({ onReady, onChange, onSelection, onAction, prefs });
   const toolbarFrame = useRef(0);
+  const selectionBoundary = useRef(true);
   callbacks.current = { onReady, onChange, onSelection, onAction, prefs };
   const editor = useEditor({
     extensions, content: chapter.content,
     editorProps: {
       attributes: { class: 'manuscript', 'aria-label': 'Manuscript editor', role: 'textbox', 'aria-multiline': 'true', spellcheck: String(prefs.spellcheck), lang: prefs.language },
+      transformCopied: withoutCommentAnchors,
+      transformPasted: withoutCommentAnchors,
+      handleClick(_view, _position, event) {
+        if (event.button !== 0) return false;
+        const anchor = event.target.closest?.('[data-comment-id]');
+        if (anchor) callbacks.current.onAction('comment:' + anchor.getAttribute('data-comment-id'));
+        return false;
+      },
       handleKeyDown(view, event) {
         const ghost = ghostKey.getState(view.state);
         const keys = { ...DEFAULT_HOTKEYS, ...callbacks.current.prefs.hotkeys }, pressed = shortcutFromEvent(event);
@@ -56,10 +74,15 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
       }
     },
     onUpdate: ({ editor, transaction, appendedTransactions }) => {
+      transaction.setMeta(HISTORY_GROUP_BREAK_META, selectionBoundary.current);
+      selectionBoundary.current = false;
       const content = associateHistoryContent(editor.getJSON(), editor.state.doc);
       callbacks.current.onChange(content, editor, transaction, { appendedTransactions, wordCount: wordCountKey.getState(editor.state) });
     },
-    onSelectionUpdate: ({ editor }) => callbacks.current.onSelection(editor.state.selection),
+    onSelectionUpdate: ({ editor, transaction }) => {
+      if (!transaction?.docChanged) selectionBoundary.current = true;
+      callbacks.current.onSelection(editor.state.selection);
+    },
     onTransaction: () => {
       if (!toolbarFrame.current) toolbarFrame.current = requestAnimationFrame(() => { toolbarFrame.current = 0; callbacks.current.onAction('toolbar-refresh'); });
     }

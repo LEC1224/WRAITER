@@ -17,7 +17,8 @@ const children = {
   table: new Set(['tableRow']), tableRow: new Set(['tableCell', 'tableHeader']), tableCell: blocks, tableHeader: blocks
 };
 const leaves = new Set(['text', 'hardBreak', 'horizontalRule', 'image']);
-const marks = new Set(['bold', 'italic', 'underline', 'strike', 'code', 'link', 'textStyle', 'highlight']);
+const marks = new Set(['bold', 'italic', 'underline', 'strike', 'code', 'link', 'textStyle', 'highlight', 'commentAnchor']);
+const commentIdPattern = /^[A-Za-z0-9_-]{1,200}$/;
 function validateAttrs(attrs) {
   if (attrs == null) return;
   if (!object(attrs)) invalid('Invalid text formatting.');
@@ -40,10 +41,11 @@ function validateContent(doc, budget) {
     if (node.type === 'image' && (typeof node.attrs?.src !== 'string' || !/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/\s]+=*$/i.test(node.attrs.src))) invalid('Native images must be embedded PNG, JPEG, WEBP, or GIF data.');
     if (node.attrs?.textAlign != null && !['left', 'right', 'center', 'justify'].includes(node.attrs.textAlign)) invalid('Unsupported text alignment.');
     if (node.marks != null) {
-      if (!Array.isArray(node.marks) || node.marks.length > 20) invalid('Invalid text marks.');
+      if (!Array.isArray(node.marks) || node.marks.length > 64) invalid('Invalid text marks.');
       for (const mark of node.marks) {
         if (!object(mark) || !marks.has(mark.type)) invalid('Unsupported text mark.');
         validateAttrs(mark.attrs);
+        if (mark.type === 'commentAnchor' && (!object(mark.attrs) || typeof mark.attrs.id !== 'string' || !commentIdPattern.test(mark.attrs.id) || Object.keys(mark.attrs).some(key => key !== 'id'))) invalid('Invalid comment anchor.');
         if (mark.type === 'link' && (typeof mark.attrs?.href !== 'string' || !/^(https?:|mailto:)/i.test(mark.attrs.href))) invalid('Links must use http, https, or mailto.');
       }
     }
@@ -104,6 +106,22 @@ function validateChapters(chapters, budget) {
     ids.add(chapter.id); validateContent(chapter.content, budget);
   }
 }
+function validateComments(comments = []) {
+  if (!Array.isArray(comments) || comments.length > 5000) invalid('Invalid comment list.');
+  const ids = new Set();
+  for (const comment of comments) {
+    if (!object(comment) || typeof comment.id !== 'string' || !commentIdPattern.test(comment.id) || ids.has(comment.id)) invalid('Invalid or duplicated comment.');
+    ids.add(comment.id);
+    string(comment.chapterId, 'comment chapter identifier', 200, true);
+    string(comment.text, 'comment text', 20000, true);
+    string(comment.quote, 'comment passage', 2000);
+    if (typeof comment.resolved !== 'boolean') invalid('Invalid comment state.');
+    for (const field of ['createdAt', 'updatedAt']) {
+      string(comment[field], `comment ${field}`, 100, true);
+      if (!Number.isFinite(Date.parse(comment[field]))) invalid('Invalid comment date.');
+    }
+  }
+}
 function validateProject(project) {
   if (!project || project.format !== 'wraiter' || project.version !== 1) throw new Error('This is not a supported WRAITER document.');
   string(project.id, 'document identifier', 200, true); string(project.title, 'document title', 2000);
@@ -112,7 +130,7 @@ function validateProject(project) {
     const style = project.documentStyle;
     if (!object(style) || typeof style.fontFamily !== 'string' || style.fontFamily.length > 200 || !Number.isFinite(style.fontSize) || style.fontSize < 6 || style.fontSize > 96 || !Number.isFinite(style.lineHeight) || style.lineHeight < 1 || style.lineHeight > 3) invalid('Invalid document formatting defaults.');
   }
-  const budget = { count: 0 }; validateChapters(project.chapters, budget); validateReferences(project.references); validateChats(project.chats, project.activeChatId);
+  const budget = { count: 0 }; validateChapters(project.chapters, budget); validateReferences(project.references); validateChats(project.chats, project.activeChatId); validateComments(project.comments);
   if (project.snapshots != null) {
     if (!Array.isArray(project.snapshots) || project.snapshots.length > 20) invalid('Invalid snapshot history.');
     const ids = new Set();
@@ -121,7 +139,7 @@ function validateProject(project) {
       string(snapshot.id, 'snapshot identifier', 200, true); string(snapshot.name, 'snapshot name', 2000); string(snapshot.title, 'snapshot title', 2000); string(snapshot.createdAt, 'snapshot date', 100, true);
       if (ids.has(snapshot.id)) invalid('A snapshot is duplicated.'); ids.add(snapshot.id);
       for (const field of ['notes', 'style']) if (snapshot[field] != null) string(snapshot[field], field);
-      validateChapters(snapshot.chapters, budget); validateReferences(snapshot.references);
+      validateChapters(snapshot.chapters, budget); validateReferences(snapshot.references); validateComments(snapshot.comments);
     }
   }
   let json; try { json = JSON.stringify(project, null, 2); } catch { invalid('This document contains invalid JSON.'); }
@@ -212,10 +230,23 @@ class DocumentStore {
     return { path: this.currentPath, savedAt: new Date().toISOString() };
   }
 }
+const DEFAULT_SUGGESTION_COUNTS = { translation: 3, correction: 1, rephrase: 3 };
+function getSuggestionCounts(request) {
+  return Object.fromEntries(Object.entries(DEFAULT_SUGGESTION_COUNTS).map(([kind, fallback]) => {
+    const value = request.suggestionCounts?.[kind];
+    return [kind, Number.isInteger(value) && value >= 1 && value <= 8 ? value : fallback];
+  }));
+}
+function getSuggestionLimit(request, kind) {
+  const counts = getSuggestionCounts(request);
+  if (Object.hasOwn(counts, kind)) return counts[kind];
+  return Math.max(counts.translation, request.mode === 'correct' ? counts.correction : counts.rephrase);
+}
 function validateRequest(request) {
   if (!object(request) || !['continue', 'correct', 'rewrite', 'chat'].includes(request.mode)) throw new Error('Unknown writing action.');
   string(request.id, 'request identifier', 200, true);
-  if (request.alternatives != null && (typeof request.alternatives !== 'boolean' || request.mode !== 'rewrite')) throw new Error('Alternatives are only available for selection rephrasing.');
+  if (request.alternatives != null && (typeof request.alternatives !== 'boolean' || !['correct', 'rewrite'].includes(request.mode))) throw new Error('Alternatives are only available for selection correction or rephrasing.');
+  if (request.suggestionCounts != null && (!request.alternatives || !object(request.suggestionCounts) || Object.entries(request.suggestionCounts).some(([kind, value]) => !Object.hasOwn(DEFAULT_SUGGESTION_COUNTS, kind) || !Number.isInteger(value) || value < 1 || value > 8))) throw new Error('Invalid suggestion counts. Choose whole numbers from 1 to 8.');
   for (const field of ['before', 'after', 'selection', 'instruction', 'style', 'language', 'nativeLanguage']) if (request[field] != null) string(request[field], `request ${field}`);
   if (request.references != null && (!Array.isArray(request.references) || request.references.length > 20 || request.references.some(r => !object(r) || typeof r.name !== 'string' || typeof r.text !== 'string'))) throw new Error('Invalid AI references.');
   if (request.history != null && (!Array.isArray(request.history) || request.history.some(x => typeof x !== 'string'))) throw new Error('Invalid suggestion history.');
@@ -242,9 +273,14 @@ function buildPrompt(request) {
   task += `\nThe document's content language is ${language}. Use this language and its spelling conventions.`;
   if (nativeLanguage && ['rewrite', 'correct'].includes(mode)) task += `\nThe author's native language is ${nativeLanguage}. If the selected word or phrase is in ${nativeLanguage} and differs from the document language ${language}, translate ONLY that selected text naturally into ${language}, using the nearby sentence for context. Otherwise perform the requested correction or rephrasing in ${language}. Do not translate names or text already in the document language unnecessarily.`;
   if (guidance) task += `\nThe author included these bracketed editing instructions: ${guidance}\nFollow them for this selection. Do not include the brackets or their instruction text in the replacement.`;
-  if (mode === 'rewrite' && request.alternatives) task += '\nFor this request, return ONLY JSON: {"alternatives":[{"text":"replacement","rating":3},{"text":"another replacement","rating":2},{"text":"another replacement","rating":1}]}. Offer three distinct, natural alternatives when possible; fewer is better than inventing misleading synonyms. Each text replaces ONLY the selection and must fit grammatically into its surrounding sentence. Translate a foreign-language selection into the content language when appropriate. Rate contextual fit from 1 to 3 stars: 3 = strongest fit, 2 = good alternative, 1 = plausible but weaker. Ratings are your editorial judgment, not certainty or probabilities; ties are allowed. Rank strongest first. Preserve meaning and do not supply incorrect translations merely to fill the list. No explanations, labels, or star characters inside replacement text. This JSON format overrides the single-replacement output instruction above.';
+  if (['correct', 'rewrite'].includes(mode) && request.alternatives) {
+    const counts = getSuggestionCounts(request), kind = mode === 'correct' ? 'correction' : 'rephrase';
+    task += `\nFor this request, return ONLY JSON: {"kind":"${kind}","currentRating":3,"alternatives":[{"text":"replacement","rating":3,"description":"A brief note about this choice."}]}. First decide whether the selection needs translation into the document language. For translations, set kind to "translation" and aim for ${counts.translation} distinct translations. Otherwise set kind to "${kind}" and aim for ${counts[kind]} distinct ${mode === 'correct' ? 'minimal corrections' : 'natural rephrasings'}. These counts are targets, not quotas: fewer is better than inventing misleading or redundant choices.`;
+    if (mode === 'correct') task += ' Every correction must stay limited to spelling, punctuation, and necessary grammar. Preserve the original wording and intentional dialogue/fragments; do not offer stylistic rephrasings to fill the list. Correction descriptions explain what was corrected.';
+    task += ' Always include currentRating: your rating of the unchanged SELECTED TEXT in its surrounding sentence and document language, taking any author guidance into account. Rate the current phrase and every alternative on the same scale; the original can be the strongest choice or tie with an alternative. Do not assume a replacement is better just because one was requested. If no useful different wording is available, return an empty alternatives array with currentRating. Do not repeat the original selection as an alternative. Each text replaces ONLY the selection and must fit grammatically into its surrounding sentence. Translate a foreign-language selection into the content language when appropriate. For every alternative, supply a description: one short, plain-language sentence of at most 25 words explaining its specific tone, register, emphasis, or shade of meaning compared with the original selection in this sentence. For translations, explain the nuance of the translated wording and any relevant ambiguity. Highlight any added or narrowed implication, such as age, formality, or focus on a group versus a species. Describe the likely reading in context; do not present a subjective impression as a universal definition or invent a difference between near-equivalent choices. Avoid generic praise, rating justifications, and repeated replacement text. Keep descriptions in the document language, as plain text without markdown, labels, or star characters. Rate contextual fit from 1 to 3 stars: 3 = excellent fit, 2 = good fit, 1 = weaker fit that could be improved. Ratings are your editorial judgment, not certainty or probabilities; ties are allowed. Rank alternatives strongest first. Preserve meaning and do not supply incorrect translations merely to fill the list. Descriptions belong only in the description field; no explanations, labels, or star characters inside replacement text. This JSON format overrides the single-replacement output instruction above.';
+  }
   const localSelection = ['correct', 'rewrite'].includes(mode);
-  const nearbyWords = request.alternatives ? 80 : 10;
+  const nearbyWords = mode === 'rewrite' && request.alternatives ? 80 : 10;
   const beforeContext = localSelection ? (before.match(/\S+\s*/g) || []).slice(-nearbyWords).join('') : contextBefore(before, contextWords);
   let body = `${task}\n\nREFERENCE MATERIAL:\n${refText || '(none)'}\n\nTEXT BEFORE CURSOR:\n${beforeContext}`;
   if (mode !== 'continue') body += `\n\nSELECTED TEXT:\n${selectedText.slice(0, 16000)}\n\nTEXT AFTER CURSOR:\n${localSelection ? (after.match(/\S+\s*/g) || []).slice(0, nearbyWords).join('') : after.slice(0, 10000)}`;
@@ -268,4 +304,4 @@ function cleanResult(text, mode, words = 35, request = {}) {
   }
   return result;
 }
-module.exports = { hash, validateProject, validateRequest, atomicWrite, readLimited, buildPrompt, cleanResult, contextBefore, DocumentStore, samePath, safeFilename, MAX_DOCUMENT_BYTES };
+module.exports = { hash, validateProject, validateRequest, atomicWrite, readLimited, buildPrompt, cleanResult, contextBefore, DocumentStore, samePath, safeFilename, MAX_DOCUMENT_BYTES, DEFAULT_SUGGESTION_COUNTS, getSuggestionCounts, getSuggestionLimit };

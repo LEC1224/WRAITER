@@ -10,6 +10,7 @@ import { exportScope, titleOptions } from './formats/scope.js';
 import { addStructure, readStructure, loadOfficePackage } from './formats/package.js';
 import { formatLosses } from './formats/losses.js';
 import { chatDocument, chatFormats } from './formats/chat.js';
+import { stripCommentAnchors } from '../electron/comments.mjs';
 export { exportScope } from './formats/scope.js';
 
 const escape = text => String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -450,7 +451,14 @@ export async function importDocument(payload, extensions) {
   return { project, warning, fidelity };
 }
 
+function publicationProject(source) {
+  const project = { ...source, chapters: source.chapters.map(chapter => ({ ...chapter, content: stripCommentAnchors(chapter.content) })) };
+  delete project.comments;
+  return project;
+}
+
 export function publicationHTML(project, extensions, options = {}) {
+  project = publicationProject(project);
   const titles = titleOptions(options), preset = options.pdfPreset || 'standard', dark = options.colorMode === 'dark';
   const pages = { standard: { size: 'A4', margin: '22mm', width: '720px', sizeScale: 1 }, desktop: { size: '180mm 255mm', margin: '18mm', width: '680px', sizeScale: 1.08 }, mobile: { size: '105mm 187mm', margin: '9mm 8mm', width: '100%', sizeScale: 1 } };
   const page = pages[preset] || pages.standard;
@@ -575,7 +583,9 @@ export async function exportPayload(source, format, extensions, options = {}) {
   if (format === 'pdf-desktop') options = { ...options, pdfPreset: 'desktop' };
   if (format === 'pdf-mobile') options = { ...options, pdfPreset: 'mobile' };
   format = aliases[format] || format;
-  const project = exportScope(source, options), titles = titleOptions(options), lossWarnings = formatLosses(project, format);
+  // Strip after scoping: a selected document can contain anchors independently
+  // of the source chapters. Native JSON and companion state keep the originals.
+  const project = publicationProject(exportScope(source, options)), titles = titleOptions(options), lossWarnings = formatLosses(project, format);
   if (format === 'rich-text') {
     const html = (titles.includeTitle ? `<h1>${escape(project.title)}</h1>` : '') + project.chapters.map(chapter => (titles.includeChapterTitles ? `<h2>${escape(chapter.title)}</h2>` : '') + safeHTML(generateHTML(chapter.content, extensions))).join('');
     const container = document.createElement('div'); container.innerHTML = html;

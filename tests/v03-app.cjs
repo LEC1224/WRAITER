@@ -30,7 +30,7 @@ const envelope = (tools = [], message = 'Removed 3 repeated-space runs across bo
     res.end(JSON.stringify(req.url === '/api/generate' ? { response: reply } : { message: { content: JSON.stringify({ completion: reply }) } }));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); const baseUrl = `http://127.0.0.1:${server.address().port}`;
-  await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ ...defaults, enabled: true, continuous: false, provider: 'ollama', model: 'mock-agent', baseUrl, ollamaMode: 'raw', taskProfiles: { chat: { provider: 'ollama', baseUrl, model: 'mock-agent' } }, keys: {} }));
+  await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ ...defaults, setupComplete: true, tutorialComplete: true, enabled: true, continuous: false, provider: 'ollama', model: 'mock-agent', baseUrl, ollamaMode: 'raw', taskProfiles: { chat: { provider: 'ollama', baseUrl, model: 'mock-agent' } }, keys: {} }));
   await fs.writeFile(path.join(userData, 'recovery.json'), JSON.stringify({ project: fixture(), path: null, expectedHash: null }));
   const env = { ...process.env, WRAITER_USER_DATA: userData }; delete env.ELECTRON_RUN_AS_NODE;
   const launchOptions = process.env.WRAITER_EXECUTABLE ? { executablePath: process.env.WRAITER_EXECUTABLE, args: [], env, timeout: 60000 } : { args: [root], env, timeout: 60000 };
@@ -54,9 +54,11 @@ const envelope = (tools = [], message = 'Removed 3 repeated-space runs across bo
     const target = path.join(userData, filename); await destination(target); await menu('File', 'Export…');
     await page.getByRole('combobox', { name: 'Export scope', exact: true }).selectOption(scope); await page.getByRole('combobox', { name: 'Export format', exact: true }).selectOption(format);
     await page.getByRole('dialog').getByRole('button', { name: 'Export', exact: true }).click(); await waitFor(async () => (await fs.stat(target)).size > 0, `${format} ${scope} export`);
+    // The file can appear before the IPC reply closes the export dialog.
+    await page.getByRole('dialog', { name: 'Export document', exact: true }).waitFor({ state: 'hidden' });
     // Informational format-fidelity notices are allowed, and must be dismissed
     // before the next real native-menu workflow.
-    const closeNotice = page.getByRole('dialog').getByRole('button', { name: /^(Close(?: dialog)?|OK|Got it|Continue writing)$/ }); if (await closeNotice.count()) await closeNotice.first().click();
+    const closeNotice = page.getByRole('dialog', { name: 'Export details', exact: true }).getByRole('button', { name: /^(Close(?: dialog)?|OK|Got it|Continue writing)$/ }); if (await closeNotice.count()) await closeNotice.first().click();
     return target;
   };
   try {
@@ -86,11 +88,11 @@ const envelope = (tools = [], message = 'Removed 3 repeated-space runs across bo
     await waitFor(async () => { const value = await recover(); return textOf(value.chapters[0].content).includes('Alpha first') && textOf(value.chapters[1].content).includes('Other second'); }, 'redo survives process restart');
     passed.push('One Ctrl+Z reverses the entire agent operation; Ctrl+Y reapplies it after restarting WRAITER.');
     await editor.click(); await page.keyboard.press('Control+End'); await page.keyboard.type('xyz', { delay: 45 });
-    await page.keyboard.press('Control+z'); await waitFor(async () => textOf((await recover()).chapters[0].content).endsWith('xy'), 'atomic character undo');
+    await page.keyboard.press('Control+z'); await waitFor(async () => textOf((await recover()).chapters[0].content).endsWith('Another sentence.'), 'word-sized typing undo');
     await app.close(); app = null; await launch(); await chapter('First chapter').click(); await editor.click(); await page.keyboard.press('Control+y');
-    await waitFor(async () => textOf((await recover()).chapters[0].content).endsWith('xyz'), 'typed-character redo across sessions');
-    await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z'); await page.keyboard.press('Control+z'); await waitFor(async () => textOf((await recover()).chapters[0].content).endsWith('Another sentence.'), 'typing test restored');
-    passed.push('Individual typing transactions remain undoable and redoable between sessions.');
+    await waitFor(async () => textOf((await recover()).chapters[0].content).endsWith('xyz'), 'word-sized typing redo across sessions');
+    await page.keyboard.press('Control+z'); await waitFor(async () => textOf((await recover()).chapters[0].content).endsWith('Another sentence.'), 'typing test restored');
+    passed.push('One Ctrl+Z reverses a typed word; Ctrl+Y restores it across sessions.');
     const selectionText = 'first'; await selectText(selectionText); const selected = await exportFile('bbcode', 'selection', 'Selected - BBCode.txt');
     const bbcode = await fs.readFile(selected, 'utf8'); assert.match(bbcode, /\[b\]first\[\/b\]/); assert.ok(!bbcode.includes('Alpha') && !bbcode.includes('Other'));
     const current = await exportFile('txt', 'chapter', 'One chapter.txt'); const currentText = await fs.readFile(current, 'utf8'); assert.ok(currentText.includes('Alpha first paragraph.') && !currentText.includes('Other second chapter.'));

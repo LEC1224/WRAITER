@@ -177,6 +177,105 @@ export async function runIOTests() {
     const twice = await importDocument({ name: 'Markdown', extension: '.md', bytes: new TextEncoder().encode(exported.data) }, extensions);
     assert(nodeText(twice.project.chapters[0].content) === nodeText(imported.project.chapters[0].content), 'Repeated Markdown save changed visible wording: ' + JSON.stringify([nodeText(imported.project.chapters[0].content), nodeText(twice.project.chapters[0].content), exported.data]));
   });
+  await test('Highlight and imported background colours survive HTML and office roundtrips without editor translucency', async () => {
+    const highlighted = newProject(); highlighted.chapters[0].content = { type: 'doc', content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Custom highlight.', marks: [{ type: 'bold' }, { type: 'highlight', attrs: { color: '#12abef' } }] }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Imported background.', marks: [{ type: 'textStyle', attrs: { backgroundColor: '#8de5a1' } }] }] }
+    ] };
+    const html = await exportPayload(highlighted, 'html', extensions, { nativeSave: true });
+    const exportedDOM = new DOMParser().parseFromString(html.html, 'text/html');
+    assert(exportedDOM.querySelector('mark')?.style.backgroundColor === 'rgb(18, 171, 239)' && exportedDOM.querySelector('span[style*="background-color"]')?.style.backgroundColor === 'rgb(141, 229, 161)', 'HTML changed the selected colours');
+    assert(!html.html.includes('color-mix(') && !html.html.includes('--wraiter-highlight-color'), 'Editor appearance leaked into publication HTML');
+    for (const format of ['html', 'odt', 'docx']) {
+      const encoded = format === 'html' ? html : await exportPayload(highlighted, format, extensions, { nativeSave: true });
+      if (format !== 'html') {
+        const zip = await JSZip.loadAsync(encoded.data), source = await zip.file(format === 'odt' ? 'content.xml' : 'word/document.xml').async('string');
+        assert(source.toLowerCase().includes('12abef') && source.toLowerCase().includes('8de5a1') && !source.includes('color-mix('), format + ' changed highlight shading');
+      }
+      const restored = await importDocument({ name: 'Colour roundtrip', extension: '.' + format, bytes: format === 'html' ? new TextEncoder().encode(encoded.data) : encoded.data }, extensions);
+      importedProjects.push(restored.project);
+      const nodes = all(restored.project.chapters[0].content), colours = nodes.flatMap(node => (node.marks || []).map(mark => mark.type === 'highlight' ? mark.attrs?.color : mark.attrs?.backgroundColor)).filter(Boolean);
+      const context = document.createElement('canvas').getContext('2d'), normalized = colours.map(colour => { context.fillStyle = colour; return context.fillStyle; });
+      assert(normalized.includes('#12abef') && normalized.includes('#8de5a1'), format + ' lost original highlight colours: ' + JSON.stringify(colours));
+      assert(nodeText(restored.project.chapters[0].content) === nodeText(highlighted.chapters[0].content), format + ' changed highlighted words');
+    }
+    const legacy = await importDocument({ name: 'Imported CSS background', extension: '.html', bytes: new TextEncoder().encode('<p><span style="background-color: rgb(141, 229, 161)">Legacy background</span></p><p><mark data-color="blue">Named highlight</mark></p>') }, extensions);
+    importedProjects.push(legacy.project);
+    const nodes = all(legacy.project.chapters[0].content);
+    assert(nodes.some(node => node.marks?.some(mark => mark.type === 'textStyle' && mark.attrs.backgroundColor === 'rgb(141, 229, 161)')), 'RGB background import lost its colour');
+    assert(nodes.some(node => node.marks?.some(mark => mark.type === 'highlight' && mark.attrs.color === 'blue')), 'Named highlight import lost its colour');
+  });
+  await test('Comments stay private in publication, rich clipboard, Office, EPUB and scoped exports', async () => {
+    const annotated = newProject(); annotated.title = 'Public manuscript';
+    const marks = [{ type: 'bold' }, { type: 'underline' }, { type: 'textStyle', attrs: { fontFamily: 'Georgia', fontSize: '16pt', color: '#123456' } }, { type: 'highlight', attrs: { color: '#12abef' } }, { type: 'link', attrs: { href: 'https://example.com/public' } }];
+    annotated.chapters[0].content = { type: 'doc', content: [{ type: 'paragraph', attrs: { textAlign: 'center', spaceAfter: 12 }, content: [{ type: 'text', text: 'Commented wording.', marks: [...marks, { type: 'commentAnchor', attrs: { id: 'private-comment-id-one' } }, { type: 'commentAnchor', attrs: { id: 'private-comment-id-two' } }] }] }] };
+    annotated.comments = [{ id: 'private-comment-id-one', chapterId: annotated.chapters[0].id, text: 'PRIVATE COMMENT BODY: revise this scene', resolved: false }, { id: 'private-comment-id-two', chapterId: annotated.chapters[0].id, text: 'PRIVATE RESOLVED COMMENT: keep this draft instruction', resolved: true }];
+    const selectionDoc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Selected wording.', marks: [...marks, { type: 'commentAnchor', attrs: { id: 'private-selection-comment-id' } }] }] }] };
+    const before = JSON.stringify(annotated), selectedBefore = JSON.stringify(selectionDoc);
+    const forbidden = ['private-comment-id-one', 'private-comment-id-two', 'private-selection-comment-id', 'PRIVATE COMMENT BODY', 'PRIVATE RESOLVED COMMENT', 'comment-anchor', 'data-comment-id', 'commentAnchor'];
+    const privateFree = (value, label) => { for (const secret of forbidden) assert(!String(value).includes(secret), `${label} exposed ${secret}`); };
+    privateFree(publicationHTML(annotated, extensions), 'Direct publicationHTML');
+    for (const format of ['html', 'pdf', 'rich-text', 'epub', 'docx', 'odt', 'txt', 'md', 'bbcode', 'discord', 'telegram-md', 'telegram-html']) {
+      for (const nativeSave of [false, true]) for (const scope of ['manuscript', 'selection']) {
+        const options = { nativeSave, scope, selectionDoc, chapterId: annotated.chapters[0].id }, payload = await exportPayload(annotated, format, extensions, options);
+        const expected = scope === 'selection' ? 'Selected wording.' : 'Commented wording.';
+        privateFree(JSON.stringify({ ...payload, data: undefined }), `${format} payload metadata`);
+        if (['epub', 'docx', 'odt'].includes(format)) {
+          const zip = await JSZip.loadAsync(payload.data), parts = await Promise.all(Object.values(zip.files).filter(part => !part.dir).map(part => part.async('string')));
+          parts.forEach((part, index) => privateFree(part, `${format} package part ${index}`));
+          let visibleParts = parts;
+          if (format === 'odt') {
+            const xml = new DOMParser().parseFromString(await zip.file('content.xml').async('string'), 'application/xml'), textNS = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
+            for (const space of [...xml.getElementsByTagNameNS(textNS, 's')]) space.replaceWith(xml.createTextNode(' '.repeat(Number(space.getAttributeNS(textNS, 'c')) || 1)));
+            visibleParts = [xml.getElementsByTagNameNS('urn:oasis:names:tc:opendocument:xmlns:office:1.0', 'text')[0].textContent];
+          }
+          assert(visibleParts.some(part => part.includes(expected)), `${format} lost the annotated wording`);
+          if (scope === 'selection') assert(visibleParts.every(part => !part.includes('Commented wording.')), `${format} selection exported other chapter text`);
+        } else {
+          privateFree(payload.data, `${format} document`);
+          const visible = format === 'telegram-md' ? payload.data.replace(/\\([^\r\n])/g, '$1') : payload.data;
+          assert(visible.includes(expected), `${format} lost the annotated wording`);
+          if (scope === 'selection') assert(!visible.includes('Commented wording.'), `${format} selection exported other chapter text`);
+          if (format === 'rich-text') { privateFree(payload.clipboardHTML, 'Rich clipboard HTML'); privateFree(payload.clipboardText, 'Rich clipboard text'); }
+        }
+      }
+    }
+    assert(JSON.stringify(annotated) === before && JSON.stringify(selectionDoc) === selectedBefore, 'Export altered native comments or their anchors');
+  });
+  await test('Removing export comment anchors retains public words, typography, highlights and links', async () => {
+    const annotated = newProject();
+    annotated.chapters[0].content = { type: 'doc', content: [{ type: 'paragraph', attrs: { textAlign: 'center' }, content: [{ type: 'text', text: 'Formatted annotated passage.', marks: [{ type: 'commentAnchor', attrs: { id: 'private-style-comment-id' } }, { type: 'bold' }, { type: 'underline' }, { type: 'textStyle', attrs: { fontFamily: 'Georgia', fontSize: '16pt', color: '#123456' } }, { type: 'highlight', attrs: { color: '#12abef' } }, { type: 'link', attrs: { href: 'https://example.com/public' } }] }] }] };
+    annotated.comments = [{ id: 'private-style-comment-id', chapterId: annotated.chapters[0].id, text: 'Private editorial instructions', resolved: false }];
+    for (const format of ['html', 'rich-text', 'epub']) {
+      const payload = await exportPayload(annotated, format, extensions, { nativeSave: true });
+      const html = format === 'epub' ? await (await JSZip.loadAsync(payload.data)).file('EPUB/chapter-1.xhtml').async('string') : payload.clipboardHTML || payload.html;
+      const dom = new DOMParser().parseFromString(html, 'text/html');
+      assert(dom.querySelector('strong')?.textContent === 'Formatted annotated passage.' && dom.querySelector('u'), `${format} removed emphasis with the comment`);
+      assert(dom.querySelector('a')?.getAttribute('href') === 'https://example.com/public', `${format} removed the public link`);
+      assert(dom.querySelector('mark')?.style.backgroundColor === 'rgb(18, 171, 239)', `${format} changed the highlight colour`);
+      const run = [...dom.querySelectorAll('span[style]')].find(span => span.style.fontFamily === 'Georgia');
+      assert(run?.style.fontSize === '16pt' && run.style.color === 'rgb(18, 52, 86)', `${format} changed individual typography`);
+    }
+    for (const format of ['html', 'docx', 'odt']) {
+      const payload = await exportPayload(annotated, format, extensions, { nativeSave: true });
+      if (format !== 'html') {
+        const zip = await JSZip.loadAsync(payload.data), xml = await zip.file(format === 'odt' ? 'content.xml' : 'word/document.xml').async('string');
+        assert(format === 'odt' ? xml.includes('style:text-underline-style="solid"') : xml.includes('<w:u '), `${format} export removed public underlining`);
+      }
+      const bytes = typeof payload.data === 'string' ? new TextEncoder().encode(payload.data) : payload.data;
+      const restored = await importDocument({ name: 'Public annotated copy', extension: '.' + format, bytes }, extensions);
+      importedProjects.push(restored.project);
+      assert(nodeText(restored.project.chapters[0].content) === nodeText(annotated.chapters[0].content), `${format} changed public wording`);
+      const nodes = all(restored.project.chapters[0].content), run = nodes.find(node => node.type === 'text' && node.text === 'Formatted annotated passage.');
+      assert(run?.marks?.some(mark => mark.type === 'bold') && (format === 'odt' || run.marks.some(mark => mark.type === 'underline')), `${format} lost public emphasis`);
+      assert(run.marks.some(mark => mark.type === 'textStyle' && mark.attrs.fontFamily === 'Georgia' && ['16pt', '21.3333px'].includes(mark.attrs.fontSize)), `${format} lost public font or size`);
+      assert(!nodes.some(node => node.marks?.some(mark => mark.type === 'commentAnchor')), `${format} imported orphan private anchors`);
+      assert(!JSON.stringify(restored.project).includes('private-style-comment-id') && !JSON.stringify(restored.project).includes('Private editorial instructions'), `${format} imported private comment metadata`);
+      const colours = run.marks.flatMap(mark => [mark.attrs?.color, mark.attrs?.backgroundColor]).filter(Boolean), context = document.createElement('canvas').getContext('2d');
+      const normalized = colours.map(value => { context.fillStyle = value; return context.fillStyle; });
+      assert(normalized.includes('#123456') && normalized.includes('#12abef'), `${format} lost public text or highlight colours`);
+    }
+  });
   await test('Native plain text preserves UTF-16 encoding, line endings and trailing newline', async () => {
     const value = 'Första raden\r\nSecond line\r\n';
     const bytes = new Uint8Array([255, 254, ...Array.from(value).flatMap(c => [c.charCodeAt(0) & 255, c.charCodeAt(0) >> 8])]);

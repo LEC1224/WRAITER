@@ -6,6 +6,7 @@ import { Selection } from '@tiptap/pm/state';
 const IGNORED = new Set(['updatedAt', 'historySequence', 'snapshots', 'chats', 'activeChatId', 'binding', 'fileBinding', 'nativeBinding']);
 export const HISTORY_REPLAY_META = 'wraiterHistoryReplay';
 export const HISTORY_SELECTION_META = 'wraiterHistorySelectionBefore';
+export const HISTORY_GROUP_BREAK_META = 'wraiterHistoryGroupBreak';
 const clone = value => value === undefined ? undefined : structuredClone(value);
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const id = () => globalThis.crypto.randomUUID();
@@ -133,6 +134,7 @@ function matchingFingerprint(value, expected) {
 
 function validateEntry(entry) {
   if (!entry || typeof entry.id !== 'string' || !entry.id || typeof entry.label !== 'string' || typeof entry.timestamp !== 'string' || !Number.isFinite(Date.parse(entry.timestamp)) || typeof entry.beforeFingerprint !== 'string' || typeof entry.afterFingerprint !== 'string' || entry.chapterTitle != null && typeof entry.chapterTitle !== 'string' || entry.summary != null && typeof entry.summary !== 'string') throw new HistoryMismatchError('An editing journal entry is unreadable.');
+  if (entry.groupId != null && (entry.kind !== 'steps' || typeof entry.groupId !== 'string' || !entry.groupId)) throw new HistoryMismatchError('An editing journal entry has an invalid undo group.');
   if (entry.kind === 'steps') {
     if (typeof entry.chapterId !== 'string' || !entry.chapterId || !Array.isArray(entry.forward) || !entry.forward.length || !Array.isArray(entry.inverse) || entry.inverse.length !== entry.forward.length || [...entry.forward, ...entry.inverse].some(step => !step || typeof step.stepType !== 'string') || typeof entry.beforeDocFingerprint !== 'string' || typeof entry.afterDocFingerprint !== 'string') throw new HistoryMismatchError('An editing journal entry has invalid document operations.');
   } else if (entry.kind === 'project') {
@@ -213,6 +215,54 @@ function labelFor(steps, transaction) {
   return 'Edit document';
 }
 
+const TYPING_GROUP_PAUSE_MS = 2500;
+const punctuation = /[\p{P}\p{S}]/u;
+const whitespace = /\s/u;
+function singleCharacter(value) { return typeof value === 'string' && Array.from(value).length === 1; }
+function textSlice(step) {
+  const content = step?.slice?.content;
+  return content?.length === 1 && content[0].type === 'text' ? content[0].text : null;
+}
+function simpleTextEdit(entry) {
+  if (entry?.kind !== 'steps' || entry.forward.length !== 1 || entry.inverse.length !== 1) return null;
+  const step = entry.forward[0], reverse = entry.inverse[0];
+  if (step.stepType !== 'replace' || reverse.stepType !== 'replace') return null;
+  const inserted = textSlice(step), removed = textSlice(reverse);
+  if (step.from === step.to && singleCharacter(inserted) && !reverse.slice?.content?.length) return { kind: 'insert', from: step.from, to: step.to, text: inserted };
+  if (step.from < step.to && !step.slice?.content?.length && singleCharacter(removed)) {
+    const cursor = entry.selectionBefore?.anchor;
+    if (entry.selectionBefore?.head !== cursor) return null;
+    if (cursor === step.to) return { kind: 'backspace', from: step.from, to: step.to, text: removed };
+    if (cursor === step.from) return { kind: 'delete', from: step.from, to: step.to, text: removed };
+  }
+  return null;
+}
+function caret(selection) {
+  return selection?.type === 'text' && selection.anchor === selection.head ? selection.anchor : null;
+}
+function breaksWord(previous, current, kind) {
+  if (kind === 'backspace') return whitespace.test(current) && !whitespace.test(previous) || punctuation.test(current) && !punctuation.test(previous);
+  return whitespace.test(current) && !whitespace.test(previous) || punctuation.test(previous) && !punctuation.test(current) && !whitespace.test(current);
+}
+function typingGroupId(journal, entry, transaction) {
+  if (transaction.getMeta('historyLabel') || transaction.getMeta('assistAccept') || transaction.getMeta('paste') || transaction.getMeta('uiEvent') === 'paste') return null;
+  const current = simpleTextEdit(entry);
+  if (!current || caret(entry.selectionBefore) == null || caret(entry.selectionAfter) == null) return null;
+  if (transaction.getMeta(HISTORY_GROUP_BREAK_META)) return entry.id;
+  const precedingId = journal.activeIds[journal.cursor - 1];
+  const previous = journal.cursor === journal.activeIds.length && journal.entries.at(-1)?.id === precedingId ? journal.entries.at(-1) : null;
+  const earlier = simpleTextEdit(previous);
+  const elapsed = previous ? Date.parse(entry.timestamp) - Date.parse(previous.timestamp) : Infinity;
+  if (!previous?.groupId || !earlier || previous.chapterId !== entry.chapterId || earlier.kind !== current.kind ||
+      elapsed < 0 || elapsed > TYPING_GROUP_PAUSE_MS ||
+      caret(previous.selectionAfter) !== caret(entry.selectionBefore) ||
+      breaksWord(earlier.text, current.text, current.kind)) return entry.id;
+  if (current.kind === 'insert' && current.from === earlier.to + earlier.text.length) return previous.groupId;
+  if (current.kind === 'backspace' && current.to === earlier.from) return previous.groupId;
+  if (current.kind === 'delete' && current.from === earlier.from) return previous.groupId;
+  return entry.id;
+}
+
 export function recordTransaction(journal, { chapterId, transaction, beforeProject, afterProject, label, appendedTransactions = [] }) {
   if (!transaction?.docChanged && !appendedTransactions.some(item => item.docChanged)) return journal;
   if (transaction.getMeta(HISTORY_REPLAY_META)) return journal;
@@ -243,6 +293,8 @@ export function recordTransaction(journal, { chapterId, transaction, beforeProje
     selectionBefore: clone(transaction.getMeta(HISTORY_SELECTION_META) || null),
     selectionAfter: final.selection.toJSON()
   };
+  const groupId = typingGroupId(journal, entry, transaction);
+  if (groupId) entry.groupId = groupId;
   return appendEntry(journal, entry);
 }
 
@@ -269,7 +321,7 @@ function projectPatches(before, after) {
   return patches;
 }
 
-export function recordProjectChange(journal, before, after, { label = 'Edit manuscript', chapterId = null, revertsEntryId = null } = {}) {
+export function recordProjectChange(journal, before, after, { label = 'Edit manuscript', chapterId = null, revertsEntryId = null, selectionBefore = null, selectionAfter = null } = {}) {
   verifyCurrent(journal, before);
   if (after.id !== before.id || !Array.isArray(after.chapters) || !after.chapters.length || new Set(after.chapters.map(chapter => chapter.id)).size !== after.chapters.length) throw new HistoryMismatchError('A manuscript history entry must retain its identity and valid chapters.');
   const afterFingerprint = projectFingerprint(after);
@@ -277,6 +329,8 @@ export function recordProjectChange(journal, before, after, { label = 'Edit manu
   return appendEntry(journal, {
     id: id(), kind: 'project', timestamp: new Date().toISOString(), label: String(label).slice(0, 200), chapterId,
     chapterTitle: after.chapters.find(chapter => chapter.id === chapterId)?.title,
+    ...(selectionBefore ? { selectionBefore: clone(selectionBefore) } : {}),
+    ...(selectionAfter ? { selectionAfter: clone(selectionAfter) } : {}),
     beforeFingerprint: journal.headFingerprint, afterFingerprint,
     ...(revertsEntryId ? { revertsEntryId } : {}),
     patches: projectPatches(before, after)
@@ -326,7 +380,14 @@ function applyEntry(project, entry, direction, schema) {
     selection = clone(direction === 'undo' ? entry.selectionBefore : entry.selectionAfter);
     if (selection) { try { Selection.fromJSON(doc, selection); } catch { selection = null; } }
     next = { ...project, chapters: project.chapters.map(item => item.id === entry.chapterId ? { ...item, content: doc.toJSON() } : item) };
-  } else next = applyPatches(project, entry.patches, direction);
+  } else {
+    next = applyPatches(project, entry.patches, direction);
+    selection = clone(direction === 'undo' ? entry.selectionBefore : entry.selectionAfter);
+    if (selection) {
+      try { const chapter = next.chapters.find(item => item.id === entry.chapterId); Selection.fromJSON(schema.nodeFromJSON(chapter.content), selection); }
+      catch { selection = null; }
+    }
+  }
   const afterFingerprint = direction === 'undo' ? entry.beforeFingerprint : entry.afterFingerprint;
   if (projectFingerprint(next, afterFingerprint) !== afterFingerprint) throw new HistoryMismatchError('The restored document did not match its recorded revision.');
   next.updatedAt = new Date().toISOString();
@@ -338,13 +399,22 @@ export function applyHistory(project, journal, direction, schema) {
   verifyCurrent(journal, project);
   const entryId = journal.activeIds[direction === 'undo' ? journal.cursor - 1 : journal.cursor];
   if (!entryId) return null;
-  const entry = journal.entries.find(item => item.id === entryId);
+  const lookup = new Map(journal.entries.map(item => [item.id, item]));
+  const entry = lookup.get(entryId);
   if (!entry) throw new HistoryMismatchError('The requested editing history entry is missing.');
-  const { project: next, selection, afterFingerprint } = applyEntry(project, entry, direction, schema);
-  const event = { version: 1, kind: direction, sequence: journal.sequence + 1, timestamp: new Date().toISOString(), entryId, beforeFingerprint: journal.headFingerprint, afterFingerprint };
-  const updated = replayEvent(journal, event);
+  const groupId = entry.groupId || entry.id;
+  let next = project, updated = journal, selection = null, lastEntry = entry;
+  while (true) {
+    const nextId = updated.activeIds[direction === 'undo' ? updated.cursor - 1 : updated.cursor];
+    const member = lookup.get(nextId);
+    if (!member || (member.groupId || member.id) !== groupId) break;
+    const result = applyEntry(next, member, direction, schema);
+    const event = { version: 1, kind: direction, sequence: updated.sequence + 1, timestamp: new Date().toISOString(), entryId: member.id, beforeFingerprint: updated.headFingerprint, afterFingerprint: result.afterFingerprint };
+    updated = replayEvent(updated, event);
+    next = result.project; selection = result.selection; lastEntry = member;
+  }
   next.historySequence = updated.sequence;
-  return { project: next, journal: updated, chapterId: next.chapters.some(chapter => chapter.id === entry.chapterId) ? entry.chapterId : next.chapters[0].id, selection, entry };
+  return { project: next, journal: updated, chapterId: next.chapters.some(chapter => chapter.id === lastEntry.chapterId) ? lastEntry.chapterId : next.chapters[0].id, selection, entry: lastEntry };
 }
 
 export function recoverHistoryProject(project, { events = [], recoverySequence = project.historySequence } = {}, schema) {
@@ -394,11 +464,34 @@ export function prepareHistoryLoad(project, saved = {}, schema) {
 export function historyStatus(journal) {
   if (!journal) return { canUndo: false, canRedo: false, undoLabel: '', redoLabel: '', totalEdits: 0, sequence: 0 };
   const lookup = new Map(journal.entries.map(entry => [entry.id, entry]));
-  return { canUndo: journal.cursor > 0, canRedo: journal.cursor < journal.activeIds.length, undoLabel: lookup.get(journal.activeIds[journal.cursor - 1])?.label || '', redoLabel: lookup.get(journal.activeIds[journal.cursor])?.label || '', totalEdits: journal.entries.length, sequence: journal.sequence };
+  const positions = new Map(journal.activeIds.map((entryId, index) => [entryId, index]));
+  let totalEdits = 0, priorGroup = null, priorStatus = null;
+  for (const entry of journal.entries) {
+    const status = !positions.has(entry.id) ? 'branched' : positions.get(entry.id) < journal.cursor ? 'applied' : 'undone';
+    if (!entry.groupId || entry.groupId !== priorGroup || status !== priorStatus) totalEdits++;
+    priorGroup = entry.groupId || null; priorStatus = status;
+  }
+  return { canUndo: journal.cursor > 0, canRedo: journal.cursor < journal.activeIds.length, undoLabel: lookup.get(journal.activeIds[journal.cursor - 1])?.label || '', redoLabel: lookup.get(journal.activeIds[journal.cursor])?.label || '', totalEdits, sequence: journal.sequence };
 }
 
 export function timelineEntries(journal) {
   if (!journal) return [];
   const positions = new Map(journal.activeIds.map((entryId, index) => [entryId, index]));
-  return journal.entries.map(entry => ({ ...entry, status: !positions.has(entry.id) ? 'branched' : positions.get(entry.id) < journal.cursor ? 'applied' : 'undone', current: journal.activeIds[journal.cursor - 1] === entry.id })).reverse();
+  const groups = [];
+  for (const entry of journal.entries) {
+    const status = !positions.has(entry.id) ? 'branched' : positions.get(entry.id) < journal.cursor ? 'applied' : 'undone';
+    const previous = groups.at(-1);
+    if (entry.kind === 'steps' && entry.groupId && previous?.kind === 'steps' && previous.groupId === entry.groupId && previous.status === status) {
+      previous.forward.push(...entry.forward);
+      previous.inverse.unshift(...entry.inverse);
+      previous.afterFingerprint = entry.afterFingerprint;
+      previous.afterDocFingerprint = entry.afterDocFingerprint;
+      previous.selectionAfter = entry.selectionAfter;
+      previous.timestamp = entry.timestamp;
+      previous.summary = excerpt(previous.forward.map(step => textOf(step.slice)).join('')) || excerpt(previous.inverse.map(step => textOf(step.slice)).join(''));
+      previous.current = journal.activeIds[journal.cursor - 1] === entry.id;
+      previous.editCount++;
+    } else groups.push({ ...entry, ...(entry.kind === 'steps' ? { forward: [...entry.forward], inverse: [...entry.inverse] } : {}), status, current: journal.activeIds[journal.cursor - 1] === entry.id, editCount: 1 });
+  }
+  return groups.reverse();
 }

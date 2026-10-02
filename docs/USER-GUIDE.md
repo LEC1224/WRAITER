@@ -1,10 +1,12 @@
 # WRAITER user guide
 
-Detailed controls and behaviour for version 0.11.0. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
+Detailed controls and behaviour for version 0.15.1. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Projects and startup
 
 **File → Open recent** lists the last 12 opened or saved documents, including preserved unnamed drafts. Selecting a file that is already open activates its tab. Clear recent list removes the list entries without deleting files.
+
+With the Windows file association enabled, double-click a `.wraiter` file in Explorer or choose **Open with → WRAITER**. The file opens in the existing WRAITER window, or starts WRAITER if it is closed. Current typing is saved before switching projects, and files that are already open reuse their tabs. Requests received during setup or another dialog wait until that dialog closes.
 
 **New**, **Open**, and the **+** beside the tabs add a project in the same window. Each tab has independent chapters, formatting, notes, file format, recovery, chat sessions and editing history. Assistant chats are saved with their project; use the chat dropdown to reopen an earlier conversation or **New chat** to begin another. Chat requests keep running against their originating project when you change chapter or project; its tab shows working and reply-ready indicators, and completed replies are saved there while completed edits are applied when you return. Inline completions still cancel on a project switch so they cannot appear in another document. Save As and Export cannot overwrite another tab's open file.
 
@@ -19,22 +21,56 @@ Each tab has a separate recovery file in application data. Restoring projects do
 
 ## Writing and formatting
 
-- Chapter outline, titles, ordering, status, and word counts; optional notes, references, history, and assistant panels.
-- A searchable installed-font picker renders every font name in its own font. Direct controls cover point sizes, text colour, bold/italic/underline, highlighting, alignment, lists, images, links, and tables.
+- Chapter outline, titles, ordering, status, and word counts; optional comments, notes, references, history, and assistant panels.
+- A searchable installed-font picker renders every font name in its own font. Direct controls cover point sizes, text colour, bold/italic/underline, highlighting, clear formatting, alignment, lists, images, links, and tables.
 - Paragraph spacing and first-line indentation; document default font/size/line spacing. Document formatting is saved and carried into supported exports.
 - Light, Dark, and High contrast themes, document zoom, continuous/divided-page views, and focus mode.
-- Find/replace, undo/redo, local spellchecking, and a content-language selector on the status bar.
+- Whole-manuscript or current-chapter find/replace, undo/redo, local spellchecking, and a content-language selector on the status bar.
 - Automatic recovery, preceding-save `.bak` backups, and Git versions. External edits are detected before overwriting a named document.
 
 Choose **Story**, **Article**, **Submission manuscript**, **Report**, or **Notes** from the status bar. Story is the default and hides reading statistics beneath the chapter title. Article shows them. Layouts set document typography and spacing; the paragraph settings dialog also provides an independent reading-statistics checkbox. Word counts remain available in the outline and status bar.
 
 Use the paragraph settings button at the right of the formatting toolbar for document defaults. A toolbar font change affects selected text or newly typed text, like a conventional word processor. Zoom changes only the view.
 
+Select text and use **Clear formatting** beside the highlighter to remove its inline styling and reset its paragraphs to Normal. Undo restores the formatting. Open the arrow beside **Highlight** to choose one of eight colours or a custom colour; the main button applies the last chosen colour or clears an active highlight. **No highlight** removes only the highlight or imported text background, preserving other formatting. These controls also set the formatting for newly typed text when no text is selected.
+
+In the editor, highlight and imported text background colours use 26% opacity over the current page, keeping the text fully opaque and readable in Light, Dark and High contrast. Saved documents retain their original colours; publication and office exports keep those colours without the editor's theme treatment. **Ctrl+Shift+H** toggles highlighting with the same readable appearance.
+
+Use **Copy formatting** and **Paste formatting** beside Clear formatting to reuse a passage's appearance. Copy takes the formatting at the start of the selection, or at the cursor when nothing is selected. It includes supported font, size, text/background colours, emphasis, paragraph alignment, spacing and Heading/Normal style. For a selection with mixed styling, the first character determines the copied formatting.
+
+Paste changes selected characters and their paragraphs' formatting while preserving the target words. With only a cursor, it formats the whole current paragraph. Links, comments, list/table structure and manual page breaks stay with the target; they are never copied from the source. A heading style leaves a list item's required paragraph structure intact. Each paste is one undo step. The copied formatting remains available for repeated use across chapters and project tabs during the current app session; it does not replace the system clipboard.
+
 **Settings → Appearance → Document view** chooses Continuous (the default infinite page) or Divided pages. Both provide almost one viewport of workspace below the document, so the last line can sit higher on screen. The status-bar view button and View menu also switch modes; the choice survives restart. Divided pages use A4 proportions at the current column width and flow wrapped paragraphs automatically. Page gaps and numbers are view decorations, so switching views does not add text, paragraph breaks or undo actions. Oversized tables/objects stay intact on an expanded sheet. Export pagination follows its selected paper preset and can differ from the editing view.
 
 **View → Text numbering** has independent checkboxes for **Row numbers**, **Page numbers**, and **Paragraph numbers**. Small, muted numbers appear in the grey margin outside the paper, and the choices survive restart. Rows count visible wrapped lines; paragraphs count text blocks, including headings and list/table paragraphs. Numbering starts at 1 in each chapter. Page numbers follow the editor's page layout; Continuous view marks the corresponding virtual page starts. Numbers follow edits, zoom and resizing, and are excluded from document text, exports and undo history.
 
 **Ctrl+Enter** inserts a manual page break at the cursor, also available under **Edit → Insert page break**. It splits the current paragraph and starts the following paragraph on a new page. Backspace at that paragraph's start removes the break. Manual breaks remain visible as markers in Continuous view and persist through save, restart, undo/redo, ODT, DOCX, HTML and PDF. Plain text and Markdown disclose the formatting loss before native save. Page-break insertion has a customizable shortcut; an existing Ctrl+Enter binding is preserved during upgrade instead of being reassigned.
+
+## Right-click actions
+
+Right-click inside a selected passage to keep that selection and open its editing menu. A right-click elsewhere places the cursor at the clicked position. **Shift+F10** opens the same menu for the keyboard selection.
+
+Alongside Undo, Redo and normal clipboard commands, the menu offers **Copy formatting**, **Paste formatting**, **Clear formatting** and **Add comment…**. Copy formatting uses its own reusable buffer; ordinary Copy and Paste continue to use the system clipboard. Formatting paste preserves the target words, links and comment anchors, and is one undo step.
+
+With AI enabled, selected text offers **Rephrase / translate selection** and **Correct spelling and grammar**. An empty cursor offers **Continue writing here**. These actions use the models chosen for their tasks in Settings and show a preview before changing the manuscript. **Accept suggestion** and **Dismiss suggestion** appear while a preview is available; **Stop generating** appears during a request. **Enable AI** and **AI settings…** are available in the same menu.
+
+**Ask assistant about selection…** opens and focuses the writing assistant, keeping the passage selected. Type your question or editing instruction, then send it. Opening the composer does not send an AI request. Other text fields, including private notes and comment bodies, retain their ordinary native text-editing menus.
+
+## Search and replace
+
+Open **Edit → Find** / **Edit → Replace**, press **Ctrl+F** / **Ctrl+H**, or use **Find in manuscript** in the chapter sidebar. **Search in → Whole manuscript** is the default; choose **Current chapter** to restrict the results. Searches match literal text, with optional **Match case** and **Whole words**. They search editable chapter text, including lists and tables, and omit private notes and comments.
+
+Results show surrounding wording and are grouped by chapter. Click a result to select its passage, or use **Previous match** / **Next match**. Enter in the Find field moves forward; Shift+Enter moves backward. Large lists have **More results** / **Previous results** controls, with the full match count retained.
+
+Enter the replacement and choose **Replace** to change the current match. **Preview replace all** shows the original and replacement for every match in the chosen scope. Review it, then choose **Replace all** to apply the batch. An empty replacement deletes the matched wording. All replacements in that batch, even across chapters, share one persistent undo step. Formatting outside the replaced wording stays intact; replacement text takes the formatting at the start of the match and retains any attached comments. If the manuscript changes after preview, WRAITER refuses the stale batch and asks for a fresh preview. Escape cancels a preview, then closes search.
+
+## Passage comments
+
+Select a passage, then choose **Add comment** on the formatting toolbar or open **Comments** in the sidebar. Write the revision note and choose **Add comment**. Click a saved comment's quoted passage to jump back to its current location. Anchors follow the text as you insert, remove or format surrounding words, and a passage can have more than one comment.
+
+Use **Edit**, **Resolve**, **Reopen** or **Delete** on a comment. The filter offers **Open comments**, **Resolved comments** and **All comments**. If its complete passage is deleted, the note remains saved with **Passage removed · comment retained** instead of jumping to unrelated text. Undoing the deletion restores its anchor. Adding, editing, resolving and deleting comments is undoable.
+
+Comments are private project data: `.wraiter` saves include their text, state and passage anchors. For an open Word, LibreOffice, HTML or text file, WRAITER keeps them in its local companion state; copying that exported/native file alone to another computer does not transfer the comments. Save a `.wraiter` copy to carry them with the manuscript. Comment bodies and anchor identifiers are excluded from publication exports and rich-text clipboard output, and comment bodies are excluded from AI context. Ordinary copying and pasting does not create duplicate comment anchors. Imported Office comments continue to become plain text in Project notes; they are not converted into WRAITER passage comments.
 
 ## Proofreading and statistics
 
@@ -50,7 +86,7 @@ AI proofreading is editorial assistance, not an authority: models can miss error
 
 ## Guided setup and first steps
 
-Run `release/WRAITER-0.11.0-Setup.exe`. Choose **Simple** (recommended) or **Advanced**, then an installation folder. WRAITER installs for your Windows account, adds shortcuts and offers to open the app. Installation continues with account setup on first launch; the mode selected in the installer is carried into that guide. The portable app uses the same first-run guide.
+Run the WRAITER Setup executable. Choose **Simple** (recommended) or **Advanced**, then an installation folder. **Associate .wraiter files with WRAITER** is checked on a fresh installation; leave it checked to enable double-click opening and Windows' Open with menu. Your choice is remembered on upgrades. WRAITER installs for your Windows account, adds shortcuts and offers to open the app. Installation continues with account setup on first launch; the mode selected in the installer is carried into that guide. The portable app uses the same first-run guide.
 
 1. Choose **Codex** or **Claude Code**.
 2. **Check my account** looks for the installed helper and its saved sign-in. If missing, **Install** downloads and runs the provider's official Windows installer. No command typing is needed. Installation needs internet access and can be cancelled; an interrupted provider install may need a retry.
@@ -103,7 +139,13 @@ Change these in **Settings → Keyboard shortcuts**. Suggest and Accept delibera
 
 Autocomplete receives only text before the cursor. Its configurable context budget retains an opening excerpt and recent prose. Correction receives the selected text and up to ten nearby words on each side; ranked rephrasing/translation receives up to eighty on each side to judge the surrounding sentence. Bracketed instructions within a selection are treated as editing guidance and excluded from the requested replacement. Escape retains the selection; requesting again discourages repetition of rejected alternatives without reducing suggestion length.
 
-Selection rephrasing presents up to three distinct alternatives in a dropdown beside the selection. **Up/Down** changes the highlighted option, **Enter or Tab** accepts it, **Escape** dismisses the list, and clicking an option accepts it. **More alternatives** requests another set. One to three stars represent the model's editorial judgment of contextual fit, with ties allowed; they are not confidence probabilities. Models that return only a single plain replacement are shown as Unrated. Ratings and unaccepted alternatives never enter the manuscript. Acceptance replaces only the selected text and remains one undo action.
+Selection rephrasing, translation, and correction present alternatives in a dropdown beside the selection. Each option can include a short model-generated note beneath it explaining its tone, emphasis, or shade of meaning in the surrounding sentence. Translation notes explain the translated wording's nuance or ambiguity; correction notes describe the spelling or grammar change. The notes arrive with the alternatives in the same AI request and reflect the model's reading of the context. **Up/Down** changes the highlighted option, **Enter or Tab** accepts it, **Escape** dismisses the list, and clicking an option accepts it. **More alternatives** requests another set. One to three stars represent the model's editorial judgment of contextual fit, with ties allowed; they are not confidence probabilities. Models that omit notes still show their replacements; a single plain replacement is shown as Unrated. Descriptions, ratings and unaccepted alternatives never enter the manuscript. Acceptance replaces only the selected text and remains one undo action.
+
+Under **Settings → Writing AI → Selection suggestions**, set independent targets for **Translation suggestions**, **Correction suggestions**, and **Rephrasing suggestions**, from 1 to 8 each. Defaults are 3 translations, 1 correction, and 3 rephrasings. The model uses the translation target when the selection needs translating into the document language; otherwise it uses the target for the requested correction or rephrasing. It may return fewer useful choices instead of forcing redundant alternatives. Correction choices remain limited to spelling, punctuation, and necessary grammar. These targets also apply to **More alternatives** and vibe-guided rephrasing. **Suggestion length (words)** controls continuations separately, and **Maximum output tokens** still caps the model's response length.
+
+**Current phrase rating:** in the dropdown header shows how the model rates your unchanged selection on the same three-star scale as its alternatives, including any submitted vibe. Your wording can score higher than the replacements or tie with them; **Highest rated** and **Tied highest** compare it with the shown alternatives when all have ratings. If the model offers no different wording, the dropdown still shows the original rating, and **Enter or Tab** keeps your phrase without editing it. **More alternatives** and **Describe your vibe** remain available. Models that omit the original rating show **Unrated**; the app never infers a score from a replacement.
+
+**Describe your vibe**, beside **More alternatives**, opens a text field in the dropdown. Describe the feeling, imagery, emphasis, or point of view you want, then choose **Find alternatives**. For example: “I want the reader to feel the sense of avian navigation through her eyes.” The model receives this guidance with the original selection and its nearby context; the new options remain previews until accepted. **More alternatives** keeps using the submitted vibe for that selection, and reopening the field lets you revise it. **Cancel** or **Escape** while editing returns to the current options without sending a request. Starting a fresh selection request clears the previous vibe. The description itself is never inserted into the manuscript or saved as a writing-voice preference.
 
 A three-dot indicator marks a pending request. When text typed during generation matches the start of a continuation, only its untyped remainder is shown. Incompatible edits invalidate the pending result. Typing over a displayed revision resumes after the original selected text. Previews do not affect word counts, saved files, or exports. Accepted revisions preserve unchanged marks where possible and can be undone.
 
@@ -131,7 +173,7 @@ You can keep writing in untouched chapters while an editing request runs. WRAITE
 
 API keys are encrypted in per-user application settings and scoped to the provider endpoint; they are never stored in manuscripts. Connection checks discover availability without generating prose. Actual cloud requests use the selected account's allowance or billing. Codex offers reasoning effort, but its app-server does not expose temperature or token caps; the requested suggestion-word limit still applies. Some API providers/models do not implement reasoning controls.
 
-Private notes are excluded from AI requests. Writing-voice instructions and enabled references are included. Reference attachments support Markdown and plain text, up to 20 files. Inline suggestions use up to 48,000 combined reference characters. Chat can read the full enabled references in sections (up to 2 MB per linked file). Linked files refresh saved edits; older embedded-only references continue to work. Missing or untrusted imported links are skipped with a notice instead of silently using stale content.
+Private notes and passage comment bodies are excluded from AI requests. Writing-voice instructions and enabled references are included. Reference attachments support Markdown and plain text, up to 20 files. Inline suggestions use up to 48,000 combined reference characters. Chat can read the full enabled references in sections (up to 2 MB per linked file). Linked files refresh saved edits; older embedded-only references continue to work. Missing or untrusted imported links are skipped with a notice instead of silently using stale content.
 
 ## Local models
 
@@ -151,15 +193,17 @@ Runtime downloads come from [Ollama's official Windows releases](https://github.
 
 If a save detects that another program changed the open file, the warning offers **Save a copy** and **Load modified version**. Loading replaces the current tab with the disk version and clears the conflict. WRAITER first preserves your current draft in **File → Open recent**, with “before reload” in its filename. The loaded version starts a fresh undo history so earlier edits cannot overwrite the external changes. If the file is missing, invalid or changes again during import, the current draft stays open.
 
-**View → Revision history → Every edit** lists text, formatting, chapter, and document-setting actions with timestamps and before/after details. Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z work across chapter switches and application restarts. Typing transactions stay separate; a multi-step replacement or assistant batch is one undo operation. New typing after undo starts a new branch, while abandoned edits remain visible in the audit trail. History begins with edits made in 0.3; earlier keystrokes cannot be reconstructed.
+**View → Revision history → Every edit** lists text, formatting, chapter, and document-setting actions with timestamps and before/after details. Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z work across chapter switches and application restarts. Ordinary typing and deletion are grouped into word-sized undo steps; pauses, punctuation, caret moves, and other edits start a new step. A multi-step replacement or assistant batch remains one undo operation. New typing after undo starts a new path, while abandoned edits remain visible in the audit trail. History begins with edits made in 0.3; earlier keystrokes cannot be reconstructed.
 
 The journal appends immutable events and flushes them before a recovery snapshot can reference them. If an interruption occurs between those writes, startup replays the complete later events. A corrupt or mismatched journal is preserved alongside a document snapshot before a fresh undo chain begins; the app reports this instead of replaying unrelated edits. Atomic history does not depend on Git.
 
 Source history is stored in this application's repository. Manuscript history is separate: each document receives a local Git repository beneath WRAITER's application-data directory. It records structured text, marks, chapter order, notes, and references without adding manuscript folders to the application's source repository.
 
-Named saves, document switches, and editing checkpoints create versions. Automatic checkpoints occur after 20 seconds idle or two minutes of continuous editing. The **Checkpoints** tab lists them; **Save version** creates a labelled checkpoint. Restore saves the current version first and creates a new revision, preserving the intervening history. It is also undoable. Git must be installed for checkpoints; atomic editing history, ordinary saving, and recovery still work if it is unavailable.
+Named saves, document switches, and editing checkpoints create versions. Automatic checkpoints occur after 20 seconds idle or two minutes of continuous editing once roughly 40 words have changed, or after a chapter, paragraph, or manuscript structure change. The **Checkpoints** tab shows your current path with the newest version first. **Open complete tree** shows every branch as a connected graph. Select **Preview** to read a saved chapter without changing your draft; **Continue here** first saves the current document, then creates a new path from the selected checkpoint. Both paths remain available, and the restore is undoable. **Save version** creates a named checkpoint at any time.
 
-History and native-file companion state live in WRAITER's per-user application-data directory, rather than inside office/text files. Copying a native office/text document alone to another computer does not carry its local undo history, private notes, or assistant chats; use a `.wraiter` save when that project metadata must travel with the manuscript. These local records are not a remote backup.
+When AI writing assistance is enabled, WRAITER sends bounded excerpts of the changes to the **Version summaries** model selected under **Settings → Connections**. The model supplies a short label and summary that appear beside the affected chapter in the tree. A factual label is saved immediately and remains available when the model is offline, busy, or cancelled. A title you typed for a manual checkpoint stays as written. Git must be installed for checkpoints; atomic editing history, ordinary saving, and recovery still work if it is unavailable.
+
+History and native-file companion state live in WRAITER's per-user application-data directory, rather than inside office/text files. Copying a native office/text document alone to another computer does not carry its local undo history, private notes, passage comments or assistant chats; use a `.wraiter` save when that project metadata must travel with the manuscript. These local records are not a remote backup.
 
 ## Formats and present limits
 
@@ -177,7 +221,7 @@ Opening an office/text document keeps it attached to its original format. Save a
 
 Unsupported office features are detected where possible and described on opening. Until the first compatibility review, changed content is staged safely in recovery. Saving after review preserves the complete original under **Format originals** in application data, plus the preceding-save `.bak` beside the document. New unsupported formatting in a text format also prompts for review before writing. This is direct file-format support, not lossless preservation of every Word/Writer feature: page sections, named styles, headers/footers, comments, tracked changes, footnotes/endnotes, fields, floating objects and advanced layouts may be simplified or omitted. Unrecognized office features can still require manual comparison.
 
-**File → Export** offers full manuscript, one chapter, or selected text, with title/chapter-heading options. Formats include DOCX, ODT, all three PDFs, EPUB, plain text, BBCode `.txt`, Markdown and HTML. Exports exclude private notes, AI context, assistant chats and editing history. PDF export performs pagination; page view is a writing surface, not an exact print preview.
+**File → Export** offers full manuscript, one chapter, or selected text, with title/chapter-heading options. Formats include DOCX, ODT, all three PDFs, EPUB, plain text, BBCode `.txt`, Markdown and HTML. Exports exclude private notes, passage comments and their anchors, AI context, assistant chats and editing history. PDF export performs pagination; page view is a writing surface, not an exact print preview.
 
 The export dialog also offers **Discord chat**, **Formatted text · Telegram / email**, and Telegram bot **MarkdownV2** and **HTML**. Choose **Destination → Export to Clipboard** for any text-based format, or **Create file** to save it. Clipboard export follows the same manuscript/chapter/selection scope and heading options. It does not open a save dialog or change the manuscript. PDF, DOCX, ODT and EPUB require files.
 
@@ -185,7 +229,7 @@ Discord exports basic chat markup to `.txt`. Telegram bot exports are escaped `.
 
 Formatting references: [Discord chat syntax](https://support.discord.com/hc/en-us/articles/210298617-Markdown-Text-101-Chat-Formatting-Bold-Italic-Underline), [Telegram bot formatting](https://core.telegram.org/bots/api#formatting-options), and [Telegram Desktop HTML clipboard support](https://telegramdesktop.github.io/tdesktop/changelog/). Run `npm run test:clipboard` for the synthetic desktop export regression; it intercepts clipboard writes so the user's clipboard remains intact.
 
-Live print pagination, editing comments/tracked changes/footnotes, and direct Grok Build connections remain future work. macOS and Linux are not yet packaged or validated.
+Live print pagination, native Office comment editing, tracked changes/footnotes, and direct Grok Build connections remain future work. macOS and Linux are not yet packaged or validated.
 
 ## Development
 
