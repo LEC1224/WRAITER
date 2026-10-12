@@ -57,6 +57,7 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | Pagination and rephrasing alternatives | `npm run test:v05` |
 | Long-document scrolling and responsiveness | `npm run test:scrolling`, `npm run test:large` and `npm run test:undo-scroll` |
 | Paragraph navigation and dialog keyboard focus | `npm run test:navigation` |
+| Sustained large-manuscript save, undo, navigation and restart | `npm run test:soak -- --minutes=45` |
 | External file reload and margin numbering | `npm run test:reload-numbering` and `npm run test:long-numbering` |
 | Proofreading review, statistics or spelling tools | `npm run test:proofreading` |
 | Save/import/export | `npm run test:io` and `npm run test:v03` |
