@@ -56,6 +56,14 @@ Testing this exposed an existing dialog issue: restoring focus through the conte
 
 Validation: all 296 unit tests and the build passed. Five new desktop groups cover keyboard and native menu navigation, late paragraphs, invalid inputs, cancellation without selection/history changes, all three themes at 960×650 and existing link-dialog focus. The broader document-interaction, settings and undo/scroll workflows also passed. One earlier interaction run caught a transient Windows file-replacement failure; that reliability finding is investigated separately below.
 
+### Recover from brief Windows replacement locks
+
+A desktop interaction run reached the correct undone image state and saved it to recovery, but Windows refused the final rename with `EPERM`. The unchanged rerun passed. The exact source of the transient lock is unknown.
+
+Atomic replacement now retries permission/busy failures up to five times, with waits totalling at most 620 ms. It retains the flushed staging file and preceding backup, never removes the destination to force a replacement, and still reports permanent or unrelated failures. Native and WRAITER document saves recheck the original fingerprint after staging and before each retry, so a change or newly created destination during the wait is preserved. The check does not make filesystem replacement a compare-and-swap operation; there remains the ordinary tiny interval between the final check and rename.
+
+Six new regression groups simulate replacement and backup locks, permanent errors, unrelated disk errors, an external manuscript edit, a new Save-as destination and an external native-text edit. They verify original bytes, backups, cleanup and recovery. All 302 unit tests, the build, the full document-interaction workflow and both damaged-history/restart scenarios passed. Autosave scheduling and write flushing remain unchanged.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.

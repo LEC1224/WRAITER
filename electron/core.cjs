@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { setTimeout: delay } = require('node:timers/promises');
 
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const MAX_DOCUMENT_BYTES = 60 * 1024 * 1024;
@@ -146,15 +147,30 @@ function validateProject(project) {
   if (Buffer.byteLength(json) > MAX_DOCUMENT_BYTES) throw new Error('This preview supports documents up to 60 MB, including snapshots, chats, and images.');
   return project;
 }
-async function atomicWrite(file, data, backup = false) {
+async function atomicWrite(file, data, backup = false, options = {}) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.${crypto.randomUUID()}.tmp`;
   try {
     await fs.writeFile(temp, data, { encoding: 'utf8', flag: 'wx' });
     const handle = await fs.open(temp, 'r+');
     try { await handle.sync(); } finally { await handle.close(); }
-    if (backup) await fs.copyFile(file, `${file}.bak`).catch(e => { if (e.code !== 'ENOENT') throw e; });
-    await fs.rename(temp, file);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        // Recheck named documents after staging and before every retry. A
+        // brief Windows lock must not hide a concurrent author edit.
+        if (Object.hasOwn(options, 'expectedHash')) {
+          let actual = null;
+          try { actual = hash(await readLimited(file)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+          if (actual !== options.expectedHash) throw new Error(options.conflictMessage || 'This file changed outside WRAITER. Your edits are safe in recovery. Save a copy to preserve both versions.');
+        }
+        if (backup) await fs.copyFile(file, `${file}.bak`).catch(error => { if (error.code !== 'ENOENT') throw error; });
+        await fs.rename(temp, file);
+        break;
+      } catch (error) {
+        if (!['EPERM', 'EBUSY', 'EACCES'].includes(error.code) || attempt >= 5) throw error;
+        await delay(20 * 2 ** attempt);
+      }
+    }
   } catch (error) { await fs.unlink(temp).catch(() => {}); throw error; }
 }
 async function readLimited(file, max = 60 * 1024 * 1024) {
@@ -223,8 +239,9 @@ class DocumentStore {
     if (target) {
       let actual = null;
       try { actual = hash(await readLimited(target)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      if ((samePath(target, this.currentPath) && actual !== this.expectedHash) || (!samePath(target, this.currentPath) && actual && !overwrite)) throw new Error('This file changed outside WRAITER, or already exists. Your edits are safe in recovery. Use Save a copy to preserve both versions.');
-      if (actual !== fingerprint) await atomicWrite(target, serialized, true);
+      const conflictMessage = 'This file changed outside WRAITER, or already exists. Your edits are safe in recovery. Use Save a copy to preserve both versions.';
+      if ((samePath(target, this.currentPath) && actual !== this.expectedHash) || (!samePath(target, this.currentPath) && actual && !overwrite)) throw new Error(conflictMessage);
+      if (actual !== fingerprint) await atomicWrite(target, serialized, true, { expectedHash: actual, conflictMessage });
       await this.writeRecovery(project, target, fingerprint);
     }
     return { path: this.currentPath, savedAt: new Date().toISOString() };

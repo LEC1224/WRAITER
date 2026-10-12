@@ -103,7 +103,7 @@ class DocumentFiles {
         await fs.mkdir(path.dirname(originalBackup), { recursive: true });
         try { await fs.writeFile(originalBackup, bytes, { flag: 'wx' }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
       }
-      if (actual !== hash(data)) await atomicWrite(target, data, true);
+      if (actual !== hash(data)) await atomicWrite(target, data, true, { expectedHash: actual });
       this.binding = { path: target, format, contentHash: contentHash(project), fidelity: chosen ? {} : this.binding?.fidelity || {}, reviewed: true, reviewedLossWarnings: [...new Set([...(chosen ? [] : this.binding?.reviewedLossWarnings || []), ...(payload.lossWarnings || [])])], originalBackup };
       await this.store.writeRecovery(project, target, hash(data));
     }
