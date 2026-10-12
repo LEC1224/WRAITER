@@ -6,7 +6,7 @@ const number = value => Number(value || 0).toLocaleString();
 
 export default function StatisticsDialog({ Modal, project, onClose }) {
   const [wordsPerPage, setWordsPerPage] = useState(250);
-  const stats = useMemo(() => documentStatistics(project, wordsPerPage), [project, wordsPerPage]);
+  const stats = useMemo(() => documentStatistics(project), [project]);
   const cards = [
     ['Words', number(stats.words), Type],
     ['Characters', number(stats.characters), Hash],
@@ -14,7 +14,7 @@ export default function StatisticsDialog({ Modal, project, onClose }) {
     ['Paragraphs', number(stats.paragraphs), Pilcrow],
     ['Sentences', number(stats.sentences), MessageSquareQuote],
     ['Chapters', number(stats.chapters), BookOpen],
-    ['Estimated pages', number(stats.pages), BarChart3],
+    ['Estimated pages', number(Math.ceil(stats.words / wordsPerPage)), BarChart3],
     ['Reading time', formatDuration(stats.readingMinutes), Clock3],
     ['Read-aloud time', formatDuration(stats.speakingMinutes), Clock3]
   ];

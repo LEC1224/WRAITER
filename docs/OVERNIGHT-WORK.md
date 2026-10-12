@@ -108,6 +108,12 @@ The list also retains chapter counts and the current page's grouping when only t
 
 Four headless browser groups cover equivalent refreshes, query/options, manual paging, replacement text, active-result changes/removal, empty lists, repopulation and replacement previews. All 321 unit tests and the build passed. The late-result desktop regression now additionally checks that its selected passage appears on the correct results page; that run is queued after the soak.
 
+### Recalculate only the page estimate in Statistics
+
+Changing the words-per-page input used to repeat vocabulary, character, paragraph and sentence analysis for the whole manuscript. The dialog now retains its analysis until the project changes and calculates the page estimate directly from the selected length. A 120,000-word fixture's full analysis took 35–59 ms per call in three samples; that redundant work is avoided for each estimate adjustment. This is a small interaction improvement, not a claimed startup or typing gain.
+
+All 321 unit tests and the production build passed. The existing proofreading/statistics desktop workflow is queued after the soak.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.
