@@ -128,7 +128,11 @@ ODT encoding reparsed an XML namespace wrapper for every top-level manuscript no
 
 The parser now rejects invalid visible XML characters instead of putting parser-error content into an office file. Two new import/export groups check multi-paragraph quotations, an empty chapter, following chapters, a chapter exceeding the batch limit, emphasis, Unicode and invalid XML characters. All 25 browser import/export groups, 321 unit tests and the production build passed. Independent LibreOffice rendering passed for ODT and DOCX with lists, a merged table, an embedded image, Arial text and a manual page break. The rendered ODT first page was visually inspected.
 
-Native codec-error recovery and close/restart behavior are being checked separately below before the final build.
+### Preserve recovery when native-file encoding fails
+
+An office encoder could fail before its save reached the recovery writer, and closing repeated the same failure before contacting the main process. Save and autosave now stage the complete captured project and journal through the normal durable backend when encoding fails, then report the original encoding error. Closing can submit that recovery-only save; the main process still confirms persistence before it closes the window. The last valid native file remains intact.
+
+Three genuine ODT desktop groups passed with an invalid visible XML character. They verify automatic and explicit save failures, identical original office bytes, durable complete recovery and private notes, close/restart, persistent undo/redo, later valid ODT saveback and the native binding after another restart. All 321 unit tests and the production build passed. The broader native export/save workflows are running next.
 
 ## Experiments and observations
 
@@ -137,7 +141,7 @@ Record benchmark conditions, rejected approaches and unresolved findings here, s
 - Desktop benchmarks run sequentially with isolated synthetic profiles. Build and unit-test loads should finish before timing runs.
 - No off-screen unloading, estimated paragraph heights, persistence delays or journal durability changes were introduced.
 - An initial prototype cancelling only the queued toolbar refresh gave no render-count improvement and was removed. Later measurements identified a second source of duplicate work in unchanged status setters; the tested combination is described above.
-- A first 45-minute packaged soak stopped after 37 cycles (13.7 minutes) when two height samples differed by approximately the zoom ratio. The harness had not awaited the asynchronous zoom setting or native resize. A rapid diagnostic completed 18 cycles in two minutes without reproducing it. The corrected harness awaits the requested zoom and renderer viewport, verifies equal zoom/viewport for both measurements, and retains the exact same-height assertion. A synchronized short packaged trial passed; the extended repeat is recorded below when complete.
+- A first 45-minute packaged soak stopped after 37 cycles (13.7 minutes) when two height samples differed by approximately the zoom ratio. The harness had not awaited the asynchronous zoom setting or native resize. A rapid diagnostic completed 18 cycles in two minutes without reproducing it. The corrected harness awaits the requested zoom and renderer viewport, verifies equal zoom/viewport for both measurements, and retains the exact same-height assertion. The synchronized 45-minute repeat passed: 127 cycles, six launches, no renderer errors and all intended manuscript text retained. That frozen build was commit `5d3d239`; later native-state, Find-paging, font, statistics and ODT improvements are validated separately and in the final packaged run.
 
 ## Final validation and local build
 

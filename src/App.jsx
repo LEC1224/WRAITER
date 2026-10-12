@@ -209,6 +209,15 @@ export default function App() {
     }
     return cached.get(key);
   }
+  async function encodeForSave(captured, format, journal) {
+    try { return await encodeNative(captured, format); }
+    catch (error) {
+      // A codec failure must still protect the complete draft and its journal.
+      // A null native payload stages recovery without replacing the source.
+      await api.autosave(captured, null, journal?.events.slice(persistedHistory.current.get(captured.id) || 0) || []);
+      throw error;
+    }
+  }
 
   const saveLocal = useCallback(async () => {
     clearTimeout(autosaveTimer.current);
@@ -217,7 +226,7 @@ export default function App() {
     const captured = projectRef.current;
     const history = historyRef.current, format = bindingRef.current?.format;
     setSaveState('saving');
-    const work = pendingSave.current.then(async () => api.autosave(captured, await encodeNative(captured, format), history?.events.slice(persistedHistory.current.get(captured.id) || 0) || [])).then(result => {
+    const work = pendingSave.current.then(async () => api.autosave(captured, await encodeForSave(captured, format, history), history?.events.slice(persistedHistory.current.get(captured.id) || 0) || [])).then(result => {
       if (projectRef.current === captured) { setSaveState(result.recoveryOnly ? 'recovery' : 'saved'); setSaveError(result.needsReview ? 'Edits are safe in recovery. Use Save to review this file’s format compatibility.' : ''); }
       setPath(result.path);
       if ('binding' in result) { bindingRef.current = result.binding; setBinding(result.binding); }
@@ -316,7 +325,7 @@ export default function App() {
       const captured = projectRef.current, history = historyRef.current;
       const target = !path || copy ? await api.chooseSaveTarget({ title: captured.title, format: bindingRef.current?.format || 'wraiter', copy }) : null;
       if ((!path || copy) && !target) return;
-      const work = pendingSave.current.then(async () => api.saveEncoded(captured, await encodeNative(captured, target?.format || bindingRef.current?.format), target ? { token: target.token } : {}, history.events.slice(persistedHistory.current.get(captured.id) || 0)));
+      const work = pendingSave.current.then(async () => api.saveEncoded(captured, await encodeForSave(captured, target?.format || bindingRef.current?.format, history), target ? { token: target.token } : {}, history.events.slice(persistedHistory.current.get(captured.id) || 0)));
       pendingSave.current = work.catch(() => {});
       const result = await work;
       if (result?.chooseCopy) { namedSave.current = false; await saveNamed(true); return; }
@@ -1029,7 +1038,11 @@ export default function App() {
         await pendingSave.current;
         await actionRef.current.rememberTab().catch(error => notify(errorText(error)));
         const captured = projectRef.current;
-        api.finishClose(captured, await actionRef.current.encodeNative(captured), historyRef.current?.events.slice(persistedHistory.current.get(captured?.id) || 0) || []);
+        let payload = null;
+        try { payload = await actionRef.current.encodeNative(captured); } catch {}
+        // A failed office encoder can still close after the main process
+        // durably stages recovery with the existing source left in place.
+        api.finishClose(captured, payload, historyRef.current?.events.slice(persistedHistory.current.get(captured?.id) || 0) || []);
       }
       else if (command === 'external-files-pending') actionRef.current.openExternalFiles();
       else actionRef.current.command(command);
