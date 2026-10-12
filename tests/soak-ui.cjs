@@ -5,9 +5,12 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
+const JSZip = require('jszip');
 const root = path.resolve(__dirname, '..'), output = path.join(root, 'test-output');
 const minutes = Number(process.argv.find(value => value.startsWith('--minutes='))?.split('=')[1] || 10);
+const format = process.argv.find(value => value.startsWith('--format='))?.split('=')[1] || 'wraiter';
 assert.ok(Number.isFinite(minutes) && minutes > 0 && minutes <= 180, 'Choose a soak duration between 0 and 180 minutes.');
+assert.ok(['wraiter', 'odt'].includes(format), 'Choose WRAITER or ODT for the endurance save format.');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const textOf = node => node?.text || (node?.content || []).map(textOf).join('');
 const twoFrames = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -31,13 +34,13 @@ const geometry = () => {
 
 (async () => {
   await fs.mkdir(output, { recursive: true });
-  const userData = await fs.mkdtemp(path.join(output, 'soak-')), target = path.join(userData, 'Synthetic long novel.wraiter');
+  const userData = await fs.mkdtemp(path.join(output, 'soak-')), target = path.join(userData, `Synthetic long novel.${format}`);
   const line = 'The river turned through the valley under the quiet evening sky. ';
   const fixture = { format: 'wraiter', version: 1, id: 'overnight-soak', title: 'Synthetic long novel', language: 'en-US', documentStyle: { fontFamily: 'Cambria', fontSize: 12, lineHeight: 1.5 }, notes: '', style: '', references: [], snapshots: [], chapters: Array.from({ length: 4 }, (_, chapter) => ({ id: `chapter-${chapter}`, title: `Part ${chapter + 1}`, status: 'Draft', content: { type: 'doc', content: Array.from({ length: 1500 }, (_, index) => ({ type: 'paragraph', attrs: { lineHeight: index % 19 === 0 ? 2 : null }, content: [{ type: 'text', text: `Paragraph ${index + 1}. ${line.repeat(1 + index % 3)}${index === 1499 ? `TAIL_C${chapter + 1}` : ''}` }] })) } })) };
   const expected = fixture.chapters.map(chapter => chapter.content.content.map(textOf));
   const serialized = JSON.stringify(fixture);
-  await fs.writeFile(target, serialized);
-  await fs.writeFile(path.join(userData, 'recovery.json'), JSON.stringify({ project: fixture, path: target, expectedHash: crypto.createHash('sha256').update(serialized).digest('hex') }));
+  if (format === 'wraiter') await fs.writeFile(target, serialized);
+  await fs.writeFile(path.join(userData, 'recovery.json'), JSON.stringify({ project: fixture, path: format === 'wraiter' ? target : null, expectedHash: format === 'wraiter' ? crypto.createHash('sha256').update(serialized).digest('hex') : null }));
   await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ setupComplete: true, tutorialComplete: true, enabled: false, startup: 'restore', pageMode: 'continuous', showParagraphNumbers: true, theme: 'dark', spellcheck: false }));
   const env = { ...process.env, WRAITER_USER_DATA: userData }; delete env.ELECTRON_RUN_AS_NODE;
   const options = process.env.WRAITER_EXECUTABLE ? { executablePath: process.env.WRAITER_EXECUTABLE, args: [], env, timeout: 60000 } : { args: [root], env, timeout: 60000 };
@@ -52,9 +55,21 @@ const geometry = () => {
     await page.evaluate(() => document.fonts.ready); await twoFrames(page);
     await waitFor(async () => (await page.evaluate(() => window.wraiter.boot())).project.historySequence > 0, 'history initialization');
   }
+  async function savedProject() {
+    if (format === 'wraiter') return JSON.parse(await fs.readFile(target, 'utf8'));
+    const source = await fs.readFile(target), name = process.platform === 'win32' ? path.resolve(target).toLowerCase() : path.resolve(target);
+    const state = JSON.parse(await fs.readFile(path.join(userData, 'Format state', `${crypto.createHash('sha256').update(name).digest('hex')}.json`), 'utf8'));
+    assert.equal(state.sourceHash, crypto.createHash('sha256').update(source).digest('hex'), 'ODT state must describe the actual source bytes');
+    const xml = await (await JSZip.loadAsync(source)).file('content.xml').async('string');
+    // This fixture has plain paragraphs only. Check the actual office text as
+    // well as WRAITER's companion state; no author documents use this helper.
+    const paragraphs = [...xml.matchAll(/<text:p\b[^>]*>([\s\S]*?)<\/text:p>/g)].map(match => match[1].replace(/<text:s\b([^>]*)\/>/g, (_tag, attrs) => ' '.repeat(Number(attrs.match(/text:c="(\d+)"/)?.[1] || 1))).replace(/<[^>]*>/g, '').replace(/&(amp|lt|gt|quot|apos);/g, (_entity, name) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[name])));
+    assert.deepEqual(paragraphs, state.project.chapters.flatMap(chapter => chapter.content.content.map(textOf)), 'real ODT paragraphs must agree with their companion state');
+    return state.project;
+  }
   async function saved(chapter, tail) {
     await waitFor(async () => {
-      const named = JSON.parse(await fs.readFile(target, 'utf8'));
+      const named = await savedProject();
       const recovery = JSON.parse(await fs.readFile(path.join(userData, 'recovery.json'), 'utf8')).project;
       return textOf(named.chapters[chapter].content.content.at(-1)) === tail && textOf(recovery.chapters[chapter].content.content.at(-1)) === tail;
     }, 'named save and recovery agree');
@@ -80,13 +95,20 @@ const geometry = () => {
     samples.push({ label, elapsedMs: Date.now() - started, launches, heapBytes: heap.usedSize, nodes: metrics.Nodes, documents: metrics.Documents, listeners: metrics.JSEventListeners, processes });
   }
   async function report(passed, failure) {
-    const result = { passed, minutesRequested: minutes, elapsedMs: Date.now() - started, userData, executable: process.env.WRAITER_EXECUTABLE || 'development Electron', launches, completedCycles: cycles.length, cycles, samples, errors, ...(failure ? { failure: failure.message } : {}) };
+    const result = { passed, format, minutesRequested: minutes, elapsedMs: Date.now() - started, userData, executable: process.env.WRAITER_EXECUTABLE || 'development Electron', launches, completedCycles: cycles.length, cycles, samples, errors, ...(failure ? { failure: failure.message } : {}) };
     result.status = failure ? 'failed' : passed ? 'passed' : 'running';
     await fs.writeFile(path.join(userData, 'report.json'), JSON.stringify(result, null, 2));
     await fs.writeFile(path.join(output, 'soak-ui-results.json'), JSON.stringify(result, null, 2));
   }
   try {
-    await launch(); await sample('initial');
+    await launch();
+    if (format === 'odt') {
+      await app.evaluate(({ dialog }, target) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: target }); }, target);
+      await command('save-copy');
+      await waitFor(async () => (await page.evaluate(() => window.wraiter.boot())).binding?.format === 'odt', 'initial genuine ODT saveback');
+      await savedProject();
+    }
+    await sample('initial');
     await page.getByRole('button', { name: 'New project tab', exact: true }).click();
     await page.getByRole('tab', { name: 'Untitled manuscript', exact: true }).waitFor();
     await page.getByRole('tab', { name: 'Synthetic long novel', exact: true }).click(); await editor.waitFor();
@@ -129,13 +151,13 @@ const geometry = () => {
       if (cycle % 5 === 0) { await sample(`after ${cycle} cycles`); await report(false); console.log(JSON.stringify({ progress: cycle, elapsedMinutes: Number(((Date.now() - started) / 60000).toFixed(1)), userData })); }
       if (cycle % 25 === 0 && Date.now() < deadline) {
         await app.close(); app = null; await launch();
-        const reopened = JSON.parse(await fs.readFile(target, 'utf8'));
+        const reopened = await savedProject();
         assert.deepEqual(reopened.chapters.map(item => item.content.content.map(textOf)), expected, 'restart preserves every paragraph');
         await sample(`restart ${launches}`);
       }
       if (Date.now() < deadline) await pause(Math.min(15000, deadline - Date.now()));
     }
-    const final = JSON.parse(await fs.readFile(target, 'utf8'));
+    const final = await savedProject();
     assert.deepEqual(final.chapters.map(chapter => chapter.content.content.map(textOf)), expected, 'only intended tail additions changed');
     await sample('final'); await page.screenshot({ path: path.join(userData, 'final.png') }); await report(true);
     console.log(JSON.stringify({ passed: true, completedCycles: cycles.length, elapsedMinutes: Number(((Date.now() - started) / 60000).toFixed(1)), launches, userData }, null, 2));

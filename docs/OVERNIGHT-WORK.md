@@ -98,7 +98,7 @@ Native-document saves also rewrote the format-state file containing private note
 
 Two alternating-order comparisons used a 120,000-word synthetic TXT document and ten unchanged cloned saves. They took 1,132–1,158 ms before and 343–374 ms after; format-state replacements fell from ten to zero. Recovery reuse was already present in both versions. The packaged soak was running in the background, so these are scoped backend measurements rather than desktop timing claims.
 
-Seven new native-state groups cover notes/history/fidelity/source changes, fresh restart, deleted/corrupt/external state, optional read locks, failed flush/retry, destination changes and external source edits. All 321 unit tests and the production build passed. Native desktop workflows are queued after the frozen packaged soak.
+Seven new native-state groups cover notes/history/fidelity/source changes, fresh restart, deleted/corrupt/external state, optional read locks, failed flush/retry, destination changes and external source edits. All 321 unit tests and the production build passed. The genuine desktop native workflow passed with ODT saveback, DOCX conversion, scoped exports, PDF/EPUB, persistent undo and native binding after restart.
 
 ### Keep Find paging aligned with the selected result
 
@@ -112,7 +112,7 @@ Four headless browser groups cover equivalent refreshes, query/options, manual p
 
 Changing the words-per-page input used to repeat vocabulary, character, paragraph and sentence analysis for the whole manuscript. The dialog now retains its analysis until the project changes and calculates the page estimate directly from the selected length. A 120,000-word fixture's full analysis took 35–59 ms per call in three samples; that redundant work is avoided for each estimate adjustment. This is a small interaction improvement, not a claimed startup or typing gain.
 
-All 321 unit tests and the production build passed. The existing proofreading/statistics desktop workflow is queued after the soak.
+All 321 unit tests and the production build passed. A browser interaction check adjusted a 120,000-word document to five page lengths, verified correct estimates and unchanged other statistics, and confirmed that its initial sentence analysis was reused. The existing proofreading/statistics desktop workflow is queued after the soak.
 
 ### Keep the font picker usable by keyboard and in short windows
 
@@ -132,7 +132,13 @@ The parser now rejects invalid visible XML characters instead of putting parser-
 
 An office encoder could fail before its save reached the recovery writer, and closing repeated the same failure before contacting the main process. Save and autosave now stage the complete captured project and journal through the normal durable backend when encoding fails, then report the original encoding error. Closing can submit that recovery-only save; the main process still confirms persistence before it closes the window. The last valid native file remains intact.
 
-Three genuine ODT desktop groups passed with an invalid visible XML character. They verify automatic and explicit save failures, identical original office bytes, durable complete recovery and private notes, close/restart, persistent undo/redo, later valid ODT saveback and the native binding after another restart. All 321 unit tests and the production build passed. The broader native export/save workflows are running next.
+Three genuine ODT desktop groups passed with an invalid visible XML character. They verify automatic and explicit save failures, identical original office bytes, durable complete recovery and private notes, close/restart, persistent undo/redo, later valid ODT saveback and the native binding after another restart. All 321 unit tests and the production build passed. The broader eight-group native format workflow passed with real ODT/DOCX files, scoped exports, PDF/EPUB and cross-session undo/redo; its three provider requests used the local mock.
+
+### Exercise actual ODT files in the endurance harness
+
+The optional `--format=odt` mode begins by saving the synthetic novel through the real application. Each save/undo/redo checks recovery, the companion state's source digest and the actual 6,000 paragraphs extracted from the ODT package. Restarts and the final check compare every paragraph against the intended edits. The default WRAITER mode retains its complete named-JSON checks.
+
+A 90-second source trial passed four cycles with real ODT saveback, zoom/resize, Find, paragraph navigation and tab returns. The final packaged endurance run uses this mode for longer validation.
 
 ## Experiments and observations
 
