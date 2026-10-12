@@ -8,6 +8,7 @@ The working tree already contains the tested scrolling/paragraph-numbering fix, 
 
 - Starting branch: `codex/project-tabs-and-startup`; base release commit: `5bf31ca`; initial local-work checkpoint: `113c2cc`.
 - Overnight branch: `codex/overnight-2026-10-12`.
+- Local comparison tags: `codex/overnight-start-2026-10-12` preserves checkpoint `113c2cc`, including the earlier scrolling fix; `codex/overnight-preview-2026-10-13` names packaged runtime commit `193ba96`. The previous project branch remains at its release commit, so use the start tag when comparing with the fixed scrolling baseline.
 - Baseline `npm test`: 287 passing tests; `npm run build`: passed.
 - Author manuscripts, account settings and the installed application are outside the experiment profiles.
 - Baseline scrolling remains stable with real paragraph heights. The earlier large-chapter typing tradeoff is the first performance investigation.
@@ -63,6 +64,8 @@ A desktop interaction run reached the correct undone image state and saved it to
 Atomic replacement now retries permission/busy failures up to five times, with waits totalling at most 620 ms. It retains the flushed staging file and preceding backup, never removes the destination to force a replacement, and still reports permanent or unrelated failures. Native and WRAITER document saves recheck the original fingerprint after staging and before each retry, so a change or newly created destination during the wait is preserved. The check does not make filesystem replacement a compare-and-swap operation; there remains the ordinary tiny interval between the final check and rename.
 
 Six new regression groups simulate replacement and backup locks, permanent errors, unrelated disk errors, an external manuscript edit, a new Save-as destination and an external native-text edit. They verify original bytes, backups, cleanup and recovery. All 302 unit tests, the build, the full document-interaction workflow and both damaged-history/restart scenarios passed. Autosave scheduling and write flushing remain unchanged.
+
+Four additional Windows workflows passed with real OS sharing locks, using a hidden PowerShell helper on synthetic WRAITER and TXT files. A 600 ms lock caused actual `EPERM` failures followed by a successful retry with the preceding backup retained. A 1,800 ms lock exhausted the initial replacement plus five retries, kept the original bytes and complete recovery/private notes, then saved normally after release. The helper only holds a read handle; it does not inject rename errors or modify source data. Evidence: `test-output/windows-locks-results.json`.
 
 ### Reveal every selected Find result
 
@@ -128,6 +131,8 @@ ODT encoding reparsed an XML namespace wrapper for every top-level manuscript no
 
 The parser now rejects invalid visible XML characters instead of putting parser-error content into an office file. Two new import/export groups check multi-paragraph quotations, an empty chapter, following chapters, a chapter exceeding the batch limit, emphasis, Unicode and invalid XML characters. All 25 browser import/export groups, 321 unit tests and the production build passed. Independent LibreOffice rendering passed for ODT and DOCX with lists, a merged table, an embedded image, Arial text and a manual page break. The rendered ODT first page was visually inspected.
 
+A further 42-document browser corpus compared the previous and final encoders. Every uncompressed package part was byte-identical, including office XML and chapter-structure metadata; warnings were identical too. Cases include mixed formatting/namespaces, nested quotations and lists, merged tables, embedded images, headings/code/rules, Unicode and XML literals, whitespace, title options, empty/following chapters, multiple batches and an individual quote node larger than a batch. This is output-equivalence verification, without a timing claim. Evidence: `test-output/overnight-odt-corpus.json`.
+
 ### Preserve recovery when native-file encoding fails
 
 An office encoder could fail before its save reached the recovery writer, and closing repeated the same failure before contacting the main process. Save and autosave now stage the complete captured project and journal through the normal durable backend when encoding fails, then report the original encoding error. Closing can submit that recovery-only save; the main process still confirms persistence before it closes the window. The last valid native file remains intact.
@@ -146,6 +151,7 @@ Record benchmark conditions, rejected approaches and unresolved findings here, s
 
 - Desktop benchmarks run sequentially with isolated synthetic profiles. Build and unit-test loads should finish before timing runs.
 - No off-screen unloading, estimated paragraph heights, persistence delays or journal durability changes were introduced.
+- Cache lifetimes were reviewed: Find's editor plugin retains one document/query result, text/history/navigation caches use weak object keys, and each persistence owner retains one path/digest marker. Changed data still invalidates or replaces those entries. The endurance reports record collected heap, DOM nodes and listeners; they are evidence for the exercised workload, rather than a guarantee for every document.
 - An initial prototype cancelling only the queued toolbar refresh gave no render-count improvement and was removed. Later measurements identified a second source of duplicate work in unchanged status setters; the tested combination is described above.
 - A first 45-minute packaged soak stopped after 37 cycles (13.7 minutes) when two height samples differed by approximately the zoom ratio. The harness had not awaited the asynchronous zoom setting or native resize. A rapid diagnostic completed 18 cycles in two minutes without reproducing it. The corrected harness awaits the requested zoom and renderer viewport, verifies equal zoom/viewport for both measurements, and retains the exact same-height assertion. The synchronized 45-minute repeat passed: 127 cycles, six launches, no renderer errors and all intended manuscript text retained. That frozen build was commit `5d3d239`; later native-state, Find-paging, font, statistics and ODT improvements are validated separately and in the final packaged run.
 
