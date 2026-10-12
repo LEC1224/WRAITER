@@ -50,8 +50,16 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
 
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('command', 'find'));
     const find = page.getByRole('textbox', { name: 'Find text', exact: true }); await find.fill('UNIQUE_TAIL_PASSAGE'); await find.press('Enter');
-    await waitFor(async () => await page.evaluate(() => window.getSelection().toString()) === 'UNIQUE_TAIL_PASSAGE', 'Search did not select the distant match');
+    await waitFor(async () => {
+      const match = editor.locator('.search-match').filter({ hasText: 'UNIQUE_TAIL_PASSAGE' });
+      if (await match.count() !== 1) return false;
+      return match.evaluate(element => {
+        const bounds = element.closest('.writing-scroll').getBoundingClientRect(), hit = element.getBoundingClientRect();
+        return hit.top >= bounds.top && hit.bottom <= bounds.bottom;
+      });
+    }, 'Search did not reveal the distant match');
     await page.getByRole('button', { name: 'Close search', exact: true }).click();
+    await waitFor(async () => await page.evaluate(() => window.getSelection().toString()) === 'UNIQUE_TAIL_PASSAGE', 'Closing Find did not restore the selected passage');
 
     await page.getByRole('button', { name: 'New project tab', exact: true }).click();
     await waitFor(async () => await page.getByRole('tab', { name: 'Untitled manuscript', exact: true }).getAttribute('aria-selected') === 'true', 'New tab did not activate');
