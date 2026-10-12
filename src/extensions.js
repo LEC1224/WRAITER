@@ -27,14 +27,19 @@ export { ParagraphFormat } from '../electron/editor-schema.mjs';
 export const SearchHighlight = Extension.create({
   name: 'searchHighlight',
   addProseMirrorPlugins() {
+    // Cursor moves, toolbar actions and pagination metadata keep the same
+    // immutable document. Reuse highlights until that document or query changes.
+    let cached = null;
     return [new Plugin({ key: searchKey,
       state: { init: () => '', apply: (tr, value) => tr.getMeta(searchKey) ?? value },
       props: { decorations(state) {
         const value = searchKey.getState(state), options = typeof value === 'string' ? { query: value } : value || {};
-        const query = options.query;
-        if (!query) return null;
+        const query = options.query, caseSensitive = !!options.caseSensitive, wholeWord = !!options.wholeWord;
+        if (!query) { cached = null; return null; }
+        if (cached?.doc === state.doc && cached.query === query && cached.caseSensitive === caseSensitive && cached.wholeWord === wholeWord) return cached.decorations;
         const decorations = findTextMatches(state.doc, query, 2000, options).map(match => Decoration.inline(match.from, match.to, { class: 'search-match' }));
-        return DecorationSet.create(state.doc, decorations);
+        cached = { doc: state.doc, query, caseSensitive, wholeWord, decorations: DecorationSet.create(state.doc, decorations) };
+        return cached.decorations;
       } }
     })];
   }

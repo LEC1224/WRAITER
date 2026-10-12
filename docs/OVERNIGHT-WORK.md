@@ -28,6 +28,12 @@ An instrumented 32-character typing run in a 1,500-paragraph chapter made **36 `
 
 Validation: 287 unit tests, production build, large-manuscript typing/search/tab checks, nine image-import groups, eleven document-interaction groups, and settings workflows passed. The settings regression now checks language and spelling attributes after changing them and typing again, to catch stale configuration.
 
+### Reuse Find highlights for cursor movements
+
+Find highlights now reuse their decoration set while the immutable chapter and query/options are unchanged. Typing, deleting, changing case/whole-word options and closing Find invalidate the cache. Each editor owns just its latest cached result.
+
+In a focused benchmark with 1,500 paragraphs and 1,500 highlights, 200 selection updates took 771–844 ms before and 0.75–1.44 ms after. This measures the search plugin, not total desktop interaction time. Four new regression groups cover selection/metadata updates, edits, option changes/clearing, editor isolation and the existing 2,000-highlight limit. All 291 unit tests and the production build passed. The real desktop search, replace-all, stale-preview rejection, comments, formatting, minimum-window and restart checks also passed.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.
