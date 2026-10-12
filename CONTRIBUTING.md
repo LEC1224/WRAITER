@@ -60,15 +60,16 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | Sustained large-manuscript save, undo, navigation and restart | `npm run test:soak -- --minutes=45`; add `--format=odt` for actual office saveback |
 | Find highlights beyond the display limit | `npm run test:large-search` |
 | Find result paging and replacement previews | `npm run test:search-panel` and `npm run test:large-search` |
-| Font search, keyboard focus or popup placement | `npm run test:font-picker`, `npm run test:settings` and `npm run test:app` |
+| Font search, keyboard focus or popup placement | `npm run test:font-picker`, `npm run test:font-picker-desktop`, `npm run test:settings` and `npm run test:app` |
 | External file reload and margin numbering | `npm run test:reload-numbering` and `npm run test:long-numbering` |
 | Proofreading review, statistics or spelling tools | `npm run test:proofreading` |
 | Save/import/export | `npm run test:io` and `npm run test:v03` |
 | Native encoding failures and recovery | `npm run test:native-save-errors` |
+| Windows replacement locks and durable snapshots | `npm run test:windows-locks` |
 | Clipboard export | `npm run test:clipboard` |
 | Image drop, clipboard image paste or image insertion | `npm run test:images` |
 | Image controls, Find focus/keys, chapter/tab gestures, links, document/reference drops or zoom | `npm run test:ux` |
-| Persistent undo and recovery | `npm run test:history-recovery` |
+| Persistent undo and recovery | `npm run test:history-recovery` and `npm run test:crash-recovery` |
 | Local-model interface | `npm run test:v04` |
 
 Use synthetic manuscripts in tests. Do not weaken validation, replace production AI with canned tutorial output, or send real manuscripts to providers in automated checks. Add a focused regression test for a consequential bug or new behaviour; documentation-only changes do not need new tests.
