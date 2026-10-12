@@ -74,6 +74,14 @@ Find also reuses text extracted from unchanged immutable paragraphs across query
 
 Four new unit groups cover late selected results, stale selections/options, literal Unicode matching, whole-word boundaries, marks, hard breaks and inline objects. The production build and full unit suite passed. Four new desktop groups verify result 2,405, wraparound/F3, focus retention, replacement/undo, cross-chapter navigation, minimum-window themes and closing Find. The broader revision, document-interaction and undo/scroll workflows passed as well.
 
+### Reuse unchanged editing-history status
+
+The toolbar, native editor menu and history panel now share the status calculation for the same immutable journal. An edit, undo, redo, branch or reload produces a different journal and a fresh calculation. Returned objects remain independent, so a caller cannot alter a cached label or count.
+
+In a focused helper benchmark, 200 status calls for a 10,000-entry journal took 332–357 ms before caching and 0.01–0.02 ms after warming. This avoids repeated maps and entry scans; it does not measure complete typing or undo latency. The journal format, recording and flushing are unchanged.
+
+A new regression checks current labels/counts across typing, undo, redo, branching, reload, older journal snapshots, unrelated manuscripts and caller mutations. All 307 unit tests and the build passed, along with the large Find, revision, document-interaction and undo/scroll desktop checks.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.

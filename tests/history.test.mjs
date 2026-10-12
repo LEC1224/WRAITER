@@ -58,6 +58,29 @@ test('undo and redo survive serialized sessions and cross chapter boundaries', (
   assert.deepEqual(contents(project), ['Alpha!', 'Omega?']); assert.equal(historyStatus(journal).canRedo, false);
 });
 
+test('history status remains current across undo, redo, branching, reload and unrelated journals', () => {
+  let project = manuscript(), journal = createHistory(project);
+  const empty = historyStatus(journal); assert.equal(empty.canUndo, false); assert.equal(empty.totalEdits, 0);
+  ({ project, journal } = typeAtCaret(project, journal, 'hello'));
+  const typedJournal = journal, typedStatus = historyStatus(journal);
+  assert.equal(typedStatus.canUndo, true); assert.equal(typedStatus.canRedo, false); assert.equal(typedStatus.totalEdits, 1);
+  const changedByCaller = historyStatus(journal); changedByCaller.undoLabel = 'Caller-owned value'; changedByCaller.totalEdits = 999;
+  assert.deepEqual(historyStatus(journal), typedStatus, 'caller changes cannot poison a cached status');
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema));
+  const undoneProject = project, undoneJournal = journal, undoneStatus = historyStatus(journal);
+  assert.equal(undoneStatus.canUndo, false); assert.equal(undoneStatus.canRedo, true); assert.ok(undoneStatus.sequence > typedStatus.sequence);
+  ({ project, journal } = applyHistory(project, journal, 'redo', schema));
+  assert.equal(historyStatus(journal).canUndo, true); assert.equal(historyStatus(journal).canRedo, false);
+  ({ project, journal } = typeAtCaret(undoneProject, undoneJournal, 'bye'));
+  const branched = historyStatus(journal);
+  assert.equal(branched.totalEdits, 2); assert.equal(branched.canRedo, false);
+  const restored = createHistory(structuredClone(project), { events: structuredClone(journal.events) });
+  assert.deepEqual(historyStatus(restored), branched);
+  assert.deepEqual(historyStatus(typedJournal), typedStatus, 'an earlier immutable journal keeps its original status');
+  assert.deepEqual(historyStatus(createHistory({ ...manuscript(), id: 'unrelated' })), empty);
+  assert.deepEqual(historyStatus(null), { canUndo: false, canRedo: false, undoLabel: '', redoLabel: '', totalEdits: 0, sequence: 0 });
+});
+
 test('typing is undone a word at a time and grouped timeline rows survive restart', () => {
   let project = manuscript(), journal = createHistory(project);
   ({ project, journal } = typeAtCaret(project, journal, ' hello, world'));

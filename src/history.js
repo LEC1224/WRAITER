@@ -11,6 +11,7 @@ const clone = value => value === undefined ? undefined : structuredClone(value);
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const id = () => globalThis.crypto.randomUUID();
 const valueFingerprints = new WeakMap(), projectFingerprints = new WeakMap(), structuralFingerprints = new WeakMap();
+const statusCache = new WeakMap();
 
 export class HistoryMismatchError extends Error {
   constructor(message = 'This editing history no longer matches the document. The saved history has been preserved.') {
@@ -463,6 +464,10 @@ export function prepareHistoryLoad(project, saved = {}, schema) {
 
 export function historyStatus(journal) {
   if (!journal) return { canUndo: false, canRedo: false, undoLabel: '', redoLabel: '', totalEdits: 0, sequence: 0 };
+  // Published journals are immutable. Cursor/toolbar renders and the history
+  // panel can share this calculation until an edit, undo or redo replaces it.
+  const cached = statusCache.get(journal);
+  if (cached) return { ...cached };
   const lookup = new Map(journal.entries.map(entry => [entry.id, entry]));
   const positions = new Map(journal.activeIds.map((entryId, index) => [entryId, index]));
   let totalEdits = 0, priorGroup = null, priorStatus = null;
@@ -471,7 +476,9 @@ export function historyStatus(journal) {
     if (!entry.groupId || entry.groupId !== priorGroup || status !== priorStatus) totalEdits++;
     priorGroup = entry.groupId || null; priorStatus = status;
   }
-  return { canUndo: journal.cursor > 0, canRedo: journal.cursor < journal.activeIds.length, undoLabel: lookup.get(journal.activeIds[journal.cursor - 1])?.label || '', redoLabel: lookup.get(journal.activeIds[journal.cursor])?.label || '', totalEdits, sequence: journal.sequence };
+  const status = { canUndo: journal.cursor > 0, canRedo: journal.cursor < journal.activeIds.length, undoLabel: lookup.get(journal.activeIds[journal.cursor - 1])?.label || '', redoLabel: lookup.get(journal.activeIds[journal.cursor])?.label || '', totalEdits, sequence: journal.sequence };
+  statusCache.set(journal, status);
+  return { ...status };
 }
 
 export function timelineEntries(journal) {
