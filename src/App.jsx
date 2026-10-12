@@ -40,7 +40,7 @@ import ChapterOutline from './ChapterOutline.jsx';
 import ProjectTabs from './ProjectTabs.jsx';
 import GoToParagraph from './GoToParagraph.jsx';
 import { paragraphLocations } from './navigation.js';
-import { DOCUMENT_EXTENSIONS, IMAGE_EXTENSIONS, ZOOM_LEVELS, extensionOf, moveItem, nextZoom, captureReadingAnchor, restoreReadingAnchor } from './document-ux.js';
+import { DOCUMENT_EXTENSIONS, IMAGE_EXTENSIONS, ZOOM_LEVELS, extensionOf, moveItem, nextZoom, captureReadingAnchor, restoreReadingAnchor, revealEditorSelection } from './document-ux.js';
 import ProofreadingDialog from './ProofreadingDialog.jsx';
 import StatisticsDialog from './StatisticsDialog.jsx';
 import { applyProofreadingFixes } from './proofreading.js';
@@ -696,12 +696,7 @@ export default function App() {
         if (!scroller) return;
         if (top !== null) scroller.scrollTop = top;
         if (!reveal) return;
-        try {
-          const caret = current.view.coordsAtPos(current.state.selection.head);
-          const viewport = scroller.getBoundingClientRect(), margin = 24;
-          if (caret.bottom > viewport.bottom - margin) scroller.scrollTop += caret.bottom - (viewport.bottom - margin);
-          else if (caret.top < viewport.top + margin) scroller.scrollTop -= viewport.top + margin - caret.top;
-        } catch {}
+        try { revealEditorSelection(current); } catch {}
       }));
     }
   }
@@ -1076,7 +1071,12 @@ export default function App() {
     if (transition.current || !range || !projectRef.current.chapters.some(item => item.id === chapterId)) return;
     if (requestRef.current?.mode !== 'chat') dismiss();
     const current = editorRef.current;
-    if (chapterId === activeId && current && !current.isDestroyed) { const chain = current.chain(); if (focusEditor) chain.focus(); chain.setTextSelection(range).scrollIntoView().run(); }
+    if (chapterId === activeId && current && !current.isDestroyed) {
+      const chain = current.chain(); if (focusEditor) chain.focus(); chain.setTextSelection(range).scrollIntoView().run();
+      // ProseMirror skips scrolling when Find owns the DOM selection. Reveal
+      // the logical passage explicitly without moving focus from its input.
+      if (!focusEditor) revealEditorSelection(current);
+    }
     else {
       restoreSelection.current = { type: 'text', anchor: range.from, head: range.to };
       restoreFocus.current = focusEditor;

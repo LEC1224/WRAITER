@@ -40,6 +40,7 @@
     "test:large": "node tests/large-manuscript-ui.cjs",
     "test:navigation": "node tests/paragraph-navigation-ui.cjs",
     "test:soak": "node tests/soak-ui.cjs",
+    "test:large-search": "node tests/large-search-ui.cjs",
     "test:scrolling": "node tests/scrolling-ui.cjs",
     "test:reload-numbering": "node tests/reload-numbering-ui.cjs",
     "test:long-numbering": "node tests/long-numbering-ui.cjs",

@@ -28,3 +28,17 @@ export function restoreReadingAnchor(anchor) {
   if (!anchor?.element.isConnected) return;
   anchor.scroller.scrollTop += anchor.element.getBoundingClientRect().top - anchor.scroller.getBoundingClientRect().top - anchor.offset;
 }
+export function revealEditorSelection(editor) {
+  if (!editor || editor.isDestroyed) return false;
+  const scroller = editor.view.dom.closest('.writing-scroll');
+  if (!scroller) return false;
+  const { from, to } = editor.state.selection, first = editor.view.coordsAtPos(from, 1), last = editor.view.coordsAtPos(to, -1);
+  const viewport = scroller.getBoundingClientRect(), margin = Math.min(24, viewport.height / 4);
+  const top = viewport.top + margin, bottom = viewport.bottom - margin;
+  let delta = 0;
+  if (last.bottom - first.top > bottom - top) delta = first.top - top;
+  else if (first.top < top) delta = first.top - top;
+  else if (last.bottom > bottom) delta = last.bottom - bottom;
+  if (delta) scroller.scrollTop += delta;
+  return Boolean(delta);
+}

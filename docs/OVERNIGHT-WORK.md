@@ -64,6 +64,16 @@ Atomic replacement now retries permission/busy failures up to five times, with w
 
 Six new regression groups simulate replacement and backup locks, permanent errors, unrelated disk errors, an external manuscript edit, a new Save-as destination and an external native-text edit. They verify original bytes, backups, cleanup and recovery. All 302 unit tests, the build, the full document-interaction workflow and both damaged-history/restart scenarios passed. Autosave scheduling and write flushing remain unchanged.
 
+### Reveal every selected Find result
+
+Find listed matches beyond the 2,000-decoration limit but did not highlight those late passages. The selected result now receives one additional decoration if needed; ordinary results retain the limit and reuse the existing base decoration set. Clearing Find, changing its options, editing the passage and collapsing the selection remove invalid active highlights.
+
+The new desktop regression exposed a second issue: ProseMirror deliberately skips its scroll routine when the DOM selection is outside the editor. A freshly opened Find field could select paragraph 2,405 logically while leaving the manuscript at paragraph one. WRAITER now reveals the selected passage explicitly while preserving Find input focus. Restored chapter selections reuse the same reveal helper.
+
+Find also reuses text extracted from unchanged immutable paragraphs across query changes. Six alternating-order Node benchmark pairs with 1,500 formatted paragraphs and 160 searches per sample took 84–106 ms before and 39–51 ms after, with identical 420,000 total matches. Repeat text extraction calls fell from 240,000 to zero after warming. This measures the search function, not desktop latency; the packaged soak ran separately in the background.
+
+Four new unit groups cover late selected results, stale selections/options, literal Unicode matching, whole-word boundaries, marks, hard breaks and inline objects. The production build and full unit suite passed. Four new desktop groups verify result 2,405, wraparound/F3, focus retention, replacement/undo, cross-chapter navigation, minimum-window themes and closing Find. The broader revision, document-interaction and undo/scroll workflows passed as well.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.

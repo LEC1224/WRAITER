@@ -67,3 +67,32 @@ test('search highlight caches belong to their editor and respect the highlight l
   const manyState = many.state.apply(many.state.tr.setMeta(searchKey, { query: 'river' }));
   assert.equal(ranges(many.plugin.props.decorations(manyState)).length, 2000);
 });
+
+test('a selected Find result beyond the highlight limit stays visible without unbounding all decorations', () => {
+  let { plugin, state } = create('river '.repeat(2205));
+  const matches = findTextMatches(state.doc, 'river', Infinity), tail = matches.at(-1);
+  state = state.apply(state.tr.setMeta(searchKey, { query: 'river' }).setSelection(TextSelection.create(state.doc, tail.from, tail.to)));
+  const highlighted = plugin.props.decorations(state), decorations = highlighted.find();
+  assert.ok(decorations.some(item => item.from === tail.from && item.to === tail.to), 'the active late result has a visible highlight');
+  assert.equal(decorations.length, 2001, 'only one selected result is added to the ordinary limit');
+  assert.equal(decorations.filter(item => item.type.attrs.class.includes('search-match-active')).length, 1);
+  assert.equal(plugin.props.decorations(state), highlighted);
+  state = state.apply(state.tr.setMeta('unrelated', true)); assert.equal(plugin.props.decorations(state), highlighted);
+  state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, tail.to)));
+  assert.equal(plugin.props.decorations(state).find().length, 2000, 'a collapsed cursor removes the extra highlight');
+  const first = matches[0]; state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, first.from, first.to)));
+  assert.equal(plugin.props.decorations(state).find().length, 2000, 'a selected ordinary result replaces its decoration rather than duplicating it');
+});
+
+test('active highlights never retain a stale query, document or invalid whole-word selection', () => {
+  let { plugin, state } = create('rivers river RIVER');
+  state = state.apply(state.tr.setMeta(searchKey, { query: 'river', wholeWord: true }).setSelection(TextSelection.create(state.doc, 1, 6)));
+  const activeCount = () => plugin.props.decorations(state)?.find().filter(item => item.type.attrs.class.includes('search-match-active')).length || 0;
+  assert.equal(activeCount(), 0, 'a partial word is not an active whole-word result');
+  state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, 8, 13))); assert.equal(activeCount(), 1);
+  state = state.apply(state.tr.setMeta(searchKey, { query: 'other' })); assert.equal(activeCount(), 0);
+  state = state.apply(state.tr.setMeta(searchKey, { query: 'river' })); assert.equal(activeCount(), 1);
+  state = state.apply(state.tr.insertText('plain', 8, 13)); assert.equal(activeCount(), 0);
+  state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, 14, 19)).setMeta(searchKey, { query: 'river', caseSensitive: true })); assert.equal(activeCount(), 0);
+  state = state.apply(state.tr.setMeta(searchKey, '')); assert.equal(plugin.props.decorations(state), null);
+});

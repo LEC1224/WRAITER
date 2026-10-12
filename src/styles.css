@@ -306,6 +306,7 @@ h1, h2, h3, p { margin-top: 0; }
 .manuscript .ProseMirror-gapcursor::after { border-color: var(--accent); }
 .ghost-text { color: var(--ghost); opacity: .8; font-style: italic; user-select: none; pointer-events: none; }
 .search-match { background: #ead799; color: #302910; border-radius: 2px; }
+.search-match-active { outline: 2px solid currentColor; outline-offset: -1px; }
 .endmark { display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--line-strong); font-size: 15px; margin: 35px auto 0; }
 .endmark span { width: 24px; height: 1px; background: var(--line); }
 .ghost-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; margin-top: 24px; border: 1px solid var(--line-strong); border-radius: 2px; background: var(--accent-faint); font-size: 10px; }

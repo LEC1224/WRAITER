@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Schema } from '@tiptap/pm/model';
 import { TextSelection } from '@tiptap/pm/state';
 import { collectCommentRanges } from '../electron/comments.mjs';
-import { findTextMatches, findManuscriptMatches, groupSearchResults, replaceManuscriptMatches, SearchReplaceError } from '../src/search.js';
+import { findTextMatches, matchesTextRange, findManuscriptMatches, groupSearchResults, replaceManuscriptMatches, SearchReplaceError } from '../src/search.js';
 import { createHistory, recordProjectChange, applyHistory } from '../src/history.js';
 const schema = new Schema({ nodes: { doc: { content: 'paragraph+' }, paragraph: { content: 'text*' }, text: {} }, marks: { bold: {} } });
 test('search finds a phrase across bold/plain text nodes', () => {
@@ -140,6 +140,32 @@ test('search crosses hard breaks within a paragraph, skips images and never cros
   assert.equal(findTextMatches(content, 'third\uFFFCfourth').length, 0);
   assert.equal(findTextMatches(content, 'secondthird').length, 0);
   assert.equal(findTextMatches(content, 'fourthfifth').length, 0);
+});
+
+test('selected-match validation agrees with literal Find for Unicode, formatted runs and whole-word boundaries', () => {
+  const content = doc(paragraph(text("Åsa Åsaland ÅSA ΩμέγαΩ Ωμέγα αΩμέγα 猫 大猫 猫2 é élan don't don’t don 🐈猫🐈 [a.*] "), text('quiet', [manuscriptSchema.marks.bold.create()]), text(' hour'), manuscriptSchema.node('hardBreak'), text('next')), paragraph(text('Other paragraph.')));
+  for (const query of ['Åsa', 'Ωμέγα', '猫', 'é', 'don', "don't", '[a.*]', 'quiet hour', 'hour\nnext']) {
+    for (const options of [{}, { wholeWord: true }, { caseSensitive: true, wholeWord: true }]) {
+      const expected = findTextMatches(content, query, Infinity, options);
+      for (const range of findTextMatches(content, query, Infinity)) assert.equal(matchesTextRange(content, range.from, range.to, query, options), expected.some(item => item.from === range.from && item.to === range.to), `${query}: ${JSON.stringify(options)}`);
+    }
+  }
+  const emoji = findTextMatches(content, '🐈')[0];
+  assert.ok(matchesTextRange(content, emoji.from, emoji.to, '🐈'));
+  assert.equal(matchesTextRange(content, emoji.from + 1, emoji.to, '🐈'), false, 'half a surrogate pair is not a match');
+  for (const [from, to] of [[-1, 2], [0, 0], [0, content.content.size + 1], [0.5, 2], [1, Infinity], [1, content.content.size]]) assert.equal(matchesTextRange(content, from, to, 'Åsa'), false);
+  assert.equal(matchesTextRange(content, 1, 4, ''), false);
+});
+
+test('selected-match validation rejects inline objects and refreshes after immutable text edits', () => {
+  const content = doc(paragraph(text('third'), manuscriptSchema.node('image', { src: 'sample.png' }), text('fourth')));
+  assert.equal(matchesTextRange(content, 1, 13, 'third\uFFFCfourth'), false);
+  const original = doc(paragraph(text('Original river.'))), range = findTextMatches(original, 'river')[0];
+  assert.ok(matchesTextRange(original, range.from, range.to, 'river'));
+  const edited = doc(paragraph(text('Original plain.')));
+  assert.equal(matchesTextRange(edited, range.from, range.to, 'river'), false);
+  assert.equal(findTextMatches(edited, 'river').length, 0);
+  assert.equal(findTextMatches(original, 'river').length, 1, 'the earlier immutable document retains its own text');
 });
 
 test('whole manuscript searches are complete beyond the legacy chapter limit and cache unchanged chapter trees', () => {

@@ -1,7 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { findTextMatches } from './search.js';
+import { findTextMatches, matchesTextRange } from './search.js';
 export const ghostKey = new PluginKey('wraiterGhost');
 export const searchKey = new PluginKey('wraiterSearch');
 export const GhostText = Extension.create({
@@ -36,10 +36,21 @@ export const SearchHighlight = Extension.create({
         const value = searchKey.getState(state), options = typeof value === 'string' ? { query: value } : value || {};
         const query = options.query, caseSensitive = !!options.caseSensitive, wholeWord = !!options.wholeWord;
         if (!query) { cached = null; return null; }
-        if (cached?.doc === state.doc && cached.query === query && cached.caseSensitive === caseSensitive && cached.wholeWord === wholeWord) return cached.decorations;
-        const decorations = findTextMatches(state.doc, query, 2000, options).map(match => Decoration.inline(match.from, match.to, { class: 'search-match' }));
-        cached = { doc: state.doc, query, caseSensitive, wholeWord, decorations: DecorationSet.create(state.doc, decorations) };
-        return cached.decorations;
+        if (cached?.doc !== state.doc || cached.query !== query || cached.caseSensitive !== caseSensitive || cached.wholeWord !== wholeWord) {
+          const decorations = findTextMatches(state.doc, query, 2000, options).map(match => Decoration.inline(match.from, match.to, { class: 'search-match' }));
+          cached = { doc: state.doc, query, caseSensitive, wholeWord, decorations: DecorationSet.create(state.doc, decorations) };
+        }
+        const { from, to } = state.selection;
+        if (cached.from === from && cached.to === to) return cached.current;
+        cached.from = from; cached.to = to; cached.current = cached.decorations;
+        if (from !== to) {
+          const existing = cached.decorations.find(from, to).find(item => item.from === from && item.to === to);
+          if (existing || matchesTextRange(state.doc, from, to, query, options)) {
+            const active = Decoration.inline(from, to, { class: 'search-match search-match-active' });
+            cached.current = cached.decorations.remove(existing ? [existing] : []).add(state.doc, [active]);
+          }
+        }
+        return cached.current;
       } }
     })];
   }

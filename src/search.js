@@ -4,7 +4,12 @@ import { editorialSchema } from '../electron/editor-schema.mjs';
 const literal = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const wordCharacter = /[\p{L}\p{N}\p{M}\p{Pc}'\u2019\u200c\u200d]/u;
 const leafText = node => node.type.name === 'hardBreak' ? '\n' : '\uFFFC';
-const documentCache = new WeakMap(), searchCache = new WeakMap(), snippetTextCache = new WeakMap();
+const documentCache = new WeakMap(), searchCache = new WeakMap(), textBlockCache = new WeakMap();
+function textForBlock(node) {
+  let text = textBlockCache.get(node);
+  if (text === undefined) { text = node.textBetween(0, node.content.size, '', leafText); textBlockCache.set(node, text); }
+  return text;
+}
 function documentFor(schema, content) {
   let documents = documentCache.get(schema);
   if (!documents) { documents = new WeakMap(); documentCache.set(schema, documents); }
@@ -30,8 +35,9 @@ export function findTextMatches(doc, query, maximum = 2000, options = {}) {
   const expression = new RegExp(literal(String(query)), options.caseSensitive ? 'gu' : 'giu');
   const matches = [];
   doc.descendants((node, pos) => {
-    if (!node.isTextblock || matches.length >= maximum) return;
-    const text = node.textBetween(0, node.content.size, '', leafText);
+    if (matches.length >= maximum) return false;
+    if (!node.isTextblock) return;
+    const text = textForBlock(node);
     expression.lastIndex = 0;
     let match;
     while ((match = expression.exec(text)) && matches.length < maximum) {
@@ -47,10 +53,22 @@ export function findTextMatches(doc, query, maximum = 2000, options = {}) {
   return matches;
 }
 
+// Validate only the selected passage, using the same literal, Unicode and
+// whole-word rules as Find. This also covers results beyond the display limit.
+export function matchesTextRange(doc, from, to, query, options = {}) {
+  if (!doc || !query || !Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from < 0 || to <= from || to > doc.content.size) return false;
+  const start = doc.resolve(from), end = doc.resolve(to);
+  if (!start.sameParent(end) || !start.parent.isTextblock) return false;
+  const text = textForBlock(start.parent), expression = new RegExp(literal(String(query)), options.caseSensitive ? 'gu' : 'giu');
+  expression.lastIndex = start.parentOffset;
+  const match = expression.exec(text);
+  if (!match || match.index !== start.parentOffset || match.index + match[0].length !== end.parentOffset || match[0].includes('\uFFFC')) return false;
+  return !options.wholeWord || !(wordCharacter.test(characterBefore(text, match.index)) || wordCharacter.test(characterAfter(text, end.parentOffset)));
+}
+
 function searchSnippet(doc, from, to) {
   const start = doc.resolve(from), end = doc.resolve(to), paragraph = start.parent;
-  let text = snippetTextCache.get(paragraph);
-  if (text === undefined) { text = paragraph.textBetween(0, paragraph.content.size, '', leafText); snippetTextCache.set(paragraph, text); }
+  const text = textForBlock(paragraph);
   const before = text.slice(Math.max(0, start.parentOffset - 44), start.parentOffset);
   const after = text.slice(end.parentOffset, end.parentOffset + 44);
   return { before: (start.parentOffset > 44 ? '…' : '') + before, match: text.slice(start.parentOffset, end.parentOffset), after: after + (end.parentOffset + 44 < text.length ? '…' : '') };

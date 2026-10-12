@@ -78,7 +78,7 @@ Open **Edit → Find** / **Edit → Replace**, press **Ctrl+F** / **Ctrl+H**, or
 
 **Enter** / **Shift+Enter** moves forward/backward while keeping focus in Find, including across chapters. **F3** / **Shift+F3** repeats the last search from the editor; **Escape** closes Find and returns focus to the passage.
 
-Results show surrounding wording and are grouped by chapter. Click a result to select its passage, or use **Previous match** / **Next match**. Large lists have **More results** / **Previous results** controls, with the full match count retained.
+Results show surrounding wording and are grouped by chapter. Click a result to select its passage, or use **Previous match** / **Next match**. The selected match is revealed in the manuscript and has a distinct highlight, including results beyond the normal highlight limit. Large lists have **More results** / **Previous results** controls, with the full match count retained.
 
 Enter the replacement and choose **Replace** to change the current match. **Preview replace all** shows the original and replacement for every match in the chosen scope. Review it, then choose **Replace all** to apply the batch. An empty replacement deletes the matched wording. All replacements in that batch, even across chapters, share one persistent undo step. Formatting outside the replaced wording stays intact; replacement text takes the formatting at the start of the match and retains any attached comments. If the manuscript changes after preview, WRAITER refuses the stale batch and asks for a fresh preview. Escape cancels a preview, then closes search.
 
