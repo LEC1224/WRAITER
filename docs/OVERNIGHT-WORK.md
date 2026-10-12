@@ -122,11 +122,11 @@ The popup opens above controls when there is more room there, follows form scrol
 
 Four headless browser groups cover keyboard choice/escape/tab order, the caller's editor-focus policy, 502-font lists and filtering at 960×650, upward/downward placement, form scrolling, resize and reopening. All 321 unit tests and the build passed. The real desktop font/settings workflows and visual checks are queued after the soak.
 
-### Parse ODT chapter XML together
+### Parse ODT chapter XML in bounded batches
 
-ODT encoding reparsed an XML namespace wrapper for every top-level manuscript node. It now parses each chapter together while retaining the exact serialized XML block boundaries used by chapter metadata. In a 120,000-word, 6,000-paragraph fixture, parser calls fell from 6,000 to four. Three samples took 535–660 ms before and 322–436 ms after. The generated `content.xml` digest and archive size were identical. The packaged soak was running separately, so these measurements describe the codec rather than complete autosave latency.
+ODT encoding reparsed an XML namespace wrapper for every top-level manuscript node. It now parses bounded batches within each chapter while retaining the exact serialized XML block boundaries used by chapter metadata. Combined batches are limited to 512K XML characters; an individually larger node follows the same parsing path as before. In a 120,000-word, 6,000-paragraph fixture, parser calls fell from 6,000 to eight. Three samples took 535–660 ms before and 336–395 ms after. The generated `content.xml` digest and archive size were identical. The packaged soak was running separately, so these measurements describe the codec rather than complete autosave latency.
 
-The parser now rejects invalid visible XML characters instead of putting parser-error content into an office file. Two new import/export groups check multi-paragraph quotations, an empty chapter, the following chapter, emphasis, Unicode and invalid XML characters. All 25 browser import/export groups, 321 unit tests and the production build passed. Independent LibreOffice rendering passed for ODT and DOCX with lists, a merged table, an embedded image, Arial text and a manual page break. The rendered ODT first page was visually inspected.
+The parser now rejects invalid visible XML characters instead of putting parser-error content into an office file. Two new import/export groups check multi-paragraph quotations, an empty chapter, following chapters, a chapter exceeding the batch limit, emphasis, Unicode and invalid XML characters. All 25 browser import/export groups, 321 unit tests and the production build passed. Independent LibreOffice rendering passed for ODT and DOCX with lists, a merged table, an embedded image, Arial text and a manual page break. The rendered ODT first page was visually inspected.
 
 Native codec-error recovery and close/restart behavior are being checked separately below before the final build.
 

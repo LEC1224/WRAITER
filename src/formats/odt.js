@@ -118,15 +118,23 @@ export async function toODT(project, options = {}) {
   for (const chapter of project.chapters) {
     if (titles.includeChapterTitles) fragments.push(`<text:h text:style-name="Heading_20_1" text:outline-level="1">${preservedText(chapter.title)}</text:h>`);
     const start = fragments.length;
-    const value = (chapter.content.content || []).map(node => block(node)).join('');
-    if (value) {
+    const pending = []; let pendingSize = 0;
+    const flush = () => {
+      if (!pending.length) return;
       // A quote may serialize as several paragraphs; offsets describe XML
-      // blocks. Parse the chapter together instead of reparsing its namespaces
-      // for every paragraph, while retaining those exact block boundaries.
-      const parsed = new DOMParser().parseFromString(`<root ${namespaces}>${value}</root>`, 'application/xml');
+      // blocks. Batch them without accumulating an arbitrarily large chapter.
+      // An individual larger node follows the same path as before batching.
+      const parsed = new DOMParser().parseFromString(`<root ${namespaces}>${pending.join('')}</root>`, 'application/xml');
       if (parsed.getElementsByTagName('parsererror').length) throw new Error('This document contains text that cannot be represented in an ODT file. Save a WRAITER copy to preserve it.');
       for (const child of [...parsed.documentElement.children]) fragments.push(new XMLSerializer().serializeToString(child));
+      pending.length = 0; pendingSize = 0;
+    };
+    for (const node of chapter.content.content || []) {
+      const value = block(node);
+      if (pendingSize && pendingSize + value.length > 512 * 1024) flush();
+      if (value) { pending.push(value); pendingSize += value.length; }
     }
+    flush();
     if (fragments.length === start) fragments.push('<text:p/>');
     chapters.push({ id: chapter.id, title: chapter.title, status: chapter.status || 'Draft', start, end: fragments.length });
   }

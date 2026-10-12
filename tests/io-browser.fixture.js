@@ -178,11 +178,12 @@ export async function runIOTests() {
     source.chapters = [
       { id: 'batch-first', title: 'Quoted chapter', status: 'Draft', content: { type: 'doc', content: [paragraph('Before the quotation.'), { type: 'blockquote', content: [paragraph('First quoted paragraph.'), { type: 'paragraph', content: [{ type: 'text', text: 'Second quoted paragraph.', marks: [{ type: 'bold' }] }] }] }, paragraph('After the quotation.')] } },
       { id: 'batch-empty', title: 'Empty chapter', status: 'Notes', content: { type: 'doc', content: [] } },
-      { id: 'batch-last', title: 'Following chapter', status: 'Draft', content: { type: 'doc', content: [paragraph('The next chapter retains Å, é and 🦉.')] } }
+      { id: 'batch-last', title: 'Following chapter', status: 'Draft', content: { type: 'doc', content: [paragraph('The next chapter retains Å, é and 🦉.')] } },
+      { id: 'batch-large', title: 'Large chapter', status: 'Draft', content: { type: 'doc', content: Array.from({ length: 300 }, (_, index) => paragraph(`Paragraph ${index + 1}. ` + 'The valley retains Å, é and 🦉 in its prose. '.repeat(100))) } }
     ];
     const encoded = await exportPayload(source, 'odt', extensions, { nativeSave: true });
     const restored = await importDocument({ name: source.title, extension: '.odt', bytes: encoded.data }, extensions);
-    assert(restored.project.chapters.length === 3, 'ODT chapter batching merged chapter boundaries');
+    assert(restored.project.chapters.length === source.chapters.length, 'ODT chapter batching merged chapter boundaries');
     assert(restored.project.chapters.map(chapter => chapter.id).join('|') === source.chapters.map(chapter => chapter.id).join('|'), 'ODT chapter identities changed');
     assert(restored.project.chapters.map(chapter => nodeText(chapter.content)).join('|') === source.chapters.map(chapter => nodeText(chapter.content)).join('|'), 'ODT chapter batching lost, reordered or merged paragraphs');
     assert(all(restored.project.chapters[0].content).some(node => node.text === 'Second quoted paragraph.' && node.marks?.some(mark => mark.type === 'bold')), 'Quoted paragraph lost its emphasis');
