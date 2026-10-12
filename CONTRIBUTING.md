@@ -60,6 +60,7 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | Sustained large-manuscript save, undo, navigation and restart | `npm run test:soak -- --minutes=45` |
 | Find highlights beyond the display limit | `npm run test:large-search` |
 | Find result paging and replacement previews | `npm run test:search-panel` and `npm run test:large-search` |
+| Font search, keyboard focus or popup placement | `npm run test:font-picker`, `npm run test:settings` and `npm run test:app` |
 | External file reload and margin numbering | `npm run test:reload-numbering` and `npm run test:long-numbering` |
 | Proofreading review, statistics or spelling tools | `npm run test:proofreading` |
 | Save/import/export | `npm run test:io` and `npm run test:v03` |

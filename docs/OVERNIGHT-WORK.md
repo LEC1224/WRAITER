@@ -114,6 +114,14 @@ Changing the words-per-page input used to repeat vocabulary, character, paragrap
 
 All 321 unit tests and the production build passed. The existing proofreading/statistics desktop workflow is queued after the soak.
 
+### Keep the font picker usable by keyboard and in short windows
+
+Choosing a font by keyboard left focus on the document body when the caller did not focus the editor. The preceding component reproduces that failure in an isolated browser. Choosing or dismissing now returns focus to the picker button before the caller applies its own focus policy. Tab/Shift+Tab closes the list and continues through the surrounding form; keyboard reopening clears stale filters.
+
+The popup opens above controls when there is more room there, follows form scrolling and viewport resize, and keeps its bounds inside the viewport. Filtering reveals the current option even if the preceding list had been scrolled far down. The available font names and filtered list are also retained while their inputs are unchanged, avoiding full-font-list work during ordinary toolbar rerenders.
+
+Four headless browser groups cover keyboard choice/escape/tab order, the caller's editor-focus policy, 502-font lists and filtering at 960×650, upward/downward placement, form scrolling, resize and reopening. All 321 unit tests and the build passed. The real desktop font/settings workflows and visual checks are queued after the soak.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.
