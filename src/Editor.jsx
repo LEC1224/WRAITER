@@ -1,5 +1,5 @@
 import { documentExtensions } from '../electron/editor-schema.mjs';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Fragment, Slice } from '@tiptap/pm/model';
 
@@ -25,9 +25,13 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
   const callbacks = useRef({ onReady, onChange, onSelection, onAction, onNotice, canImportImages, prefs });
   const toolbarFrame = useRef(0);
   const selectionBoundary = useRef(true);
+  const initialContent = useRef(chapter.content), editorInstance = useRef(null);
   callbacks.current = { onReady, onChange, onSelection, onAction, onNotice, canImportImages, prefs };
-  const editor = useEditor({
-    extensions: [...extensions.map(extension => extension.name === 'image' ? imageControls(extension, current => callbacks.current.canImportImages?.(current) !== false) : extension), imageImportExtension({ onNotice: message => callbacks.current.onNotice?.(message), canInsert: () => callbacks.current.canImportImages?.(editor) !== false })], content: chapter.content,
+  // The editor owns its live document. Parent snapshots change on every edit;
+  // rebuilding options for each snapshot needlessly updates the entire view.
+  // Chapter/project/history replacement remounts this component with a new key.
+  const options = useMemo(() => ({
+    extensions: [...extensions.map(extension => extension.name === 'image' ? imageControls(extension, current => callbacks.current.canImportImages?.(current) !== false) : extension), imageImportExtension({ onNotice: message => callbacks.current.onNotice?.(message), canInsert: () => callbacks.current.canImportImages?.(editorInstance.current) !== false })], content: initialContent.current,
     editorProps: {
       attributes: { class: 'manuscript', 'aria-label': 'Manuscript editor', role: 'textbox', 'aria-multiline': 'true', spellcheck: String(prefs.spellcheck), lang: prefs.language },
       transformCopied: withoutCommentAnchors,
@@ -90,7 +94,9 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
     onTransaction: () => {
       if (!toolbarFrame.current) toolbarFrame.current = requestAnimationFrame(() => { toolbarFrame.current = 0; callbacks.current.onAction('toolbar-refresh'); });
     }
-  });
+  }), [prefs.spellcheck, prefs.language]);
+  const editor = useEditor(options);
+  editorInstance.current = editor;
   useEffect(() => {
     if (!editor) return;
     const captureSelection = ({ transaction }) => transaction.setMeta(HISTORY_SELECTION_META, editor.state.selection.toJSON());
@@ -99,7 +105,6 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
     return () => { editor.off('beforeTransaction', captureSelection); callbacks.current.onReady(null); };
   }, [editor]);
   useEffect(() => () => cancelAnimationFrame(toolbarFrame.current), []);
-  useEffect(() => { editor?.setOptions({ editorProps: { ...editor.options.editorProps, attributes: { ...editor.options.editorProps.attributes, spellcheck: String(prefs.spellcheck), lang: prefs.language } } }); }, [editor, prefs.spellcheck, prefs.language]);
   useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(paginationKey, { enabled: prefs.pageMode === 'pages', numbering: { row: prefs.showRowNumbers, page: prefs.showPageNumbers, paragraph: prefs.showParagraphNumbers }, revision: JSON.stringify([prefs.zoom, prefs.measure, prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers, layoutSignature]) }).setMeta('addToHistory', false)); }, [editor, prefs.pageMode, prefs.zoom, prefs.measure, prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers, layoutSignature]);
   return <EditorContent editor={editor} />;
 }
