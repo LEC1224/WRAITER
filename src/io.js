@@ -11,6 +11,7 @@ import { addStructure, readStructure, loadOfficePackage } from './formats/packag
 import { formatLosses } from './formats/losses.js';
 import { chatDocument, chatFormats } from './formats/chat.js';
 import { stripCommentAnchors } from '../electron/comments.mjs';
+import { imageDimensions } from './document-ux.js';
 export { exportScope } from './formats/scope.js';
 
 const escape = text => String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -147,7 +148,7 @@ async function importODT(bytes) {
     if (tag === 'svg:desc' || tag === 'svg:title') return '';
     if (tag === 'draw:image') {
       const width = points(attr(node.parentElement, 'svg:width')), height = points(attr(node.parentElement, 'svg:height'));
-      return images.has(node) ? `<img src="${images.get(node)}" alt="${escape(attr(node.parentElement, 'draw:name') || 'Imported image')}"${width ? ` width="${width / 0.75}"` : ''}${height ? ` height="${height / 0.75}"` : ''}>` : '[Image not imported]';
+      return images.has(node) ? `<img src="${images.get(node)}" alt="${escape(elements(node.parentElement, 'svg', 'desc')[0]?.textContent || attr(node.parentElement, 'draw:name') || 'Imported image')}"${width ? ` width="${width / 0.75}"` : ''}${height ? ` height="${height / 0.75}"` : ''}>` : '[Image not imported]';
     }
     if (tag === 'table:covered-table-cell') return '';
     let inner = [...node.childNodes].map(child => convert(child, tag === 'text:list' ? listDepth + 1 : listDepth)).join('');
@@ -286,6 +287,21 @@ async function docxTypography(bytes, html) {
     return { text: value.replace(/\s+/g, ' ').trim(), value, runs, style };
   });
   const container = document.createElement('div'); container.innerHTML = html;
+  const drawing = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing', graphic = 'http://schemas.openxmlformats.org/drawingml/2006/main', relation = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const relationships = zip.file('word/_rels/document.xml.rels') ? parseXML(await zip.file('word/_rels/document.xml.rels').async('string')) : null;
+  const targets = new Map([...(relationships?.getElementsByTagName('Relationship') || [])].filter(item => item.getAttribute('TargetMode') !== 'External').map(item => [item.getAttribute('Id'), item.getAttribute('Target')]));
+  const availableImages = [...container.querySelectorAll('img')];
+  for (const object of xml.getElementsByTagNameNS(word, 'drawing')) {
+    const blip = object.getElementsByTagNameNS(graphic, 'blip')[0], target = targets.get(blip?.getAttributeNS(relation, 'embed'));
+    const entry = target && /^media\/[^/]+$/.test(target) ? zip.file(`word/${target}`) : null;
+    if (!entry) continue;
+    const base64 = await entry.async('base64'), index = availableImages.findIndex(image => image.getAttribute('src')?.split(',')[1]?.replace(/\s/g, '') === base64);
+    if (index < 0) continue;
+    const image = availableImages.splice(index, 1)[0], extent = object.getElementsByTagNameNS(drawing, 'extent')[0], properties = object.getElementsByTagNameNS(drawing, 'docPr')[0];
+    const width = Number(extent?.getAttribute('cx')) / 9525, height = Number(extent?.getAttribute('cy')) / 9525;
+    if (width > 0 && height > 0) { image.setAttribute('width', String(width)); image.setAttribute('height', String(height)); }
+    if (properties?.hasAttribute('descr')) image.setAttribute('alt', properties.getAttribute('descr'));
+  }
   let cursor = 0;
   for (const paragraph of container.querySelectorAll('p,h1,h2,h3,h4,h5,h6')) {
     const text = paragraph.textContent.replace(/\s+/g, ' ').trim();
@@ -490,8 +506,8 @@ async function imageForDocx(node) {
   if (/^data:image\/webp/i.test(source)) { const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight; canvas.getContext('2d').drawImage(image, 0, 0); dataURL = canvas.toDataURL('image/png'); }
   const match = dataURL.match(/^data:image\/(png|jpe?g|gif);base64,([\s\S]+)$/i);
   if (!match) return null;
-  const width = Math.min(590, Math.max(1, Number(node.attrs?.width) || image.naturalWidth)), scale = Math.min(1, 900 / (width * image.naturalHeight / image.naturalWidth));
-  return { type: match[1].toLowerCase().startsWith('jp') ? 'jpg' : match[1].toLowerCase(), data: Uint8Array.from(atob(match[2]), c => c.charCodeAt(0)), transformation: { width: Math.round(width * scale), height: Math.round(width * image.naturalHeight / image.naturalWidth * scale) }, altText: { title: node.attrs?.title || '', description: node.attrs?.alt || '', name: node.attrs?.alt || 'Image' } };
+  const size = imageDimensions(node.attrs, image.naturalWidth, image.naturalHeight);
+  return { type: match[1].toLowerCase().startsWith('jp') ? 'jpg' : match[1].toLowerCase(), data: Uint8Array.from(atob(match[2]), c => c.charCodeAt(0)), transformation: { width: size.width, height: size.height }, altText: { title: node.attrs?.title || '', description: node.attrs?.alt || '', name: node.attrs?.alt || 'Image' } };
 }
 async function toDocx(project, options = {}) {
   const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, ImageRun, ExternalHyperlink, LevelFormat, WidthType, ShadingType, LineRuleType } = await import('docx');

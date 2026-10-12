@@ -9,6 +9,8 @@ import { DEFAULT_HOTKEYS, shortcutFromEvent } from './hotkeys.js';
 import { associateHistoryContent, HISTORY_GROUP_BREAK_META, HISTORY_SELECTION_META } from './history.js';
 import { Pagination, paginationKey, removePageBreakAtCursor } from './pagination.js';
 import { WordCount, wordCountKey } from './word-count.js';
+import { imageImportExtension } from './image-import.js';
+import { imageControls } from './images.js';
 
 export const extensions = [...documentExtensions, Placeholder.configure({ placeholder: 'Start writing…' }), GhostText, SearchHighlight, WordCount, Pagination];
 // Ordinary text copying does not duplicate a note or expose its internal ID.
@@ -19,19 +21,21 @@ function withoutCommentAnchors(slice) {
   };
   return new Slice(Fragment.fromArray(Array.from({ length: slice.content.childCount }, (_, index) => clean(slice.content.child(index)))), slice.openStart, slice.openEnd);
 }
-export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onReady, onChange, onSelection, onAction }) {
-  const callbacks = useRef({ onReady, onChange, onSelection, onAction, prefs });
+export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onReady, onChange, onSelection, onAction, onNotice, canImportImages }) {
+  const callbacks = useRef({ onReady, onChange, onSelection, onAction, onNotice, canImportImages, prefs });
   const toolbarFrame = useRef(0);
   const selectionBoundary = useRef(true);
-  callbacks.current = { onReady, onChange, onSelection, onAction, prefs };
+  callbacks.current = { onReady, onChange, onSelection, onAction, onNotice, canImportImages, prefs };
   const editor = useEditor({
-    extensions, content: chapter.content,
+    extensions: [...extensions.map(extension => extension.name === 'image' ? imageControls(extension, current => callbacks.current.canImportImages?.(current) !== false) : extension), imageImportExtension({ onNotice: message => callbacks.current.onNotice?.(message), canInsert: () => callbacks.current.canImportImages?.(editor) !== false })], content: chapter.content,
     editorProps: {
       attributes: { class: 'manuscript', 'aria-label': 'Manuscript editor', role: 'textbox', 'aria-multiline': 'true', spellcheck: String(prefs.spellcheck), lang: prefs.language },
       transformCopied: withoutCommentAnchors,
       transformPasted: withoutCommentAnchors,
       handleClick(_view, _position, event) {
         if (event.button !== 0) return false;
+        const link = event.target.closest?.('a[href]');
+        if (link && (event.ctrlKey || event.metaKey)) { event.preventDefault(); callbacks.current.onAction('open-link:' + link.getAttribute('href')); return true; }
         const anchor = event.target.closest?.('[data-comment-id]');
         if (anchor) callbacks.current.onAction('comment:' + anchor.getAttribute('data-comment-id'));
         return false;

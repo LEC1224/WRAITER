@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import { XML_HEADER, xmlEscape as esc, addStructure } from './package.js';
 import { titleOptions } from './scope.js';
+import { imageDimensions } from '../document-ux.js';
 
 const namespaces = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"';
 const mime = 'application/vnd.oasis.opendocument.text';
@@ -33,8 +34,7 @@ export async function toODT(project, options = {}) {
       extension = 'png'; base64 = canvas.toDataURL('image/png').split(',')[1];
     }
     const path = `Pictures/image-${pictures.length + 1}.${extension}`;
-    const width = Math.min(600, Math.max(1, Number(node.attrs.width) || picture.naturalWidth));
-    const height = Number(node.attrs.height) > 0 ? Number(node.attrs.height) : width * picture.naturalHeight / picture.naturalWidth;
+    const { width, height } = imageDimensions(node.attrs, picture.naturalWidth, picture.naturalHeight);
     pictures.push({ path, type: `image/${extension === 'jpg' ? 'jpeg' : extension}` }); zip.file(path, base64, { base64: true });
     imageNodes.set(node, `<draw:frame draw:name="${esc(node.attrs.alt || 'Image')}" text:anchor-type="as-char" svg:width="${width * 0.75}pt" svg:height="${height * 0.75}pt"><draw:image xlink:href="${path}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>${node.attrs.alt ? `<svg:desc>${esc(node.attrs.alt)}</svg:desc>` : ''}</draw:frame>`);
   }

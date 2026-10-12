@@ -68,6 +68,16 @@ export async function runIOTests() {
     assert(nodes.some(n => n.type === 'tableCell' && n.attrs.colspan === 2), 'Merged cell lost');
   });
   let docx;
+  await test('Edited image dimensions and description round-trip through office documents', async () => {
+    const copy = structuredClone(project), image = all(copy.chapters[0].content).find(node => node.type === 'image');
+    image.attrs = { ...image.attrs, width: 300, height: 200, alt: 'A blue landscape beside a river', title: 'River illustration' };
+    for (const format of ['odt', 'docx']) {
+      const payload = await exportPayload(copy, format, extensions), result = await importDocument({ name: 'Edited image copy', extension: '.' + format, bytes: payload.data }, extensions);
+      const restored = result.project.chapters.flatMap(chapter => all(chapter.content)).find(node => node.type === 'image');
+      assert(restored && Math.abs(restored.attrs.width - 300) < .01 && Math.abs(restored.attrs.height - 200) < .01, `${format} lost explicit image dimensions`);
+      assert(restored.attrs.alt === image.attrs.alt, `${format} lost image description`); importedProjects.push(result.project);
+    }
+  });
   await test('DOCX preserves lists, styles, links, merged cells and image aspect ratio', async () => {
     docx = await exportPayload(project, 'docx', extensions);
     const zip = await JSZip.loadAsync(docx.data), source = await zip.file('word/document.xml').async('string'), numbering = await zip.file('word/numbering.xml').async('string');

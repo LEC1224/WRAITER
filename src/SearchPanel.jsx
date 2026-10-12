@@ -19,20 +19,20 @@ function ResultsList({ results, activeId, disabled, onActivate, replacement, pre
   return <><div ref={list} className="manuscript-search-results" aria-label={preview ? 'Replacement preview results' : 'Search results'}>{groups.map(group => <section className="manuscript-search-group" key={group.chapterId}><h3>{group.chapterTitle}<span>{group.results.length < totals.get(group.chapterId) ? `${group.results.length} of ${totals.get(group.chapterId)}` : group.results.length}</span></h3>{group.results.map(result => preview ? <div className="manuscript-search-result preview" key={result.id}><Snippet result={result} replacement={replacement} preview /></div> : <button type="button" key={result.id} className={'manuscript-search-result' + (result.id === activeId ? ' active' : '')} aria-current={result.id === activeId ? 'true' : undefined} disabled={disabled} onClick={() => onActivate(result)}><Snippet result={result} /></button>)}</section>)}{!preview && query && !results.length && <p className="manuscript-search-empty">No matches found.</p>}{!preview && !query && <p className="manuscript-search-empty">Find passages across your chapters.</p>}</div>{pages > 1 && <div className="manuscript-search-pages"><button type="button" className="secondary-button" aria-label={preview ? 'Previous preview results' : 'Previous search results'} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous results</button><span>Showing {start + 1}–{Math.min(start + pageSize, results.length)} of {results.length}. {preview ? 'All matches will be replaced.' : ''}</span><button type="button" className="secondary-button" aria-label={preview ? 'More preview results' : 'More search results'} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}>More results</button></div>}</>;
 }
 
-export default function SearchPanel({ query, onQueryChange, replacement, onReplacementChange, scope = 'manuscript', onScopeChange, options = {}, onOptionsChange, results = [], activeResult, onActivate, onReplace, onReplaceAll, onClose, busy = false }) {
+export default function SearchPanel({ query, onQueryChange, replacement, onReplacementChange, scope = 'manuscript', onScopeChange, options = {}, onOptionsChange, results = [], activeResult, onActivate, onReplace, onReplaceAll, onClose, busy = false, focusRequest = 0 }) {
   const input = useRef(), panel = useRef();
   const [preview, setPreview] = useState(null), [applying, setApplying] = useState(false), [error, setError] = useState('');
   const activeId = typeof activeResult === 'string' ? activeResult : activeResult?.id;
   const activeIndex = results.findIndex(result => result.id === activeId);
   const disabled = busy || applying;
-  useEffect(() => { input.current?.focus(); }, []);
+  useEffect(() => { input.current?.focus(); input.current?.select(); }, [focusRequest]);
   // A changed query, scope, option or replacement needs a fresh review. A preview
   // holds its original results so the caller can reject stale manuscript edits.
   useEffect(() => { setPreview(null); setError(''); }, [query, replacement, scope, options.caseSensitive, options.wholeWord]);
   const navigate = direction => {
     if (!results.length || disabled) return;
     const index = activeIndex < 0 ? direction > 0 ? 0 : results.length - 1 : (activeIndex + direction + results.length) % results.length;
-    onActivate(results[index]);
+    onActivate(results[index], { focusEditor: false });
   };
   const confirmReplace = async () => {
     if (!preview || disabled) return;

@@ -10,6 +10,7 @@ const { summarizeCheckpoint, checkpointChanges } = require('./checkpoint-summary
 const { listFonts, spellLanguage, menuTemplate } = require('./desktop.cjs');
 const { installContextMenu } = require('./context-menu.cjs');
 const { ReferenceLibrary } = require('./references.cjs');
+const { droppedPath, externalLink } = require('./document-ux.cjs');
 const { DocumentFiles, FORMATS, formatOf } = require('./document-files.cjs');
 const { EditJournal } = require('./edit-journal.cjs');
 const { runWritingAgent } = require('./writing-agent.cjs');
@@ -166,6 +167,8 @@ function createWindow() {
   setDocumentLanguage(store.project?.language || prefs.language);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
+  win.webContents.on('did-finish-load', () => win.webContents.setZoomFactor(1));
+  win.webContents.on('zoom-changed', (_event, direction) => { win.webContents.setZoomFactor(1); win.webContents.send('command', direction === 'in' ? 'zoom-in' : 'zoom-out'); });
   win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   installContextMenu(win, { Menu, ipcMain, getPreferences: () => prefs });
   win.once('ready-to-show', () => win.show());
@@ -235,6 +238,10 @@ app.whenReady().then(async () => {
     return warmMatch ? { ...result, project: null, cachedProject: true } : result;
   }));
   ipcMain.handle('workspace:close', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.close(id); syncWorkspace(); if (result.archivedPath) await rememberPath(result.archivedPath); return result; }));
+  ipcMain.handle('workspace:reorder', (_e, ids) => serial(() => workspace.reorder(ids)));
+  ipcMain.handle('drop:open', (_e, target) => serial(() => openPath(droppedPath(target))));
+  ipcMain.handle('drop:reference', (_e, target) => referenceLibrary.addFiles([droppedPath(target, true)]));
+  ipcMain.handle('link:open', (_e, href) => shell.openExternal(externalLink(href)));
   ipcMain.handle('recent:list', () => [...(prefs.recent || [])]);
   ipcMain.handle('recent:clear', () => serial(async () => { const next = { ...prefs, recent: [] }; await atomicWrite(file('settings.json'), JSON.stringify(next)); prefs = next; updateMenu(); return []; }));
   ipcMain.handle('autosave', (_e, project, payload, events) => serial(async () => { const result = await persistDocument(project, payload, events); gitHistory.schedule(project); return result; }));
@@ -323,7 +330,7 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Insert an image', properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] });
     if (result.canceled) return null;
     const target = result.filePaths[0];
-    const mime = path.extname(target).slice(1).replace('jpg', 'jpeg');
+    const mime = path.extname(target).slice(1).toLowerCase().replace(/^jpg$/, 'jpeg');
     return `data:image/${mime};base64,${(await readLimited(target, 10 * 1024 * 1024)).toString('base64')}`;
   });
   ipcMain.handle('settings', async (_e, update) => serial(async () => {

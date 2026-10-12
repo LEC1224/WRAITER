@@ -248,12 +248,8 @@ h1, h2, h3, p { margin-top: 0; }
 .chapter-tools .icon-button svg { width: 13px; height: 13px; }
 .chapter-meta { display: flex; gap: 9px; margin: 12px 0 37px; font-size: 10px; color: var(--faint); }
 .manuscript { color: var(--ink); font-family: var(--writing-font, Georgia), serif; font-size: var(--writing-size, 19px); line-height: var(--writing-leading, 1.8); font-weight: 400; min-height: 180px; outline: none; cursor: text; overflow-wrap: break-word; caret-color: var(--accent); tab-size: 4; }
-/* Chromium can skip layout and paint for distant manuscript blocks while the
-   complete editable document stays mounted for selection, undo and search.
-   The learned intrinsic size keeps the scrollbar stable as blocks approach. */
-@supports (content-visibility: auto) {
-  .continuous-pages .manuscript > * { content-visibility: auto; contain-intrinsic-block-size: auto 2.6em; }
-}
+/* Keep manuscript blocks in normal flow. Estimated offscreen heights change
+   as text enters view, shifting scroll positions and paragraph numbers. */
 .manuscript:focus, .manuscript:focus-visible { outline: none; }
 .manuscript > :first-child { margin-top: 0; }
 .manuscript > :last-child { margin-bottom: 0; }
@@ -274,6 +270,8 @@ h1, h2, h3, p { margin-top: 0; }
 .manuscript mark { color: inherit; padding: .05em .03em; border-radius: 2px; box-decoration-break: clone; }
 .manuscript img { display: block; max-width: 100%; height: auto; margin: 1em auto; border-radius: 3px; }
 .manuscript img.ProseMirror-selectednode { outline: 2px solid var(--accent); outline-offset: 4px; }
+.manuscript[data-image-drop="ready"] { outline: 2px dashed var(--accent); outline-offset: 6px; }
+.manuscript[data-image-drop="blocked"] { outline: 2px dashed var(--muted); outline-offset: 6px; }
 .manuscript pre { font: .78em/1.65 Consolas, monospace; background: var(--panel-soft); border: 1px solid var(--line); border-radius: 2px; padding: 16px; overflow: auto; white-space: pre-wrap; }
 .manuscript code { font-family: Consolas, monospace; font-size: .84em; padding: .1em .2em; background: var(--panel-soft); border-radius: 3px; }
 .manuscript pre code { font-size: inherit; background: transparent; padding: 0; }
@@ -286,6 +284,24 @@ h1, h2, h3, p { margin-top: 0; }
 .manuscript td p, .manuscript th p { margin: 0; }
 .manuscript .selectedCell::after { z-index: 2; position: absolute; inset: 0; content: ""; background: var(--selection); opacity: .5; pointer-events: none; }
 .manuscript .column-resize-handle { position: absolute; top: 0; right: -2px; bottom: -2px; width: 4px; background-color: var(--accent); pointer-events: none; }
+.image-node { position: relative; width: fit-content; max-width: 100%; margin: 1em 0; line-height: 0; }
+.image-node img { display: block; margin: 0; }
+.image-node.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.image-resize-handle { display: none; position: absolute; width: 11px; height: 11px; border: 2px solid var(--accent); background: var(--panel-raised); z-index: 2; }
+.image-node.ProseMirror-selectednode .image-resize-handle, .image-node.resizing .image-resize-handle { display: block; }
+.image-resize-handle.top-left { left: -5px; top: -5px; cursor: nwse-resize; }
+.image-resize-handle.top-right { right: -5px; top: -5px; cursor: nesw-resize; }
+.image-resize-handle.bottom-left { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.image-resize-handle.bottom-right { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.image-selection-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 16px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.chapter-item { position: relative; }
+.outline-rename { position: absolute; left: 38px; right: 20px; top: 7px; width: calc(100% - 58px); padding: 5px; font: inherit; color: var(--text); background: var(--panel-raised); border: 1px solid var(--accent); border-radius: 3px; z-index: 2; }
+.chapter-item.drop-before::before, .chapter-item.drop-after::after { content: ''; position: absolute; left: 5px; right: 5px; height: 3px; background: var(--accent); z-index: 3; pointer-events: none; }
+.chapter-item.drop-before::before { top: 0; }
+.chapter-item.drop-after::after { bottom: 0; }
+.project-tab.drop-before { box-shadow: -3px 0 var(--accent); }
+.project-tab.drop-after { box-shadow: 3px 0 var(--accent); }
+.reference-panel[data-file-drop="ready"] { outline: 2px dashed var(--accent); outline-offset: -6px; }
 .manuscript.resize-cursor { cursor: col-resize; }
 .manuscript .ProseMirror-gapcursor::after { border-color: var(--accent); }
 .ghost-text { color: var(--ghost); opacity: .8; font-style: italic; user-select: none; pointer-events: none; }

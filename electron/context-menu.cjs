@@ -1,7 +1,8 @@
 const { randomUUID } = require('node:crypto');
 
-const CONTEXT_FLAGS = ['hasSelection', 'hasTextSelection', 'blocked', 'canUndo', 'canRedo', 'canCopyFormatting', 'canPasteFormatting', 'aiEnabled', 'hasSuggestion'];
+const CONTEXT_FLAGS = ['hasSelection', 'hasTextSelection', 'blocked', 'canUndo', 'canRedo', 'canCopyFormatting', 'canPasteFormatting', 'aiEnabled', 'hasSuggestion', 'hasImage', 'hasLink'];
 function editorMenuContext(value) {
+  if (value?.tab === true && typeof value.tabId === 'string' && /^[a-f0-9-]{36}$/.test(value.tabId)) return { tab: true, tabId: value.tabId, canMoveLeft: value.canMoveLeft === true, canMoveRight: value.canMoveRight === true, canCloseOthers: value.canCloseOthers === true, blocked: value.blocked === true };
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.editor !== true) return null;
   return { editor: true, ...Object.fromEntries(CONTEXT_FLAGS.map(key => [key, value[key] === true])) };
 }
@@ -12,6 +13,7 @@ function contextMenuTemplate(params, context, handlers, shortcuts = {}) {
     id: command, label, enabled, click: () => handlers.command(command),
     ...(shortcut ? { accelerator: shortcut, registerAccelerator: false } : {})
   });
+  if (editor?.tab) return [action('Close tab', 'tab-close', !editor.blocked, shortcuts.closeTab), action('Close other tabs', 'tab-close-others', !editor.blocked && editor.canCloseOthers), action('Close tabs to the right', 'tab-close-right', !editor.blocked && editor.canMoveRight), separator, action('Move tab left', 'tab-left', !editor.blocked && editor.canMoveLeft), action('Move tab right', 'tab-right', !editor.blocked && editor.canMoveRight)];
   const items = (params.dictionarySuggestions || []).slice(0, 5).map(word => ({ label: word.replace(/&/g, '&&'), click: () => handlers.replaceMisspelling(word) }));
   if (params.misspelledWord) items.push({ label: 'Add to dictionary', click: () => handlers.addToDictionary(params.misspelledWord) });
   if (items.length) items.push(separator);
@@ -21,6 +23,8 @@ function contextMenuTemplate(params, context, handlers, shortcuts = {}) {
     { role: 'paste', enabled: Boolean(params.isEditable) && (!editor || !editor.blocked) && flags.canPaste !== false },
     editor ? action('Select all', 'select-all', true, 'Ctrl+A') : { role: 'selectAll', enabled: flags.canSelectAll !== false });
   if (!editor) return items;
+  if (editor.hasImage) items.push(separator, action('Image properties…', 'image-properties', !editor.blocked));
+  if (editor.hasLink) items.push(separator, action('Open link', 'open-link'), action('Edit link…', 'edit-link', !editor.blocked, shortcuts.insertLink), action('Remove link', 'remove-link', !editor.blocked));
   items.push(separator,
     action('Copy formatting', 'copy-format', editor.canCopyFormatting && !editor.blocked),
     action('Paste formatting', 'paste-format', editor.canPasteFormatting && !editor.blocked),

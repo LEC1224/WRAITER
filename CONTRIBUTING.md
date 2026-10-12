@@ -55,10 +55,13 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | Explorer file opening and single-instance handling | `npm run test:file-open` |
 | Windows installer file associations | `npm run test:installer` |
 | Pagination and rephrasing alternatives | `npm run test:v05` |
-| External file reload and margin numbering | `npm run test:reload-numbering` |
+| Long-document scrolling and responsiveness | `npm run test:scrolling`, `npm run test:large` and `npm run test:undo-scroll` |
+| External file reload and margin numbering | `npm run test:reload-numbering` and `npm run test:long-numbering` |
 | Proofreading review, statistics or spelling tools | `npm run test:proofreading` |
 | Save/import/export | `npm run test:io` and `npm run test:v03` |
 | Clipboard export | `npm run test:clipboard` |
+| Image drop, clipboard image paste or image insertion | `npm run test:images` |
+| Image controls, Find focus/keys, chapter/tab gestures, links, document/reference drops or zoom | `npm run test:ux` |
 | Persistent undo and recovery | `npm run test:history-recovery` |
 | Local-model interface | `npm run test:v04` |
 

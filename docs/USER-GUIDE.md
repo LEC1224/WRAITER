@@ -1,6 +1,6 @@
 # WRAITER user guide
 
-Detailed controls and behaviour for version 0.15.1. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
+Detailed controls and behaviour for version 0.16.0. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Projects and startup
 
@@ -10,7 +10,7 @@ With the Windows file association enabled, double-click a `.wraiter` file in Exp
 
 **New**, **Open**, and the **+** beside the tabs add a project in the same window. Each tab has independent chapters, formatting, notes, file format, recovery, chat sessions and editing history. Assistant chats are saved with their project; use the chat dropdown to reopen an earlier conversation or **New chat** to begin another. Chat requests keep running against their originating project when you change chapter or project; its tab shows working and reply-ready indicators, and completed replies are saved there while completed edits are applied when you return. Inline completions still cancel on a project switch so they cannot appear in another document. Save As and Export cannot overwrite another tab's open file.
 
-Use **Ctrl+Tab** / **Ctrl+Shift+Tab** to cycle projects, and **Ctrl+W** or a tab's **×** to close it. These shortcuts can be changed in Settings. Closing an unnamed draft preserves it in Open Recent; named files remain on disk. Closing the last tab leaves a blank project.
+Use **Ctrl+Tab** / **Ctrl+Shift+Tab** to cycle projects, and **Ctrl+W** or a tab's **×** to close it. Middle-click a tab to close it, or right-click for Close tab, Close other tabs, Close tabs to the right, and Move left/right. Drag tabs to reorder them; a marker shows the drop edge and the order survives restart. On a focused tab, Ctrl+Shift+Left/Right also moves it. These shortcuts can be changed in Settings. Closing an unnamed draft preserves it in Open Recent; named files remain on disk. Closing the last tab leaves a blank project.
 
 **Settings → General → When WRAITER starts** offers:
 
@@ -31,6 +31,18 @@ Each tab has a separate recovery file in application data. Restoring projects do
 Choose **Story**, **Article**, **Submission manuscript**, **Report**, or **Notes** from the status bar. Story is the default and hides reading statistics beneath the chapter title. Article shows them. Layouts set document typography and spacing; the paragraph settings dialog also provides an independent reading-statistics checkbox. Word counts remain available in the outline and status bar.
 
 Use the paragraph settings button at the right of the formatting toolbar for document defaults. A toolbar font change affects selected text or newly typed text, like a conventional word processor. Zoom changes only the view.
+
+**Images:** drag PNG, JPEG, GIF or WebP files from File Explorer onto the manuscript page, paste a copied image or screenshot, or choose **Insert image** in the formatting toolbar. Drops insert at the pointer; clipboard images and the file picker use the cursor or replace selected text. Multiple images keep their file order and insert together as one undo step. Each image is embedded in the document, so moving its original file does not break the picture. The page shows a dashed outline during a file drag and reports progress or unreadable/unsupported files. The limit is 10 MB per image and 32 million pixels.
+
+You can continue typing while an image loads; its insertion point follows those edits. Switching chapter/project or undoing before loading finishes cancels that import. Dragging an image already in the manuscript moves it through the editor's normal drag behavior. Images linked in pasted or dropped formatted text become labelled placeholders with guidance to copy the image itself or save and drop its file. Drop WRAITER, ODT, DOCX, Markdown, HTML or text documents anywhere in the window to open project tabs. Mixed drops report unsupported files by name; image files in a mixed page drop insert before the documents open. Existing file compatibility checks still apply.
+
+Select an image to show its corner handles and **Image properties…**. Corner dragging keeps its proportions and commits one undo step. Image properties lets you edit the description and pixel dimensions, with **Keep proportions** enabled by default. Description and size apply together and survive WRAITER, ODT and DOCX save/reopen.
+
+Double-click a chapter in the outline, or focus it and press **F2**, to rename it. **Enter** commits; **Escape** cancels. Drag chapters to reorder them using the insertion marker. Chapter rename and reorder each have one undo step; the existing Move earlier/later buttons are also available.
+
+**Ctrl+K** or the link toolbar button creates a link for selected text or edits the current link. **Ctrl+click** opens HTTP, HTTPS and mailto links in the default application. Ordinary clicking keeps editing; right-click provides Open, Edit and Remove link.
+
+The status percentage, **View → Zoom document in/out / Actual document size**, **Ctrl+=**, **Ctrl+-**, **Ctrl+0**, and **Ctrl+mouse wheel** over the writing page share document zoom. The interface keeps its size and your reading position is retained.
 
 Select text and use **Clear formatting** beside the highlighter to remove its inline styling and reset its paragraphs to Normal. Undo restores the formatting. Open the arrow beside **Highlight** to choose one of eight colours or a custom colour; the main button applies the last chosen colour or clears an active highlight. **No highlight** removes only the highlight or imported text background, preserving other formatting. These controls also set the formatting for newly typed text when no text is selected.
 
@@ -56,11 +68,15 @@ With AI enabled, selected text offers **Rephrase / translate selection** and **C
 
 **Ask assistant about selection…** opens and focuses the writing assistant, keeping the passage selected. Type your question or editing instruction, then send it. Opening the composer does not send an AI request. Other text fields, including private notes and comment bodies, retain their ordinary native text-editing menus.
 
+Drop `.txt` or `.md` files directly into the **Reference library** panel to attach them as enabled references. A dashed target confirms the drop area; the result reports each accepted or rejected file. References use the existing 20-file limit.
+
 ## Search and replace
 
-Open **Edit → Find** / **Edit → Replace**, press **Ctrl+F** / **Ctrl+H**, or use **Find in manuscript** in the chapter sidebar. **Search in → Whole manuscript** is the default; choose **Current chapter** to restrict the results. Searches match literal text, with optional **Match case** and **Whole words**. They search editable chapter text, including lists and tables, and omit private notes and comments.
+Open **Edit → Find** / **Edit → Replace**, press **Ctrl+F** / **Ctrl+H**, or use **Find in manuscript** in the chapter sidebar. Ctrl+F seeds the selected phrase and always focuses/selects the query, including when Find is already visible. **Search in → Whole manuscript** is the default; choose **Current chapter** to restrict the results. Searches match literal text, with optional **Match case** and **Whole words**. They search editable chapter text, including lists and tables, and omit private notes and comments.
 
-Results show surrounding wording and are grouped by chapter. Click a result to select its passage, or use **Previous match** / **Next match**. Enter in the Find field moves forward; Shift+Enter moves backward. Large lists have **More results** / **Previous results** controls, with the full match count retained.
+**Enter** / **Shift+Enter** moves forward/backward while keeping focus in Find, including across chapters. **F3** / **Shift+F3** repeats the last search from the editor; **Escape** closes Find and returns focus to the passage.
+
+Results show surrounding wording and are grouped by chapter. Click a result to select its passage, or use **Previous match** / **Next match**. Large lists have **More results** / **Previous results** controls, with the full match count retained.
 
 Enter the replacement and choose **Replace** to change the current match. **Preview replace all** shows the original and replacement for every match in the chosen scope. Review it, then choose **Replace all** to apply the batch. An empty replacement deletes the matched wording. All replacements in that batch, even across chapters, share one persistent undo step. Formatting outside the replaced wording stays intact; replacement text takes the formatting at the start of the match and retains any attached comments. If the manuscript changes after preview, WRAITER refuses the stale batch and asks for a fresh preview. Escape cancels a preview, then closes search.
 

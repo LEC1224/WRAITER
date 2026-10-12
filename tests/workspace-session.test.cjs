@@ -27,6 +27,16 @@ test('single-project recovery migrates to separate tab stores and all tabs resto
   await restored.activate(beta.workspace.activeId); assert.match(JSON.stringify(restored.active.store.project), /Independent beta edits/);
   await assert.rejects(restored.active.files.persist(project('Alpha')), /another document/);
 });
+test('tab order persists without changing the active manuscript and invalid orders cannot alter it', async t => {
+  const { directory, session } = await fixture(t); await session.create(project('Beta')); await session.create(project('Gamma'));
+  const active = session.activeId, original = session.entries.map(entry => entry.id), reordered = [original[2], original[0], original[1]];
+  await session.reorder(reordered); assert.equal(session.activeId, active);
+  assert.deepEqual((await new WorkspaceSession(directory).boot()).workspace.tabs.map(tab => tab.id), reordered);
+  for (const invalid of [original.slice(1), [original[0], original[0], original[2]], ['missing', ...original.slice(1)], null]) await assert.rejects(session.reorder(invalid), /list changed/);
+  assert.deepEqual(session.entries.map(entry => entry.id), reordered);
+  const checkpoint = session.checkpoint; session.checkpoint = async () => { throw new Error('disk full'); };
+  await assert.rejects(session.reorder(original), /disk full/); assert.deepEqual(session.entries.map(entry => entry.id), reordered); session.checkpoint = checkpoint;
+});
 test('a completed background chat is persisted into its originating project', async t => {
   const { directory, session } = await fixture(t), alphaTab = session.activeId;
   await session.create(project('Beta'));

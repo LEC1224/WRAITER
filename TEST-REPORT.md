@@ -1,4 +1,95 @@
+# Seven intuitive UX improvements — 2026-10-12
+
+All seven findings from [UX-AUDIT.md](docs/UX-AUDIT.md) are implemented. Image controls and Find were handled first: selected images have proportional corner resizing and a description/dimensions dialog; Find seeds selected prose, refocuses/selects its query on Ctrl+F, preserves field focus across chapters, supports Enter/Shift+Enter and F3/Shift+F3, and returns to the passage on Escape. Closed Find retains its query without searching the novel on each keystroke.
+
+Documents dropped from Explorer use the existing import/native-save path and open project tabs; Markdown/text dropped into the reference panel attach enabled references. Mixed drops report accepted/rejected file names. Chapter drag order and outline double-click/F2 rename are undoable. Links support Ctrl+click, Ctrl+K and native Open/Edit/Remove actions, with HTTP/HTTPS/mailto validation. Tabs support middle-click closing, native clicked-tab actions, persistent drag order and keyboard reorder. Native menu, keyboard, percentage and Ctrl+wheel controls share document zoom and preserve reading position while keeping interface scale at 1.
+
+Image properties commit together in one undo action. Explicit width, height and description round-trip through WRAITER, ODT and DOCX. The office encoders retain edited dimensions; DOCX import restores drawing extents/descriptions and ODT import uses the image description. Right-click still preserves selected prose for formatting/comment actions. Browser-only IO harnesses no longer attempt the desktop context-menu bridge.
+
+## Validation
+
+- `npm test`: **287 passing unit tests**, including reordering validation/rollback, native object/tab menus, link/drop validation, zoom steps, image dimensions and the earlier image-import tests.
+- `npm run test:ux`: **11 passing desktop groups**, in the development app and packaged app. Covers actual pointer resize at 100%/125%, one-step properties/resize undo, descriptions, Find focus/keyboard across chapters, chapter drag/rename/undo, native link actions, shared zoom/reading position, Explorer-style document/reference drops, clicked-tab menus, middle-click, persistent tab order and restart. No renderer errors.
+- `npm run test:images`: **9 passing groups**, in development and packaged apps, including native file-transfer events, clipboard images, supported formats, mixed/error cases, margins/focus/divided pages, stale picker cancellation, internal image moves, restart and durable undo.
+- `npm run test:context-menu`: **5 passing groups**, retaining selected prose, formatting/comments, native input menus, local AI actions, stale callbacks and Shift+F10.
+- `npm run test:app`: **13 passing groups**, including normal saves/recovery/history, Find/replace, formatting, custom shortcuts, AI previews and restart; 11 local mock requests.
+- `npm run test:v03`: **8 passing groups**, including native ODT save, DOCX Save As, scoped exports, PDF/EPUB, agent edits and restart history; 2 local mock requests.
+- `npm run test:io`: **23 passing checks**; 18 imported projects pass native validation. Includes edited-image office round trips and existing format/privacy/fidelity checks, without browser renderer errors.
+- `npm run test:scrolling`: 1,500 paragraphs, 51 wheel samples, no document-height/tail movement, p95 frame time 7.1 ms.
+- `npm run test:v05`: **8 passing groups**; all 194 measured text rectangles stay within the five divided-page content areas.
+- `npm run build` and `git diff --check`: passed. Desktop suites ran sequentially, using isolated profiles and synthetic material. No paid AI calls.
+
+Evidence: `test-output/document-ux-dO7W4v/` (final development UX), `test-output/document-ux-ejCzej/` (packaged UX), `test-output/image-import-Th5jdD/` (development imports), `test-output/image-import-mtYyW2/` (packaged imports), `test-output/context-menu-BNmhdB/`, `test-output/session-p3H0FH/`, `test-output/v03-desktop-BdFZ9C/`, `test-output/scrolling-b79k4b/`, and `test-output/v05-ui-8YsuJJ/`. Image handles, Find and minimum-window screenshots were inspected. File drags use Chromium's native file-transfer pipeline; these tests do not physically drive File Explorer. Link launches are captured in the isolated test app.
+
+## Files and local build
+
+New implementation files: `src/images.js`, `src/ImageProperties.jsx`, `src/ChapterOutline.jsx`, `src/ProjectTabs.jsx`, `src/document-ux.js`, and `electron/document-ux.cjs`. Integration changes are in `src/App.jsx`, `src/Editor.jsx`, `src/SearchPanel.jsx`, `src/hotkeys.js`, `src/styles.css`, `src/io.js`, `src/formats/odt.js`, and Electron's menu/preferences/preload/main/workspace files. Tests, scripts, contributor guidance, the user guide and the UX audit were updated. The earlier image-import work remains included. Existing unrelated scrolling/numbering changes are preserved; no author manuscripts were edited.
+
+Local Windows x64 artifacts are under `tmp/ux-improvements-2026-10-12/`; the application version remains **0.16.0**, with **UX-Improvements** filename suffixes distinguishing this build. They include the current working tree and its earlier scrolling changes.
+
+- `WRAITER-0.16.0-UX-Improvements-Setup.exe`: **113,018,081 bytes**, SHA-256 `320305a7d1c6f07c09b9c3ec7d0530e91a2837d5a8b52afeacbb7344335188cc`.
+- `WRAITER-0.16.0-UX-Improvements.exe`: **112,770,956 bytes**, SHA-256 `8598ac0a994625ad1786f753e3c8fb9b3e444d770e0587ddff6f0f512fa9c28f`.
+
+Install/reopen this local build to use the changes. Existing office compatibility review and original-file preservation still apply.
+
+---
+
 # WRAITER validation
+
+## Image import and expected interactions · Local development fix · 2026-10-12
+
+The image extension displayed image nodes and the toolbar opened a picker, but the manuscript had no external file-drop or clipboard-image handler. File Explorer drops now read and embed image bytes at the pointer. Clipboard screenshots and the picker use a captured, mapped cursor/selection. A file batch inserts in one durable undo action, with progress, a dashed drop target and actionable failure messages. Imports cannot follow a chapter/project switch into another editor. Ordinary internal image moves remain with ProseMirror. Linked or unsupported HTML images become labelled placeholders while copied wording/formatting remain saveable. The picker also normalizes uppercase JPG extensions.
+
+- `npm test`: **279 passing tests**, including 12 new image-transfer checks.
+- `npm run build` and `git diff --check`: passed.
+- `npm run test:images`: **9 passing desktop workflow groups**, against both the development app and the packaged `win-unpacked/WRAITER.exe`. Covers actual Chromium file-transfer events; screenshot selection/caret paste; PNG/JPEG/GIF/WebP and blank MIME; multiple/mixed files; errors; page margins/focus/divided pages; stale picker cancellation; internal movement; minimum-window layout; embedding after source-file movement; restart undo/redo; and linked HTML image placeholders. No desktop renderer errors were recorded.
+- `npm run test:app`: **13 passing general desktop workflow groups**, including formatting, durable saves/recovery/history, chapter navigation, search, custom shortcuts, AI previews and restart. All 11 provider requests used a local mock service.
+- `npm run test:io`: **22 passing import/export checks**, with 16 imported projects passing native validation. Its headless browser harness also emitted the pre-existing desktop-only boot error at `api.onEditorMenu` when no Electron bridge exists; this did not fail the IO checks and was absent from the desktop runs.
+- A separate isolated desktop gesture pass reproduced missing selected-phrase Find seeding/refocus, Enter moving focus into the editor, Ctrl+click/Ctrl+K link actions, middle-click tab closing, and outline title/drag gestures. The prioritized source-backed findings and acceptance checks are in [UX-AUDIT.md](docs/UX-AUDIT.md). Synthetic Ctrl+= did not change either zoom scale, so native zoom accelerators/wheel behavior remain unverified in that audit.
+
+Evidence: `test-output/image-import-cJf5Qb/` (development), `test-output/image-import-ItDcpi/` (packaged), `test-output/session-LJrlGN/` (general desktop), and `test-output/ux-observations-zE1o6m/observations.json`. The image desktop tests use protocol file drags and synthetic clipboard events; they do not physically drive File Explorer or overwrite the system clipboard. Minimum-size and larger-window screenshots were inspected. All manuscripts and images were synthetic, with isolated profiles and no paid AI calls.
+
+Changed files for this task: `src/image-import.js`, `src/Editor.jsx`, `src/App.jsx`, `src/styles.css`, `electron/main.cjs`, `tests/image-import.test.mjs`, `tests/image-import-ui.cjs`, `package.json`, `CONTRIBUTING.md`, `docs/USER-GUIDE.md`, `docs/UX-AUDIT.md`, and this report. Existing scrolling/numbering work and unrelated local changes were preserved. No story manuscripts were edited.
+
+Built local Windows x64 installer and portable artifacts under `tmp/image-import-2026-10-12/`. Their `Image-Import` filename suffix distinguishes this development build from public 0.16.0 artifacts; application version remains 0.16.0. The build contains the current working tree, including the earlier local scrolling fixes. The running installed app was left open; installing/reopening the new build is needed to use the fix.
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `WRAITER-0.16.0-Image-Import-Setup.exe` | 113,011,881 | `09865e41413e280a93364dfaec4a76d838e96ff4c9f2062e3318d289b3479716` |
+| `WRAITER-0.16.0-Image-Import.exe` | 112,764,744 | `93cc8f65d297dd784ec21a3d0b1c5ff1897f132a532ee84b7c91c88fa016b6f5` |
+
+## Stable scrolling and paragraph numbering · Local development fix · 2026-10-12
+
+The installed 0.16.0 app reproduced the reported numbering drift with a synthetic 480-paragraph chapter. Scrolling to paragraph 480 left its label more than 5,300 CSS pixels from its text. All 480 labels existed: there is no 220-paragraph cutoff. The gutter retained measurements taken before offscreen paragraphs acquired their actual heights. Fractional sheet widths also introduced accumulating zoom error because the old scale calculation divided by rounded `offsetWidth`.
+
+The first gutter fix refreshed nearby labels while retaining offscreen layout skipping. The subsequent scrolling test reproduced the underlying movement even with all numbering disabled: `content-visibility: auto` and an estimated intrinsic height of `2.6em` changed the document height as distant paragraphs entered view. The final fix removes those CSS rules and their obsolete state-change listener and numbering override. Manuscript blocks keep their real heights. Paragraph numbering still counts in document order, measures nearby starts, refreshes on scrolling/resizing, and uses actual CSS zoom. The manuscript and editing history remain unchanged by view operations. Browser references: [CSS containment and content visibility](https://www.w3.org/TR/css-contain-2/) and [effective CSS zoom](https://developer.mozilla.org/en-US/docs/Web/API/Element/currentCSSZoom).
+
+- `npm test`: **267 passing tests**. `npm run build` and `git diff --check` passed.
+- New `npm run test:scrolling`: passed against development and packaged builds with **1,500 paragraphs / 68,945 words**, varied paragraph lengths and line heights, real wheel input down/up, and jumps to distant positions. It takes 51 geometry samples and checks manuscript and editing-journal preservation. In all three packaged baseline trials the document height changed by **11,416 CSS pixels** and the last paragraph's document-relative position changed by **11,410.03 pixels**. In all three fixed-build trials both changes were **zero**. Fixed document height was consistently **136,338 pixels**.
+- `npm run test:long-numbering`: passed against development and packaged builds. Its 18 checks cover paragraph 220 and beyond, the last paragraph, upward scrolling, 150% zoom, the minimum 960 × 650 window, middle-paragraph insertion, undo/redo, and simultaneous row/paragraph numbering. Each target needs a single scroll request; visible labels stay within **1 CSS pixel** of the first text line. Paragraph-only mode creates fewer than 100 nearby labels while all manuscript text retains real layout.
+- `npm run test:reload-numbering`: passed persistent numbering toggles, continuous/divided alignment, zoom, resizing, history exclusion, external native/WRAITER reload, draft preservation and subsequent saves.
+- `npm run test:undo-scroll`: passed development and packaged runs. Undo/redo retained the same scroll position and kept the caret visible.
+- Packaged `npm run test:v05`: passed continuous/divided flow, zoom, manual breaks, undo/redo, restart and synthetic rephrasing. All **194 text rectangles** avoided the **4 gaps** between **5 pages**. Provider responses came from a local mock.
+- `npm run test:large`: passed three packaged trials for each build with a roughly **120,000-word manuscript**, a **30,000-word / 1,500-paragraph active chapter**, tail typing/search, warm project switching and Select All. All runs stayed within the existing startup, typing and tab-switch budgets.
+
+The comparison below uses medians of three fresh-profile trials per packaged build, alternating execution order. The baseline is the preserved first-stage gutter-fix package, which still uses offscreen layout skipping. These are local measurements, including desktop/test-driver overhead.
+
+| Measurement | With offscreen layout skipping | Fixed build |
+| --- | ---: | ---: |
+| 68,945-word chapter startup, including font readiness | 3,117 ms | 3,001 ms |
+| Chromium layout work during the wheel/jump exercise | 109.132 ms | 0.382 ms |
+| Animation-frame interval, 95th percentile | 7.2 ms | 7.1 ms |
+| 30,000-word active chapter startup | 2,997 ms | 2,695 ms |
+| Automated typing of 32 characters | 576 ms | 985 ms |
+| Warm project-tab return | 1,822 ms | 1,899 ms |
+
+Removing layout skipping eliminated the geometry jumps and reduced layout work during scrolling. Automated typing was slower, so the former optimization did provide a typing benefit in this fixture. Separate three-trial prototypes with layout-only and content containment did not improve typing and were not added to production. The fix does not claim a universal performance improvement.
+
+The final development package is `test-output/scrolling-package/win-unpacked/WRAITER.exe`. It retains base version **0.16.0** and has not been installed or published. The earlier `test-output/paragraph-numbering-package/` build is preserved for comparisons. All profiles and text were synthetic; no author manuscripts or installed-app files were modified.
+
+Visual QA: `test-output/long-numbering-scroll.png` and `test-output/long-numbering-minimum.png`, including visual inspection of the minimum window. Results: `test-output/scrolling-comparison.json`, `scrolling-results.json`, `long-numbering-results.json`, and `large-manuscript-results.json`. Packaged workflow logs are `test-output/scrolling-long-numbering-packaged.log`, `scrolling-undo-packaged.log`, and `scrolling-pagination-packaged.log`. Earlier numbering reproduction: `test-output/long-numbering-baseline.json` and `long-numbering-baseline.png`.
+
+Files changed: `src/pagination.js`, `src/styles.css`, `tests/long-numbering-ui.cjs`, new `tests/scrolling-ui.cjs`, `tests/large-manuscript-ui.cjs`, `package.json`, `CONTRIBUTING.md`, and this report. Test filenames follow the repository's existing desktop-test convention. Existing user files and named release builds were preserved.
 
 ## Version 0.16.0 · Wording guidance and revision tools · 2026-10-02
 

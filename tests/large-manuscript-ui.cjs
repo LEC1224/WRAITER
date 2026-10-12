@@ -4,6 +4,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 
 const root = path.resolve(__dirname, '..'), output = path.join(root, 'test-output');
+const baseline = process.argv.includes('--baseline');
 const waitFor = async (fn, label, timeout = 20000) => {
   const until = Date.now() + timeout;
   while (Date.now() < until) { try { if (await fn()) return; } catch {} await new Promise(resolve => setTimeout(resolve, 75)); }
@@ -34,7 +35,7 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
     const initialMs = Date.now() - launchStarted;
     assert.ok(initialMs < 15000, `30,000-word launch took ${initialMs} ms`);
     assert.equal(await editor.locator(':scope > p').count(), 1500);
-    assert.equal(await editor.locator(':scope > p').last().evaluate(element => getComputedStyle(element).contentVisibility), 'auto');
+    assert.equal(await editor.locator(':scope > p').last().evaluate(element => getComputedStyle(element).contentVisibility), baseline ? 'auto' : 'visible');
 
     await editor.locator(':scope > p').last().evaluate(element => {
       element.scrollIntoView({ block: 'center' });
@@ -49,7 +50,7 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
 
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('command', 'find'));
     const find = page.getByRole('textbox', { name: 'Find text', exact: true }); await find.fill('UNIQUE_TAIL_PASSAGE'); await find.press('Enter');
-    await waitFor(async () => await page.evaluate(() => window.getSelection().toString()) === 'UNIQUE_TAIL_PASSAGE', 'Search did not materialize the offscreen match');
+    await waitFor(async () => await page.evaluate(() => window.getSelection().toString()) === 'UNIQUE_TAIL_PASSAGE', 'Search did not select the distant match');
     await page.getByRole('button', { name: 'Close search', exact: true }).click();
 
     await page.getByRole('button', { name: 'New project tab', exact: true }).click();
@@ -60,10 +61,10 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
     assert.ok(warmSwitchMs < 5000, `Warm large-tab switch took ${warmSwitchMs} ms`);
 
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('command', 'select-all'));
-    assert.ok((await page.evaluate(() => window.getSelection().toString().length)) > 150000, 'Select All omitted virtualized manuscript blocks');
+    assert.ok((await page.evaluate(() => window.getSelection().toString().length)) > 150000, 'Select All omitted manuscript text');
     assert.deepEqual(errors, []);
-    const report = { passed: true, manuscriptWords: 120000, activeChapterWords: 30000, activeParagraphs: 1500, initialMs, typingMs, warmSwitchMs, userData };
-    await fs.writeFile(path.join(output, 'large-manuscript-results.json'), JSON.stringify(report, null, 2));
+    const report = { passed: true, baseline, manuscriptWords: 120000, activeChapterWords: 30000, activeParagraphs: 1500, initialMs, typingMs, warmSwitchMs, userData };
+    await fs.writeFile(path.join(output, baseline ? 'large-manuscript-baseline-results.json' : 'large-manuscript-results.json'), JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report, null, 2));
   } finally { await app?.close().catch(() => {}); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

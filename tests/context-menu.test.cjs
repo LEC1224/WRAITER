@@ -7,6 +7,16 @@ const selected = { editor: true, hasSelection: true, hasTextSelection: true, can
 const callbacks = () => { const calls = []; return { calls, command: value => calls.push(['command', value]), replaceMisspelling: value => calls.push(['spelling', value]), addToDictionary: value => calls.push(['dictionary', value]) }; };
 const byId = (menu, id) => menu.find(item => item.id === id);
 const settled = () => new Promise(resolve => setImmediate(resolve));
+test('object menus expose image properties and link actions with appropriate busy states', () => {
+  const handlers = callbacks(), menu = contextMenuTemplate(params, { ...selected, hasLink: true, hasImage: true, blocked: true }, handlers, { insertLink: 'Ctrl+K' });
+  assert.equal(byId(menu, 'open-link').enabled, true); assert.equal(byId(menu, 'edit-link').enabled, false); assert.equal(byId(menu, 'remove-link').enabled, false); assert.equal(byId(menu, 'image-properties').enabled, false);
+  byId(menu, 'open-link').click(); assert.deepEqual(handlers.calls, [['command', 'open-link']]);
+});
+test('tab menus describe the clicked tab with close and keyboard accessible reorder actions', () => {
+  const context = { tab: true, tabId: '12345678-1234-1234-1234-123456789abc', canMoveRight: true, canCloseOthers: true }, menu = contextMenuTemplate(params, context, callbacks());
+  assert.equal(byId(menu, 'tab-close').enabled, true); assert.equal(byId(menu, 'tab-left').enabled, false); assert.equal(byId(menu, 'tab-close-right').enabled, true);
+  assert.equal(menu.some(item => item.role === 'paste'), false);
+});
 
 test('selected-passage menu routes formatting, comments and AI without registering global shortcuts', () => {
   const handlers = callbacks(), menu = contextMenuTemplate(params, selected, handlers, { rewrite: 'Ctrl+Alt+R', correct: 'Ctrl+Alt+G' });
@@ -45,7 +55,7 @@ test('ordinary inputs use native text undo and clipboard permissions without man
   assert.equal(menu.find(item => item.role === 'paste').enabled, false);
   assert.equal(menu.some(item => item.id), false);
   assert.equal(contextMenuTemplate({ ...params, isEditable: false }, null, callbacks()).find(item => item.role === 'paste').enabled, false);
-  assert.deepEqual(editorMenuContext({ ...selected, privateBody: 'never forward', canRedo: 'yes' }), { editor: true, hasSelection: true, hasTextSelection: true, blocked: false, canUndo: true, canRedo: false, canCopyFormatting: true, canPasteFormatting: true, aiEnabled: true, hasSuggestion: false });
+  assert.deepEqual(editorMenuContext({ ...selected, privateBody: 'never forward', canRedo: 'yes' }), { editor: true, hasSelection: true, hasTextSelection: true, blocked: false, canUndo: true, canRedo: false, canCopyFormatting: true, canPasteFormatting: true, aiEnabled: true, hasSuggestion: false, hasImage: false, hasLink: false });
   assert.equal(editorMenuContext([]), null);
 });
 

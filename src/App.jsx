@@ -7,7 +7,7 @@ import { newProject, uid, blankContent, nodeText, wordCount, contentWordCount, r
 import { importDocument, exportPayload } from './io.js';
 import { revisionTransaction, proposalChangesStructure } from './revisions.js';
 import { closeHistory } from '@tiptap/pm/history';
-import { TextSelection, Selection } from '@tiptap/pm/state';
+import { TextSelection, Selection, NodeSelection } from '@tiptap/pm/state';
 import { getSchema } from '@tiptap/core';
 import { findManuscriptMatches, replaceManuscriptMatches } from './search.js';
 import SearchPanel from './SearchPanel.jsx';
@@ -33,6 +33,12 @@ import { normalizeHistoryProject, prepareHistoryLoad, recordTransaction, recordP
 import { applyAgentResult, rebaseAgentResult } from './agent-edits.js';
 import RephraseOptions from './RephraseOptions.jsx';
 import { insertPageBreak } from './pagination.js';
+import { hasFileTransfer, transferFiles, imageSurfaceEvent, insertPickedImage, insertDroppedImages } from './image-import.js';
+import { selectedImage, applyImageProperties } from './images.js';
+import ImageProperties from './ImageProperties.jsx';
+import ChapterOutline from './ChapterOutline.jsx';
+import ProjectTabs from './ProjectTabs.jsx';
+import { DOCUMENT_EXTENSIONS, IMAGE_EXTENSIONS, ZOOM_LEVELS, extensionOf, moveItem, nextZoom, captureReadingAnchor, restoreReadingAnchor } from './document-ux.js';
 import ProofreadingDialog from './ProofreadingDialog.jsx';
 import StatisticsDialog from './StatisticsDialog.jsx';
 import { applyProofreadingFixes } from './proofreading.js';
@@ -90,6 +96,9 @@ export default function App() {
   const [editor, setEditor] = useState(null), [, refreshToolbar] = useState(0);
   const [query, setQuery] = useState(''), [replacement, setReplacement] = useState(''), [searchOpen, setSearchOpen] = useState(false);
   const [searchScope, setSearchScope] = useState('manuscript'), [searchOptions, setSearchOptions] = useState({ caseSensitive: false, wholeWord: false }), [activeSearchId, setActiveSearchId] = useState(null);
+  const [searchFocus, setSearchFocus] = useState(0), restoreFocus = useRef(true);
+  const tabReordering = useRef(false), [reorderingTabs, setReorderingTabs] = useState(false), zoomWork = useRef(Promise.resolve()), zoomWanted = useRef(null);
+  const droppedQueue = useRef([]), droppedOpening = useRef(false), dropOutcomes = useRef([]);
   const [formatting, setFormatting] = useState(null), [activeCommentId, setActiveCommentId] = useState(null), [commentFocus, setCommentFocus] = useState(0);
   const editorMenuRef = useRef(null);
   const [assistantFocus, setAssistantFocus] = useState(0);
@@ -109,6 +118,17 @@ export default function App() {
   const chapter = project?.chapters.find(c => c.id === activeId) || project?.chapters[0];
   const chatSessions = [...(project?.chats || [])].sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
   const notify = useCallback(message => setToast(message), []);
+  const canImportImages = current => current === editorRef.current && !current?.isDestroyed && !transition.current && !namedSave.current && !requestRef.current && !externalBlocked.current;
+  useEffect(() => {
+    const preventFileNavigation = event => {
+      if (event.defaultPrevented || !hasFileTransfer(event.dataTransfer)) return;
+      event.preventDefault();
+      if (event.type === 'drop') notify('Drop images onto the manuscript page, documents anywhere in WRAITER, or text references into the Reference library.');
+    };
+    document.addEventListener('dragover', preventFileNavigation);
+    document.addEventListener('drop', preventFileNavigation);
+    return () => { document.removeEventListener('dragover', preventFileNavigation); document.removeEventListener('drop', preventFileNavigation); };
+  }, [notify]);
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(''), 6500); return () => clearTimeout(timer); }, [toast]);
   useEffect(() => { document.documentElement.dataset.theme = prefs.theme; }, [prefs.theme]);
   useEffect(() => { document.title = project ? `${project.title} — WRAITER` : 'WRAITER'; }, [project?.title]);
@@ -241,9 +261,21 @@ export default function App() {
     cacheTab(workspaceRef.current.activeId, { projectId: created.project.id, chatId: created.chat.id, chat: created.chat, messages: [], agentActivity: [], unread: false });
   }
   async function updatePrefs(update) {
-    try { const next = await api.settings(update); prefsRef.current = next; setPrefs(next); return next; }
+    const anchor = 'zoom' in update && update.zoom !== prefsRef.current.zoom ? captureReadingAnchor(document.querySelector('.writing-scroll')) : null;
+    try { const next = await api.settings(update); prefsRef.current = next; setPrefs(next); if (anchor) { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); restoreReadingAnchor(anchor); } return next; }
     catch (error) { notify(errorText(error)); throw error; }
   }
+  function setDocumentZoom(value) {
+    const zoom = Math.max(50, Math.min(200, Number(value)));
+    if (!Number.isFinite(zoom)) return;
+    zoomWanted.current = zoom;
+    zoomWork.current = zoomWork.current.catch(() => {}).then(async () => {
+      if (prefsRef.current.zoom === zoom) return;
+      await updatePrefs({ zoom });
+    }).catch(() => {}).finally(() => { if (zoomWanted.current === zoom) zoomWanted.current = null; });
+    return zoomWork.current;
+  }
+  function stepDocumentZoom(direction) { return setDocumentZoom(nextZoom(zoomWanted.current ?? prefsRef.current.zoom, direction)); }
   function toggleDocumentMenu() {
     setMenu(previous => !previous);
     api.getRecents().then(setRecents).catch(error => notify(errorText(error)));
@@ -387,7 +419,7 @@ export default function App() {
     if (pendingError) notify(pendingError);
   }
   function projectTransition(action, recoveryOnly = false, preserveChat = false) {
-    if (transition.current) return;
+    if (transition.current || tabReordering.current) return;
     if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action, recoveryOnly));
     setSwitching(true);
     // Block editor input immediately while saves and view state move to the
@@ -407,7 +439,30 @@ export default function App() {
     return projectTransition(async () => installWorkspace(await api.activateProject(id, identity)), false, true);
   }
   function closeProject(id = workspaceRef.current.activeId) {
+    if (tabReordering.current) return;
     return projectTransition(async () => { const result = await api.closeProject(id); tabCache.current.delete(id); warmTabs.current.delete(id); await installWorkspace(result); if (result.archivedPath) notify('Draft preserved in File → Open recent.'); });
+  }
+  async function moveProjectTab(id, target, after) {
+    if (transition.current || namedSave.current || tabReordering.current) return;
+    const current = workspaceRef.current, tabs = moveItem(current.tabs, id, target, after);
+    if (tabs === current.tabs) return;
+    tabReordering.current = true; setReorderingTabs(true);
+    try { const next = await api.reorderProjects(tabs.map(tab => tab.id)); workspaceRef.current = next; setWorkspace(next); }
+    catch (error) { notify(errorText(error)); }
+    finally { tabReordering.current = false; setReorderingTabs(false); }
+  }
+  function tabMenuAction(command, id) {
+    const current = workspaceRef.current, index = current.tabs.findIndex(tab => tab.id === id);
+    if (index < 0 || tabReordering.current || namedSave.current || document.querySelector('[role="dialog"]')) return;
+    if (command === 'tab-close') { closeProject(id); return; }
+    if (['tab-left', 'tab-right'].includes(command)) { const right = command === 'tab-right', target = current.tabs[index + (right ? 1 : -1)]; if (target) moveProjectTab(id, target.id, right); return; }
+    const ids = command === 'tab-close-others' ? current.tabs.filter(tab => tab.id !== id).map(tab => tab.id) : command === 'tab-close-right' ? current.tabs.slice(index + 1).map(tab => tab.id) : [];
+    if (!ids.length) return;
+    return projectTransition(async () => {
+      let result, preserved = false;
+      for (const closing of ids) { result = await api.closeProject(closing); preserved ||= !!result.archivedPath; tabCache.current.delete(closing); warmTabs.current.delete(closing); }
+      await installWorkspace(result); if (preserved) notify('Drafts preserved in File → Open recent.');
+    });
   }
   function cycleProject(direction, focusTab = false) {
     const current = workspaceRef.current, index = current.tabs.findIndex(tab => tab.id === current.activeId);
@@ -418,16 +473,67 @@ export default function App() {
   }
   async function openDocument(recent, external = false) {
     setMenu(false);
-    return projectTransition(async () => {
-      const result = external ? await api.openExternalFile(recent) : recent ? await api.openRecent(recent) : await api.open();
+    let outcome = null;
+    await projectTransition(async () => {
+      try {
+      const result = external === 'drop' ? await api.openDroppedDocument(recent) : external ? await api.openExternalFile(recent) : recent ? await api.openRecent(recent) : await api.open();
       if (!result) return;
       if (result.import) {
         const imported = await importDocument(result, extensions), normalized = normalizeHistoryProject(imported.project, schema);
         const attached = await api.bindNative(normalized, { openToken: result.openToken, fidelity: imported.fidelity || { requiresReview: !!imported.warning, warnings: imported.warning ? [imported.warning] : [] } });
         await installWorkspace(attached);
-        if (imported.warning) setModal({ type: 'notice', title: 'Document compatibility', text: imported.warning + '\n\nThe file remains attached in its original format. The first save will let you review these differences.' });
+        if (imported.warning) { externalBlocked.current = true; setModal({ type: 'notice', title: 'Document compatibility', text: imported.warning + '\n\nThe file remains attached in its original format. The first save will let you review these differences.' }); }
       } else await installWorkspace(result);
+      outcome = `${external === 'drop' ? recent.name : 'Document'} opened.`;
+      } catch (error) { outcome = `${external === 'drop' ? recent.name : 'Document'}: ${errorText(error)}`; throw error; }
     }, false, true);
+    return outcome;
+  }
+  async function openDroppedDocuments() {
+    if (!droppedQueue.current.length || droppedOpening.current || externalBlocked.current || transition.current || namedSave.current || tabReordering.current) return;
+    droppedOpening.current = true;
+    try {
+      while (droppedQueue.current.length && !externalBlocked.current && !transition.current && !namedSave.current) {
+        const file = droppedQueue.current.shift(), outcome = await openDocument(file, 'drop');
+        dropOutcomes.current.push(outcome || `${file.name}: could not open this file.`);
+      }
+      if (!droppedQueue.current.length) { notify(dropOutcomes.current.join(' ')); dropOutcomes.current = []; }
+    } finally { droppedOpening.current = false; }
+  }
+  useEffect(() => { if (booted && !modal && !switching && !savingNamed && !reorderingTabs) void openDroppedDocuments(); }, [booted, modal, switching, savingNamed, reorderingTabs]);
+  function attachReferences(items) {
+    const current = projectRef.current, next = [...(current.references || []), ...items.map(item => ({ ...item, id: uid(), enabled: true }))];
+    if (next.length > 20) { notify('Keep up to 20 references per manuscript.'); return false; }
+    updateProject({ references: next }, 'Attach references'); return true;
+  }
+  async function captureFileDrop(event) {
+    if (!hasFileTransfer(event.dataTransfer)) return;
+    const files = transferFiles(event.dataTransfer), reference = !!event.target.closest?.('.reference-panel');
+    const documents = files.filter(file => DOCUMENT_EXTENSIONS.includes(extensionOf(file.name)));
+    if (!reference && !documents.length) return;
+    event.preventDefault(); event.stopPropagation(); document.querySelector('.reference-panel')?.removeAttribute('data-file-drop'); editorRef.current?.view.dom.removeAttribute('data-image-drop');
+    if (!canImportImages(editorRef.current) || droppedOpening.current || droppedQueue.current.length) { notify('The document is busy. Drop the files again when the current operation finishes.'); return; }
+    if (reference) {
+      const projectId = projectRef.current.id, selected = files.filter(file => ['txt', 'md'].includes(extensionOf(file.name))), messages = files.filter(file => !selected.includes(file)).map(file => `${file.name}: references must be Markdown or text.`);
+      const available = 20 - (projectRef.current.references || []).length;
+      selected.slice(Math.max(0, available)).forEach(file => messages.push(`${file.name}: the reference limit is 20 files.`));
+      const outcomes = await Promise.allSettled(selected.slice(0, Math.max(0, available)).map(file => api.addDroppedReference(file)));
+      const items = [];
+      outcomes.forEach((result, index) => { if (result.status === 'fulfilled') { items.push(...result.value); messages.push(`${selected[index].name} attached.`); } else messages.push(`${selected[index].name}: ${errorText(result.reason)}`); });
+      if (projectRef.current.id !== projectId || transition.current || namedSave.current) { notify('The project changed. Drop the reference files into the intended project again.'); return; }
+      if (items.length) attachReferences(items); notify(messages.join(' ')); return;
+    }
+    const pictures = files.filter(file => IMAGE_EXTENSIONS.includes(extensionOf(file.name))), messages = files.filter(file => !documents.includes(file) && !pictures.includes(file)).map(file => `${file.name}: unsupported file type.`);
+    if (pictures.length) {
+      if (event.target.closest?.('.writing-scroll')) { const imported = await insertDroppedImages(editorRef.current, pictures, { left: event.clientX, top: event.clientY }); messages.push(imported ? `${pictures.map(file => file.name).join(', ')} inserted into the manuscript.` : 'Images could not be inserted; drop them onto the page again.'); }
+      else pictures.forEach(file => messages.push(`${file.name}: drop this image onto a manuscript page.`));
+    }
+    droppedQueue.current.push(...documents); dropOutcomes.current.push(...messages); await openDroppedDocuments();
+  }
+  function captureFileHover(event) {
+    if (!hasFileTransfer(event.dataTransfer)) return;
+    const reference = event.target.closest?.('.reference-panel');
+    if (reference) { event.preventDefault(); event.stopPropagation(); reference.dataset.fileDrop = 'ready'; event.dataTransfer.dropEffect = 'copy'; }
   }
   async function openExternalFiles() {
     if (externalOpening.current || externalBlocked.current || transition.current || namedSave.current) return;
@@ -482,8 +588,9 @@ export default function App() {
   function reorderChapter(id, direction) {
     const chapters = [...project.chapters], index = chapters.findIndex(c => c.id === id), target = index + direction;
     if (target < 0 || target >= chapters.length) return;
-    [chapters[index], chapters[target]] = [chapters[target], chapters[index]]; updateProject({ chapters });
+    [chapters[index], chapters[target]] = [chapters[target], chapters[index]]; updateProject({ chapters }, 'Reorder chapters');
   }
+  function moveChapter(id, target, after) { if (requestRef.current || transition.current || namedSave.current) return; const current = projectRef.current, chapters = moveItem(current.chapters, id, target, after); if (chapters !== current.chapters) updateProject({ chapters }, 'Reorder chapters'); }
   async function loadGitHistory() {
     const projectId = projectRef.current?.id;
     try { await saveLocal(); if (projectRef.current?.id !== projectId) return; const result = await api.listGitHistory(); if (projectRef.current?.id === projectId) setGitHistory(result); }
@@ -563,7 +670,8 @@ export default function App() {
     if (current && restoreSelection.current) {
       const selection = restoreSelection.current; restoreSelection.current = null;
       try { current.view.dispatch(current.state.tr.setSelection(Selection.fromJSON(current.state.doc, selection))); } catch {}
-      if (!document.querySelector('[role="dialog"]')) current.view.dom.focus({ preventScroll: true });
+      if (restoreFocus.current && !document.querySelector('[role="dialog"]')) current.view.dom.focus({ preventScroll: true });
+      restoreFocus.current = true;
     }
     if (current && (restoreScroll.current !== null || revealRestoredCaret.current)) {
       const top = restoreScroll.current, reveal = revealRestoredCaret.current;
@@ -800,6 +908,7 @@ export default function App() {
   const actionRef = useRef();
   actionRef.current = { askAI, acceptGhost, dismiss, rejectSuggestion, saveNamed, saveLocal, command: handleCommand, updatePrefs, travelHistory, encodeNative, chooseOption, rememberTab, openExternalFiles, prepareEditorMenu, runEditorMenuAction };
   useEffect(() => {
+    if (!api) return;
     const stopRequest = api.onEditorMenu(request => actionRef.current.prepareEditorMenu(request));
     const stopAction = api.onEditorMenuAction(action => actionRef.current.runEditorMenuAction(action));
     return () => { stopRequest(); stopAction(); };
@@ -807,7 +916,7 @@ export default function App() {
   const onEditorAction = useCallback(action => {
     if (action === 'toolbar-refresh') { refreshToolbar(x => x + 1); return; }
     if (action === 'undo' || action === 'redo') { actionRef.current.travelHistory(action); return; }
-    if (action === 'page-break' || action.startsWith('comment:')) { actionRef.current.command(action); return; }
+    if (action === 'page-break' || action.startsWith('comment:') || action.startsWith('open-link:')) { actionRef.current.command(action); return; }
     if (action === 'option-next' || action === 'option-previous') { actionRef.current.chooseOption((proposalRef.current?.activeOption || 0) + (action === 'option-next' ? 1 : -1)); return; }
     if (action === 'accept') actionRef.current.acceptGhost();
     if (action === 'accept-word') actionRef.current.acceptGhost('word');
@@ -852,6 +961,7 @@ export default function App() {
     }
     if (command.startsWith('reference-warning:')) { notify(command.slice(18)); return; }
     if (transition.current) return;
+    if (command.startsWith('open-link:')) { api.openLink(command.slice(10)).catch(error => notify(errorText(error))); return; }
     if (command.startsWith('comment:')) { setActiveCommentId(command.slice(8)); showComments(); return; }
     if (document.querySelector('[role="dialog"]') && (command.startsWith('open-recent:') || ['new', 'open', 'close-tab', 'next-tab', 'previous-tab', 'save', 'save-copy', 'export', 'proofread', 'statistics'].includes(command))) return;
     if (command.startsWith('open-recent:')) { openDocument(command.slice(12)); return; }
@@ -864,10 +974,12 @@ export default function App() {
     const actions = {
       new: createNew, open: () => openDocument(), save: () => saveNamed(), 'save-copy': () => saveNamed(true), export: () => openExport(),
       'close-tab': () => closeProject(), 'next-tab': () => cycleProject(1), 'previous-tab': () => cycleProject(-1),
+      'zoom-in': () => stepDocumentZoom(1), 'zoom-out': () => stepDocumentZoom(-1), 'zoom-reset': () => setDocumentZoom(100),
+      'edit-link': editLink, 'open-link': () => { const href = current?.getAttributes('link').href; if (href) api.openLink(href).catch(error => notify(errorText(error))); }, 'remove-link': () => editorCommand(chain => chain.extendMarkRange('link').unsetLink()),
       'clear-recents': async () => { try { setRecents(await api.clearRecents()); } catch (error) { notify(errorText(error)); } },
       recent: async () => { setRecents(await api.getRecents()); setModal({ type: 'recent' }); }, reveal: () => api.reveal(),
       undo: () => travelHistory('undo'), redo: () => travelHistory('redo'), 'select-all': () => current?.chain().focus().selectAll().run(),
-      find: () => setSearchOpen(true), replace: () => setSearchOpen(true), focus: () => { setFocus(value => !value); tourRef.current?.emit('focus'); }, 'toggle-outline': () => { setFocus(false); setLeftOpen(value => !value); },
+      find: openSearch, replace: openSearch, 'find-next': () => nextSearchResult(1), 'find-previous': () => nextSearchResult(-1), 'close-search': closeSearch, 'image-properties': showImageProperties, focus: () => { setFocus(value => !value); tourRef.current?.emit('focus'); }, 'toggle-outline': () => { setFocus(false); setLeftOpen(value => !value); },
       'toggle-assistant': () => { setFocus(false); setPanel(value => value === 'assist' ? null : 'assist'); }, 'page-view': async () => { await updatePrefs({ pageMode: prefsRef.current.pageMode === 'pages' ? 'continuous' : 'pages' }); tourRef.current?.emit('page-view'); }, 'page-break': () => { dismiss(); if (!insertPageBreak(current)) notify('Place the cursor in a paragraph to insert a page break.'); }, history: () => setPanel('history'), snapshot: () => createSnapshot(),
       complete: () => askAI(current?.state.selection.empty ? 'continue' : 'rewrite'), correct: () => askAI('correct'), rewrite: () => askAI('rewrite'), accept: () => acceptGhost(), dismiss: () => rejectSuggestion(),
       comments: () => showComments(), 'add-comment': () => showComments(true), 'copy-format': copyFormat, 'paste-format': pasteFormat, 'clear-format': clearFormatting,
@@ -882,10 +994,22 @@ export default function App() {
       if (event.defaultPrevented || document.querySelector('[role="dialog"]')) return;
       const pressed = shortcutFromEvent(event), keys = { ...DEFAULT_HOTKEYS, ...prefsRef.current.hotkeys };
       if (!pressed) return;
+      const documentKeys = { find: 'find', replace: 'replace', findNext: 'find-next', findPrevious: 'find-previous', insertLink: 'edit-link', zoomIn: 'zoom-in', zoomOut: 'zoom-out', zoomReset: 'zoom-reset' };
+      const action = Object.keys(documentKeys).find(key => keys[key] && keys[key] === pressed);
+      if (action) { event.preventDefault(); actionRef.current.command(documentKeys[action]); return; }
       if (pressed === keys.toggleAI) { event.preventDefault(); actionRef.current.command('toggle-ai'); }
       if (pressed === keys.toggleContinuous) { event.preventDefault(); actionRef.current.command('toggle-continuous'); }
+      if (pressed === 'Escape') actionRef.current.command('close-search');
+      if (event.ctrlKey && event.key === '+' && keys.zoomIn === 'Ctrl+=') { event.preventDefault(); actionRef.current.command('zoom-in'); }
+    };
+    let lastWheel = 0;
+    const onWheel = event => {
+      if (!event.ctrlKey || !event.target.closest?.('.writing-scroll') || document.querySelector('[role="dialog"]')) return;
+      event.preventDefault();
+      if (event.deltaY && performance.now() - lastWheel > 90) { lastWheel = performance.now(); actionRef.current.command(event.deltaY < 0 ? 'zoom-in' : 'zoom-out'); }
     };
     document.addEventListener('keydown', onKey);
+    document.addEventListener('wheel', onWheel, { passive: false });
     const stop = api?.onCommand(async command => {
       if (command === 'close-request') {
         await tourRef.current?.flush();
@@ -901,22 +1025,59 @@ export default function App() {
       else if (command === 'external-files-pending') actionRef.current.openExternalFiles();
       else actionRef.current.command(command);
     });
-    return () => { document.removeEventListener('keydown', onKey); stop?.(); };
+    return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('wheel', onWheel); stop?.(); };
   }, []);
   useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(searchKey, { query: searchOpen ? query : '', ...searchOptions }).setMeta('addToHistory', false)); }, [editor, query, searchOpen, searchOptions]);
   const liveSearchDoc = editor && !editor.isDestroyed && editor.storage.wraiterContext?.projectId === project?.id && editor.storage.wraiterContext?.chapterId === activeId ? editor.state.doc : null;
-  const searchResults = useMemo(() => searchOpen && project ? findManuscriptMatches(project, query, { ...searchOptions, scope: searchScope, chapterId: activeId, schema, activeDoc: liveSearchDoc }) : [], [searchOpen, project?.chapters, query, searchOptions, searchScope, activeId, liveSearchDoc]);
-  function navigatePassage(chapterId, range) {
+  const searchResults = useMemo(() => searchOpen && query && project ? findManuscriptMatches(project, query, { ...searchOptions, scope: searchScope, chapterId: activeId, schema, activeDoc: liveSearchDoc }) : [], [searchOpen, project?.chapters, query, searchOptions, searchScope, activeId, liveSearchDoc]);
+  function openSearch() {
+    if (document.querySelector('[role="dialog"]')) return;
+    const current = editorRef.current;
+    if (current?.isFocused && !current.state.selection.empty) {
+      const { from, to } = current.state.selection, selected = current.state.doc.textBetween(from, to, '\n', '\n');
+      if (selected.trim()) { setQuery(selected); if (selected !== query) setActiveSearchId(null); }
+    }
+    setSearchOpen(true); setSearchFocus(value => value + 1);
+  }
+  function closeSearch() { if (!searchOpen) return; setSearchOpen(false); editorRef.current?.view.dom.focus({ preventScroll: true }); }
+  function nextSearchResult(direction) {
+    if (!query) { openSearch(); return; }
+    if (requestRef.current || document.querySelector('[role="dialog"]')) return;
+    // Keep the last query for F3, but avoid searching a whole novel on every
+    // keystroke while Find is closed. Repeat searches run only on request.
+    const results = searchOpen ? searchResults : findManuscriptMatches(projectRef.current, query, { ...searchOptions, scope: searchScope, chapterId: activeId, schema, activeDoc: liveSearchDoc });
+    if (!results.length) return;
+    const index = results.findIndex(result => result.id === activeSearchId);
+    const next = index < 0 ? direction > 0 ? 0 : results.length - 1 : (index + direction + results.length) % results.length;
+    activateSearchResult(results[next], { focusEditor: !document.activeElement?.closest('.manuscript-search-panel') });
+  }
+  function navigatePassage(chapterId, range, { focusEditor = true } = {}) {
     if (transition.current || !range || !projectRef.current.chapters.some(item => item.id === chapterId)) return;
     if (requestRef.current?.mode !== 'chat') dismiss();
     const current = editorRef.current;
-    if (chapterId === activeId && current && !current.isDestroyed) current.chain().focus().setTextSelection(range).scrollIntoView().run();
+    if (chapterId === activeId && current && !current.isDestroyed) { const chain = current.chain(); if (focusEditor) chain.focus(); chain.setTextSelection(range).scrollIntoView().run(); }
     else {
       restoreSelection.current = { type: 'text', anchor: range.from, head: range.to };
+      restoreFocus.current = focusEditor;
       restoreScroll.current = null; revealRestoredCaret.current = true; setActiveId(chapterId); setRenameId(null);
     }
   }
-  function activateSearchResult(result) { setActiveSearchId(result.id); navigatePassage(result.chapterId, result); }
+  function activateSearchResult(result, options) { setActiveSearchId(result.id); navigatePassage(result.chapterId, result, options); }
+  function showImageProperties() { const image = selectedImage(editorRef.current); if (image && !requestRef.current && !namedSave.current) setModal({ type: 'image-properties', image }); }
+  function editLink() {
+    const current = editorRef.current;
+    if (!current || current.isDestroyed || requestRef.current || namedSave.current || document.querySelector('[role="dialog"]')) return;
+    setModal({ type: 'link', value: current.getAttributes('link').href || '', editor: current, doc: current.state.doc, selection: current.state.selection.toJSON() });
+  }
+  function applyLink(href, remove = false) {
+    const current = editorRef.current;
+    if (current !== modal.editor || current?.isDestroyed || current.state.doc !== modal.doc) { notify('The passage changed. Close this dialog and select it again.'); return; }
+    try {
+      if (!remove) { const url = new URL(href); if (!['http:', 'https:', 'mailto:'].includes(url.protocol) || /[\x00-\x20]/.test(href) || (!url.pathname && url.protocol === 'mailto:') || url.username || url.password) throw new Error('Use a valid http://, https:// or mailto: address.'); }
+      current.view.dispatch(current.state.tr.setSelection(Selection.fromJSON(current.state.doc, modal.selection)).setMeta('addToHistory', false));
+      editorCommand(chain => remove ? chain.extendMarkRange('link').unsetLink() : chain.extendMarkRange('link').setLink({ href })); setModal(null);
+    } catch (error) { notify(errorText(error)); }
+  }
   function commitProjectBatch(nextProject, label, chapterId = activeId, selection = null) {
     const before = projectRef.current, current = editorRef.current;
     if (transition.current || requestRef.current || nextProject.id !== before.id || nextProject.historySequence !== before.historySequence) throw new Error('The manuscript changed. Review the operation and try again.');
@@ -952,6 +1113,8 @@ export default function App() {
     editorMenuRef.current = null;
     const current = editorRef.current;
     const target = request.source === 'keyboard' ? document.activeElement : document.elementFromPoint(request.x, request.y);
+    const tab = target?.closest('[data-project-tab]'), tabs = workspaceRef.current.tabs, tabIndex = tabs.findIndex(item => item.id === tab?.dataset.projectTab);
+    if (tabIndex >= 0 && !document.querySelector('[role="dialog"]')) { editorMenuRef.current = { id: request.id, tabId: tabs[tabIndex].id }; return { tab: true, tabId: tabs[tabIndex].id, canMoveLeft: tabIndex > 0, canMoveRight: tabIndex < tabs.length - 1, canCloseOthers: tabs.length > 1, blocked: !!transition.current || namedSave.current || tabReordering.current }; }
     if (!current || current.isDestroyed || !current.isEditable || target?.closest('.manuscript') !== current.view.dom || transition.current || savingNamed || document.querySelector('[role="dialog"]')) return null;
     if (current.storage.wraiterContext?.projectId !== projectRef.current?.id || current.storage.wraiterContext?.chapterId !== activeId) return null;
     clearTimeout(continuousTimer.current);
@@ -960,23 +1123,28 @@ export default function App() {
     if (request.source !== 'keyboard') {
       const position = current.view.posAtCoords({ left: request.x, top: request.y })?.pos;
       const selected = current.state.selection;
-      if (position != null && (position < selected.from || position > selected.to)) current.view.dispatch(current.state.tr.setSelection(Selection.near(current.state.doc.resolve(position))).setMeta('addToHistory', false));
+      const image = target.closest('[data-image-node]');
+      if (image) { const pos = current.view.posAtDOM(image, 0); if (current.state.doc.nodeAt(pos)?.type.name === 'image') current.view.dispatch(current.state.tr.setSelection(NodeSelection.create(current.state.doc, pos)).setMeta('addToHistory', false)); }
+      else if (position != null && (position < selected.from || position > selected.to)) current.view.dispatch(current.state.tr.setSelection(Selection.near(current.state.doc.resolve(position))).setMeta('addToHistory', false));
     }
     current.view.focus();
     const selection = current.state.selection, undo = historyStatus(historyRef.current), shape = captureFormatting(current.state, docStyle), suggestion = ghostKey.getState(current.state);
-    editorMenuRef.current = { id: request.id, editor: current, projectId: projectRef.current.id, chapterId: activeId, doc: current.state.doc, selection: selection.toJSON() };
-    return { editor: true, hasSelection: !selection.empty, hasTextSelection: !selection.empty && !!current.state.doc.textBetween(selection.from, selection.to, '\n', '\n').trim(), blocked: !!requestRef.current, canUndo: undo.canUndo, canRedo: undo.canRedo, canCopyFormatting: !!shape, canPasteFormatting: !!shape && !!formatting, aiEnabled: prefsRef.current.enabled, hasSuggestion: !!suggestion?.text && suggestion.kind !== 'loading' };
+    const clickedLink = target.closest('a[href]'), linkPosition = clickedLink && request.source !== 'keyboard' ? current.view.posAtCoords({ left: request.x, top: request.y })?.pos : null;
+    editorMenuRef.current = { id: request.id, editor: current, projectId: projectRef.current.id, chapterId: activeId, doc: current.state.doc, selection: selection.toJSON(), linkPosition, linkHref: clickedLink?.getAttribute('href') };
+    return { editor: true, hasImage: !!selectedImage(current), hasLink: !!clickedLink || current.isActive('link'), hasSelection: !selection.empty, hasTextSelection: !selection.empty && !!current.state.doc.textBetween(selection.from, selection.to, '\n', '\n').trim(), blocked: !!requestRef.current, canUndo: undo.canUndo, canRedo: undo.canRedo, canCopyFormatting: !!shape, canPasteFormatting: !!shape && !!formatting, aiEnabled: prefsRef.current.enabled, hasSuggestion: !!suggestion?.text && suggestion.kind !== 'loading' };
   }
   function runEditorMenuAction(action) {
     const context = editorMenuRef.current, current = editorRef.current;
     if (!context || context.id !== action?.id) return;
     editorMenuRef.current = null;
+    if (context.tabId) { if (['tab-close', 'tab-close-others', 'tab-close-right', 'tab-left', 'tab-right'].includes(action.command)) tabMenuAction(action.command, context.tabId); return; }
     if (transition.current || savingNamed || document.querySelector('[role="dialog"]') || current !== context.editor || current.isDestroyed || current.state.doc !== context.doc || projectRef.current.id !== context.projectId || activeId !== context.chapterId) { notify('The manuscript changed. Right-click the passage again.'); return; }
-    const commands = ['undo', 'redo', 'select-all', 'copy-format', 'paste-format', 'clear-format', 'add-comment', 'complete', 'rewrite', 'correct', 'context-assistant', 'accept', 'dismiss', 'stop-ai', 'toggle-ai', 'settings-connections'];
+    const commands = ['undo', 'redo', 'select-all', 'copy-format', 'paste-format', 'clear-format', 'add-comment', 'complete', 'rewrite', 'correct', 'context-assistant', 'accept', 'dismiss', 'stop-ai', 'toggle-ai', 'settings-connections', 'image-properties', 'open-link', 'edit-link', 'remove-link'];
     if (!commands.includes(action.command)) return;
-    if (requestRef.current && !['stop-ai', 'settings-connections'].includes(action.command)) { notify('Wait for the current request to finish, or stop it first.'); return; }
+    if (requestRef.current && !['stop-ai', 'settings-connections', 'open-link'].includes(action.command)) { notify('Wait for the current request to finish, or stop it first.'); return; }
+    if (action.command === 'open-link' && context.linkHref) { api.openLink(context.linkHref).catch(error => notify(errorText(error))); return; }
     try {
-      const selection = Selection.fromJSON(current.state.doc, context.selection);
+      const selection = ['edit-link', 'remove-link'].includes(action.command) && context.linkPosition != null ? Selection.near(current.state.doc.resolve(context.linkPosition)) : Selection.fromJSON(current.state.doc, context.selection);
       // An unnecessary selection transaction dismisses the current AI preview.
       if (!current.state.selection.eq(selection)) current.view.dispatch(current.state.tr.setSelection(selection).setMeta('addToHistory', false));
       current.view.focus(); handleCommand(action.command);
@@ -1023,22 +1191,14 @@ export default function App() {
   const docStyle = project.documentStyle || { fontFamily: 'Cambria', fontSize: 12, lineHeight: 1.5 };
   const titleStyle = editor?.isActive('heading', { level: 1 }) ? 'heading1' : editor?.isActive('heading', { level: 2 }) ? 'heading2' : editor?.isActive('heading', { level: 3 }) ? 'heading3' : 'paragraph';
 
-  return <div className={`app layout-${project.layout || 'story'} ${focus ? 'focus-mode' : ''}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight, '--writing-measure': `${prefs.measure}px`, '--document-zoom': (prefs.zoom || 100) / 100 }}>
-    {!focus && <div className="project-tabs-bar"><div className="project-tabs" role="tablist" aria-label="Open projects">{workspace.tabs.map(tab => {
-      const active = tab.id === workspace.activeId, title = active ? project.title : tab.title, assistantWorking = requestRef.current?.mode === 'chat' && requestRef.current.tabId === tab.id, assistantUnread = tabCache.current.get(tab.id)?.unread;
-      return <div className={'project-tab' + (active ? ' selected' : '')} key={tab.id}>
-        <button role="tab" id={`project-tab-${tab.id}`} aria-selected={active} aria-controls="project-workspace" tabIndex={active ? 0 : -1} disabled={switching || savingNamed} title={(active ? path : tab.path) || 'Unnamed draft — saved in recovery'} onClick={() => switchProject(tab.id)} onKeyDown={event => { if (['ArrowLeft', 'ArrowRight'].includes(event.key)) { event.preventDefault(); cycleProject(event.key === 'ArrowRight' ? 1 : -1, true); } }}><FileText size={14} /><span>{title}</span>{active && ['pending', 'saving', 'error'].includes(saveState) && <span className={'tab-save-dot ' + saveState} aria-label={saveState === 'error' ? 'Save needs attention' : 'Saving changes'}>●</span>}{assistantWorking ? <LoaderCircle size={12} className="spin tab-assistant-status" aria-hidden="true" title="Assistant working" /> : assistantUnread ? <span className="tab-assistant-status unread" aria-hidden="true" title="Assistant reply ready">●</span> : null}</button>
-        <IconButton icon={X} title={`Close project ${title}`} disabled={switching || savingNamed} onClick={() => closeProject(tab.id)} />
-      </div>;
-    })}</div><IconButton icon={Plus} title="New project tab" disabled={switching || savingNamed} onClick={createNew} /></div>}
+  return <div onDropCapture={captureFileDrop} onDragOverCapture={captureFileHover} onDragLeave={event => { const reference = event.target.closest?.(".reference-panel"); if (reference && !reference.contains(event.relatedTarget)) reference.removeAttribute("data-file-drop"); }} className={`app layout-${project.layout || 'story'} ${focus ? 'focus-mode' : ''}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight, '--writing-measure': `${prefs.measure}px`, '--document-zoom': (prefs.zoom || 100) / 100 }}>
+    {!focus && <ProjectTabs tabs={workspace.tabs} activeId={workspace.activeId} project={project} path={path} saveState={saveState} request={requestRef.current} cache={tabCache.current} disabled={switching || savingNamed || reorderingTabs || !!modal} onActivate={switchProject} onClose={closeProject} onCycle={cycleProject} onMove={moveProjectTab} onNew={createNew} />}
     <div className="workspace" id="project-workspace" role="tabpanel" aria-labelledby={`project-tab-${workspace.activeId}`} inert={switching || (modal && modal.type !== 'tutorial') ? true : undefined}>
       {!focus && leftOpen && <aside className="sidebar">
         <div className="project-switcher"><div className="project-avatar"><BookOpen size={21} /></div><div className="project-switcher-text"><small>YOUR MANUSCRIPT</small><button className="project-title-button" onClick={() => setModal({ type: 'rename' })}>{project.title}<PenLine size={12} /></button></div></div>
-        <button className="sidebar-search" onClick={() => setSearchOpen(x => !x)}><Search size={15} />Find in manuscript<kbd>{formatShortcut(prefs.hotkeys?.find)}</kbd></button>
+        <button className="sidebar-search" onClick={() => searchOpen ? closeSearch() : openSearch()}><Search size={15} />Find in manuscript<kbd>{formatShortcut(prefs.hotkeys?.find)}</kbd></button>
         <div className="sidebar-section-label">MANUSCRIPT <IconButton icon={Plus} title="Add chapter" onClick={addChapter} /></div>
-        <nav className="chapter-list" aria-label="Chapters">{project.chapters.map((item, index) => <div className={`chapter-item ${item.id === chapter.id ? 'selected' : ''}`} key={item.id}>
-          <button className="chapter-select" onClick={() => changeChapter(item.id)}><span className="chapter-number">{String(index + 1).padStart(2, '0')}</span><span className="chapter-item-text"><span>{item.title}</span><small>{contentWordCount(item.content).toLocaleString()} words</small></span>{item.status === 'Final' ? <CheckCircle2 size={13} /> : <span className={`chapter-status ${(item.status || 'Draft').toLowerCase()}`} />}</button>
-        </div>)}</nav>
+        <ChapterOutline project={project} activeId={chapter.id} renameId={renameId} onRenameStart={setRenameId} onRenameEnd={() => setRenameId(null)} onActivate={changeChapter} onRename={(id, title) => { if (!requestRef.current && !transition.current) updateProject({ chapters: projectRef.current.chapters.map(item => item.id === id ? { ...item, title } : item) }, 'Rename chapter'); }} onMove={moveChapter} disabled={!!busy || switching || savingNamed} />
         <button className="add-chapter" onClick={addChapter}><Plus size={15} />New chapter</button>
         <div className="sidebar-divider" />
         <button data-tour="references" className={`sidebar-nav ${panel === 'references' ? 'selected' : ''}`} onClick={() => setPanel(panel === 'references' ? null : 'references')}><BookMarked size={17} />Reference library<span>{project.references?.length || 0}</span></button>
@@ -1055,22 +1215,23 @@ export default function App() {
           <div className="native-toolbar-group"><select className="paragraph-style-select" aria-label="Paragraph style" value={titleStyle} onChange={e => editorCommand(c => e.target.value === 'paragraph' ? c.setParagraph() : c.setHeading({ level: Number(e.target.value.at(-1)) }))}><option value="paragraph">Normal</option><option value="heading1">Heading 1</option><option value="heading2">Heading 2</option><option value="heading3">Heading 3</option></select><FontPicker value={editor?.getAttributes('textStyle').fontFamily || docStyle.fontFamily} fonts={fonts} onChange={font => editorCommand(c => c.setFontFamily(font))} /><FontSizeInput value={parseFloat(editor?.getAttributes('textStyle').fontSize || docStyle.fontSize)} onApply={size => editorCommand(c => c.setFontSize(size + 'pt'))} /></div>
           <div className="native-toolbar-group"><IconButton icon={Bold} title="Bold (Ctrl B)" active={editor?.isActive('bold')} onClick={() => editorCommand(c => c.toggleBold())} /><IconButton icon={Italic} title="Italic (Ctrl I)" active={editor?.isActive('italic')} onClick={() => editorCommand(c => c.toggleItalic())} /><IconButton icon={Underline} title="Underline (Ctrl U)" active={editor?.isActive('underline')} onClick={() => editorCommand(c => c.toggleUnderline())} /><label className="font-color" title="Text colour" style={{ '--font-color': editor?.getAttributes('textStyle').color || 'var(--text)' }}><Type size={17} /><input type="color" aria-label="Text colour" value={editor?.getAttributes('textStyle').color || '#222222'} onChange={e => editorCommand(c => c.setColor(e.target.value))} /></label><HighlightPicker active={editor?.isActive('highlight') || !!backgroundColour} colour={editor?.getAttributes('highlight').color || backgroundColour} onApply={colour => editorCommand(c => c.unsetBackgroundColor().setHighlight({ color: colour }))} onClear={() => editorCommand(c => c.unsetHighlight().unsetBackgroundColor())} /><IconButton icon={RemoveFormatting} title="Clear formatting" onMouseDown={e => e.preventDefault()} onClick={clearFormatting} /><FormatPainter available={!!editor && !busy && !switching} hasFormatting={!!formatting} onCopy={copyFormat} onPaste={pasteFormat} /><IconButton icon={MessageSquare} title="Add comment" disabled={!editor || editor.state.selection.empty || !!busy || switching} onMouseDown={e => e.preventDefault()} onClick={() => showComments(true)} /></div>
           <div className="native-toolbar-group"><IconButton icon={AlignLeft} title="Align left" active={editor?.isActive({ textAlign: 'left' })} onClick={() => editorCommand(c => c.setTextAlign('left'))} /><IconButton icon={AlignCenter} title="Align centre" active={editor?.isActive({ textAlign: 'center' })} onClick={() => editorCommand(c => c.setTextAlign('center'))} /><IconButton icon={AlignRight} title="Align right" active={editor?.isActive({ textAlign: 'right' })} onClick={() => editorCommand(c => c.setTextAlign('right'))} /><IconButton icon={List} title="Bullet list" active={editor?.isActive('bulletList')} onClick={() => editorCommand(c => c.toggleBulletList())} /><IconButton icon={ListOrdered} title="Numbered list" active={editor?.isActive('orderedList')} onClick={() => editorCommand(c => c.toggleOrderedList())} /></div>
-          <div className="native-toolbar-group"><IconButton icon={Image} title="Insert image" onClick={async () => { try { const src = await api.image(); if (src) editorCommand(c => c.setImage({ src })); } catch (e) { notify(errorText(e)); } }} /><IconButton icon={Link2} title="Insert or edit link" onClick={() => setModal({ type: 'link', value: editor?.getAttributes('link').href || '' })} /><IconButton icon={Table2} title="Table tools" onClick={() => setModal({ type: 'table' })} /><IconButton icon={SlidersHorizontal} title="Paragraph and document formatting" onClick={() => setModal({ type: 'format' })} /></div>
+          <div className="native-toolbar-group"><IconButton icon={Image} title="Insert image" disabled={!editor || !!busy || switching || savingNamed} onMouseDown={event => event.preventDefault()} onClick={() => insertPickedImage(editorRef.current, () => api.image())} /><IconButton icon={Link2} title="Insert or edit link (Ctrl K)" onMouseDown={event => event.preventDefault()} onClick={editLink} /><IconButton icon={Table2} title="Table tools" onClick={() => setModal({ type: 'table' })} /><IconButton icon={SlidersHorizontal} title="Paragraph and document formatting" onClick={() => setModal({ type: 'format' })} /></div>
         </div>}
         {!focus && <div className="ai-toolbar" role="toolbar" aria-label="Writing assistance"><button className={prefs.enabled ? 'active' : ''} aria-pressed={prefs.enabled} onClick={() => handleCommand('toggle-ai')} title={formatShortcut(prefs.hotkeys?.toggleAI)}><PenLine size={14} />AI {prefs.enabled ? 'on' : 'off'}</button><button disabled={tour.isCurrent} title={tour.isCurrent ? "Automatic requests pause in the practice manuscript. Your saved preference is unchanged." : undefined} className={prefs.continuous ? 'active' : ''} aria-pressed={prefs.continuous} onClick={() => handleCommand('toggle-continuous')} title={formatShortcut(prefs.hotkeys?.toggleContinuous)}>Automatic suggestions {tour.isCurrent ? 'paused for tour' : prefs.continuous ? 'on' : 'off'}</button><span className="toolbar-divider" /><button disabled={!!busy} onClick={() => handleCommand('complete')}>Suggest <kbd>{formatShortcut(prefs.hotkeys?.complete ?? 'Tab')}</kbd></button><button disabled={!!busy || !selectedWords} onClick={() => askAI('correct')}><CheckCheck size={14} />Correct</button><button disabled={!!busy || !selectedWords} onClick={() => askAI('rewrite')}>Rephrase / translate</button><div className="toolbar-spacer" /><button onClick={() => setModal({ type: 'settings', tab: 'connections' })}><Settings2 size={14} />AI settings</button></div>}
-        {searchOpen && <SearchPanel key={project.id} query={query} onQueryChange={setQuery} replacement={replacement} onReplacementChange={setReplacement} scope={searchScope} onScopeChange={setSearchScope} options={searchOptions} onOptionsChange={setSearchOptions} results={searchResults} activeResult={activeSearchId} onActivate={activateSearchResult} onReplace={(result, value) => replaceSearchResults([result], value)} onReplaceAll={(results, value) => replaceSearchResults(results, value, true)} onClose={() => { setSearchOpen(false); setQuery(''); }} busy={!!busy || switching} />}
+        {selectedImage(editor) && <div className="image-selection-tools" role="toolbar" aria-label="Image controls"><span>Drag a corner to resize</span><button className="secondary-button" disabled={!!busy || switching || savingNamed} onMouseDown={event => event.preventDefault()} onClick={showImageProperties}>Image properties…</button></div>}
+        {searchOpen && <SearchPanel focusRequest={searchFocus} key={project.id} query={query} onQueryChange={setQuery} replacement={replacement} onReplacementChange={setReplacement} scope={searchScope} onScopeChange={setSearchScope} options={searchOptions} onOptionsChange={setSearchOptions} results={searchResults} activeResult={activeSearchId} onActivate={activateSearchResult} onReplace={(result, value) => replaceSearchResults([result], value)} onReplaceAll={(results, value) => replaceSearchResults(results, value, true)} onClose={closeSearch} busy={!!busy || switching} />}
         {saveError && <div className="inline-warning"><Info size={16} /><span>{saveError}</span><button disabled={switching || savingNamed} onClick={() => saveNamed(true)}>Save a copy</button>{path && /file changed outside WRAITER/i.test(saveError) && <button disabled={switching || savingNamed} title="Load the file from disk. Your current draft will be preserved in Open recent." onClick={reloadDocument}>Load modified version</button>}</div>}
-        <div className={`writing-scroll ${prefs.pageMode === 'pages' ? 'divided-pages' : 'continuous-pages'} ${prefs.showRowNumbers || prefs.showPageNumbers || prefs.showParagraphNumbers ? 'has-numbering' : ''}`} style={{ '--numbering-width': `${[prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers].filter(Boolean).length * 34}px` }}>
+        <div className={`writing-scroll ${prefs.pageMode === 'pages' ? 'divided-pages' : 'continuous-pages'} ${prefs.showRowNumbers || prefs.showPageNumbers || prefs.showParagraphNumbers ? 'has-numbering' : ''}`} onDragOver={event => imageSurfaceEvent(editorRef.current, 'dragover', event.nativeEvent)} onDragLeave={event => imageSurfaceEvent(editorRef.current, 'dragleave', event.nativeEvent)} onDrop={event => imageSurfaceEvent(editorRef.current, 'drop', event.nativeEvent)} style={{ '--numbering-width': `${[prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers].filter(Boolean).length * 34}px` }}>
           <article className="writing-sheet">
             <div className="chapter-kicker"><span>CHAPTER {String(project.chapters.findIndex(c => c.id === chapter.id) + 1).padStart(2, '0')}</span><span className="kicker-line" /><select aria-label="Chapter status" value={chapter.status || 'Draft'} onChange={e => editChapter(chapter.id, { status: e.target.value })}><option>Draft</option><option>Notes</option><option>Revising</option><option>Final</option></select></div>
             <div className="chapter-title-row"><input className="chapter-title" aria-label="Chapter title" value={chapter.title} onChange={e => editChapter(chapter.id, { title: e.target.value })} /><div className="chapter-tools"><IconButton icon={ArrowUp} title="Move chapter earlier" disabled={project.chapters[0].id === chapter.id} onClick={() => reorderChapter(chapter.id, -1)} /><IconButton icon={ArrowDown} title="Move chapter later" disabled={project.chapters.at(-1).id === chapter.id} onClick={() => reorderChapter(chapter.id, 1)} /><IconButton icon={Trash2} title="Delete chapter" disabled={project.chapters.length === 1} onClick={() => setModal({ type: 'delete-chapter' })} /></div></div>
             {(project.showStatistics ?? layout.showStatistics) && <div className="chapter-meta">{chapterWords.toLocaleString()} words<span>·</span>{Math.max(1, Math.ceil(chapterWords / 220))} min read</div>}
-            <ManuscriptEditor key={`${project.id}:${chapter.id}:${epoch}`} chapter={chapter} prefs={{ ...prefs, language: documentLanguage }} layoutSignature={JSON.stringify([docStyle, chapter.title, project.showStatistics])} onReady={handleEditorReady} onChange={onContentChanged} onSelection={onEditorSelection} onAction={onEditorAction} />
+            <ManuscriptEditor key={`${project.id}:${chapter.id}:${epoch}`} chapter={chapter} prefs={{ ...prefs, language: documentLanguage }} layoutSignature={JSON.stringify([docStyle, chapter.title, project.showStatistics])} onReady={handleEditorReady} onChange={onContentChanged} onSelection={onEditorSelection} onAction={onEditorAction} onNotice={notify} canImportImages={canImportImages} />
             {ghost && <div className="ghost-controls"><span>{ghost.kind === 'revision' ? 'Selected text · proposed replacement' : 'Suggested continuation'}</span><button onClick={() => acceptGhost()}><kbd>{formatShortcut(prefs.hotkeys?.accept ?? 'Tab')}</kbd> Accept</button><button onClick={retryAI}><RotateCcw size={13} />Another</button><button onClick={rejectSuggestion}><kbd>{formatShortcut(prefs.hotkeys?.dismiss ?? 'Escape')}</kbd> Dismiss</button></div>}
             {busy && !['chat', 'background-chat'].includes(busy) && <div className="generation-inline" role="status">{localBusy && localProgress ? localProgress.message : 'Generating suggestion…'}<button onClick={dismiss}>Cancel</button></div>}
           </article>
         </div>
-        <div className="writer-status writing-status"><div><span className="file-format-label">{binding?.format?.toUpperCase() || 'WRAITER'}</span><span>{selectedWords ? selectedWords + ' selected' : chapterWords.toLocaleString() + ' words'}</span><span className="status-dot">·</span><span>{totalWords.toLocaleString()} in document</span></div><div><select className="layout-select" aria-label="Document layout" value={project.layout || 'story'} onChange={event => { const chosen = LAYOUTS[event.target.value]; updateProject({ layout: event.target.value, showStatistics: chosen.showStatistics, documentStyle: { ...docStyle, fontFamily: chosen.fontFamily, fontSize: chosen.fontSize, lineHeight: chosen.lineHeight } }, 'Apply ' + chosen.name + ' layout'); }}>{Object.entries(LAYOUTS).map(([id, value]) => <option key={id} value={id}>{value.name}</option>)}</select><select className="language-select" aria-label="Content language" value={documentLanguage} onChange={e => updateProject({ language: e.target.value })}>{[...new Map([...LANGUAGES, [documentLanguage, languageName(documentLanguage)]]).entries()].map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select><button data-tour="page-view" onClick={() => handleCommand('page-view')}>{prefs.pageMode === 'pages' ? 'Divided pages' : 'Continuous view'}</button><select aria-label="Document zoom" value={prefs.zoom || 100} onChange={e => updatePrefs({ zoom: Number(e.target.value) })}>{[50, 75, 90, 100, 110, 125, 150, 175, 200].map(zoom => <option key={zoom} value={zoom}>{zoom}%</option>)}</select></div></div>
+        <div className="writer-status writing-status"><div><span className="file-format-label">{binding?.format?.toUpperCase() || 'WRAITER'}</span><span>{selectedWords ? selectedWords + ' selected' : chapterWords.toLocaleString() + ' words'}</span><span className="status-dot">·</span><span>{totalWords.toLocaleString()} in document</span></div><div><select className="layout-select" aria-label="Document layout" value={project.layout || 'story'} onChange={event => { const chosen = LAYOUTS[event.target.value]; updateProject({ layout: event.target.value, showStatistics: chosen.showStatistics, documentStyle: { ...docStyle, fontFamily: chosen.fontFamily, fontSize: chosen.fontSize, lineHeight: chosen.lineHeight } }, 'Apply ' + chosen.name + ' layout'); }}>{Object.entries(LAYOUTS).map(([id, value]) => <option key={id} value={id}>{value.name}</option>)}</select><select className="language-select" aria-label="Content language" value={documentLanguage} onChange={e => updateProject({ language: e.target.value })}>{[...new Map([...LANGUAGES, [documentLanguage, languageName(documentLanguage)]]).entries()].map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select><button data-tour="page-view" onClick={() => handleCommand('page-view')}>{prefs.pageMode === 'pages' ? 'Divided pages' : 'Continuous view'}</button><select aria-label="Document zoom" value={prefs.zoom || 100} onChange={e => setDocumentZoom(e.target.value)}>{!ZOOM_LEVELS.includes(prefs.zoom) && <option value={prefs.zoom}>{prefs.zoom}%</option>}{ZOOM_LEVELS.map(zoom => <option key={zoom} value={zoom}>{zoom}%</option>)}</select></div></div>
       </main>
       {!focus && panel && <aside className="inspector">
         <div className="inspector-heading"><div className="inspector-title">{panel === 'assist' ? <Sparkles size={17} /> : panel === 'references' ? <BookMarked size={17} /> : panel === 'notes' ? <PenLine size={17} /> : panel === 'comments' ? <MessageSquare size={17} /> : <History size={17} />}<span>{({ assist: 'Writing assistant', references: 'Reference library', notes: 'Notes & voice', comments: 'Comments', history: 'Revision history' })[panel]}</span></div><IconButton icon={PanelRightClose} title="Close side panel" onClick={() => setPanel(null)} /></div>
@@ -1092,7 +1253,7 @@ export default function App() {
             {busy && busy !== 'continue' && <div className="thinking"><LoaderCircle size={15} className="spin" />{localBusy && localProgress ? localProgress.message : busy === 'chat' ? 'Thinking it through…' : busy === 'background-chat' ? `Finishing a request in “${requestRef.current?.projectTitle || 'another project'}”…` : 'Reading your selection…'}<button onClick={dismiss}>Cancel</button></div>}
           </div>
         </div><div className="chat-composer"><textarea aria-label="Ask the writing assistant" placeholder="Ask a question or request an edit to your document…" value={instruction} onChange={e => setInstruction(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (!busy && instruction.trim()) askAI('chat'); } }} /><div><span>{prefs.enabled ? providerNames[chatSettings.provider] : 'Choose a connection'}</span><button aria-label="Send writing question" disabled={!!busy || !instruction.trim()} onClick={() => askAI('chat')}><ArrowUp size={16} /></button></div><small><kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> new line. The assistant can inspect and edit your document; edits stay undoable.</small></div></>}
-        {panel === 'references' && <div className="inspector-body reference-panel"><div className="panel-description"><h3>Reference files</h3><p>Add character sheets, research, or canon. Enabled references accompany AI requests; originals stay separate.</p></div><button className="primary-button full" onClick={async () => { try { const items = await api.reference(); if (!items.length) return; const next = [...(project.references || []), ...items.map(r => ({ ...r, id: uid(), enabled: true }))]; if (next.length > 20) { notify('Keep up to 20 references per manuscript.'); return; } updateProject({ references: next }); } catch (e) { notify(errorText(e)); } }}><Plus size={15} />Add reference files</button><p className="small-muted">Markdown and text files · refreshes saved edits<br />Inline suggestions use up to 48,000 characters. Chat can read enabled references in sections.</p>{!(project.references || []).length && <div className="empty-state"><BookMarked size={32} /><p>No reference files attached.</p><small>Attach Markdown or text files to include them in AI context.</small></div>}{(project.references || []).map(reference => <div className="reference-card" key={reference.id}><div><BookMarked size={16} /><strong>{reference.name}</strong><IconButton icon={Trash2} title={`Remove ${reference.name}`} onClick={() => updateProject({ references: project.references.filter(r => r.id !== reference.id) })} /></div><p>{reference.text.slice(0, 130)}{reference.text.length > 130 ? '…' : ''}</p><label className="check-label"><input type="checkbox" checked={reference.enabled !== false} onChange={e => updateProject({ references: project.references.map(r => r.id === reference.id ? { ...r, enabled: e.target.checked } : r) })} />Include in AI context</label><button className="text-button" onClick={() => setModal({ type: 'reference', reference })}>Read reference <ArrowUpRight size={12} /></button></div>)}</div>}
+        {panel === 'references' && <div className="inspector-body reference-panel"><div className="panel-description"><h3>Reference files</h3><p>Add character sheets, research, or canon. Enabled references accompany AI requests; originals stay separate.</p></div><button className="primary-button full" onClick={async () => { try { const items = await api.reference(); if (!items.length) return; attachReferences(items); } catch (e) { notify(errorText(e)); } }}><Plus size={15} />Add reference files</button><p className="small-muted">Drop Markdown or text files here · refreshes saved edits<br />Inline suggestions use up to 48,000 characters. Chat can read enabled references in sections.</p>{!(project.references || []).length && <div className="empty-state"><BookMarked size={32} /><p>No reference files attached.</p><small>Attach Markdown or text files to include them in AI context.</small></div>}{(project.references || []).map(reference => <div className="reference-card" key={reference.id}><div><BookMarked size={16} /><strong>{reference.name}</strong><IconButton icon={Trash2} title={`Remove ${reference.name}`} onClick={() => updateProject({ references: project.references.filter(r => r.id !== reference.id) })} /></div><p>{reference.text.slice(0, 130)}{reference.text.length > 130 ? '…' : ''}</p><label className="check-label"><input type="checkbox" checked={reference.enabled !== false} onChange={e => updateProject({ references: project.references.map(r => r.id === reference.id ? { ...r, enabled: e.target.checked } : r) })} />Include in AI context</label><button className="text-button" onClick={() => setModal({ type: 'reference', reference })}>Read reference <ArrowUpRight size={12} /></button></div>)}</div>}
         {panel === 'notes' && <div className="inspector-body notes-panel"><div className="panel-description"><h3>Notes</h3><p>Private notes and instructions for this manuscript.</p></div><label className="field-label">PRIVATE NOTES <small>Not sent to AI</small></label><textarea className="notes-textarea" aria-label="Private manuscript notes" placeholder="A scene to come back to. A question to leave open…" value={project.notes || ''} onChange={e => updateProject({ notes: e.target.value })} /><label className="field-label">YOUR WRITING VOICE <small>Included in AI context</small></label><textarea className="notes-textarea voice" aria-label="Writing voice instructions" placeholder="For example: British spelling. Keep dialogue informal. Preserve deliberate fragments. Never rename characters." value={project.style || ''} onChange={e => updateProject({ style: e.target.value })} /><p className="small-muted">These are your instructions. AI suggestions never update them automatically.</p></div>}
         {panel === 'comments' && <CommentsPanel key={project.id} project={project} editor={editor} selection={editor && !editor.isDestroyed ? { chapterId: activeId, from: editor.state.selection.from, to: editor.state.selection.to } : null} onChange={commitProjectBatch} onNavigate={navigateComment} disabled={!!busy || switching} activeCommentId={activeCommentId} focusRequest={commentFocus} />}
         {panel === 'history' && <><HistoryPanel journal={journal} gitHistory={gitHistory} onUndo={() => travelHistory('undo')} onRedo={() => travelHistory('redo')} onCheckpoint={() => createSnapshot()} onRestoreGit={item => setModal({ type: 'git-restore', item })} onPreviewGit={previewGitVersion} onCheckpointSettings={() => setModal({ type: 'settings', tab: 'connections', task: 'checkpoint' })} onOpenTree={() => setModal({ type: 'version-tree' })} />{Boolean(project.snapshots?.length) && <details className="legacy-snapshots"><summary>Earlier embedded snapshots</summary>{project.snapshots.map(item => <button className="secondary-button" key={item.id} onClick={() => setModal({ type: 'restore', item })}>{item.name}</button>)}</details>}</>}
@@ -1107,7 +1268,8 @@ export default function App() {
     {modal?.type === 'settings' && <Settings Modal={Modal} fonts={fonts} initialTab={modal.tab} initialTask={modal.task} prefs={prefs} updatePrefs={updatePrefs} onClose={() => setModal(null)} notify={notify} />}
     {modal?.type === 'rename' && <Modal title="Document title" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); setModal(null); }}><label className="field-label">TITLE</label><input className="field-input" aria-label="Manuscript title" value={project.title} onChange={e => updateProject({ title: e.target.value })} /><div className="modal-footer"><button className="primary-button">Done</button></div></form></Modal>}
     {modal?.type === 'export' && <ExportDialog Modal={Modal} project={project} chapterId={activeId} hasSelection={Boolean(modal.selectionDoc)} onExport={exportDocument} onClose={() => setModal(null)} />}
-    {modal?.type === 'link' && <Modal title="Link to something" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); const href = new FormData(e.currentTarget).get('href'); if (!/^(https?:\/\/|mailto:)/i.test(href)) { notify('Use a full https://, http://, or mailto: address.'); return; } editorCommand(c => c.extendMarkRange('link').setLink({ href })); setModal(null); }}><input className="field-input" name="href" aria-label="Link address" placeholder="https://" defaultValue={modal.value} /><div className="modal-footer"><button type="button" className="secondary-button" onClick={() => { editorCommand(c => c.unsetLink()); setModal(null); }}>Remove link</button><button className="primary-button">Apply link</button></div></form></Modal>}
+    {modal?.type === 'image-properties' && <ImageProperties Modal={Modal} image={modal.image} onClose={() => setModal(null)} onApply={attrs => { if (requestRef.current || transition.current || namedSave.current || editorRef.current !== modal.image.editor || !applyImageProperties(modal.image, attrs)) return false; setModal(null); return true; }} />}
+    {modal?.type === 'link' && <Modal title="Link to something" onClose={() => setModal(null)}><form onSubmit={event => { event.preventDefault(); applyLink(String(new FormData(event.currentTarget).get('href') || '').trim()); }}><input className="field-input" name="href" aria-label="Link address" placeholder="https://" defaultValue={modal.value} maxLength={8000} /><div className="modal-footer"><button type="button" className="secondary-button" onClick={() => applyLink('', true)}>Remove link</button><button className="primary-button">Apply link</button></div></form></Modal>}
     {modal?.type === 'table' && <Modal title="Table tools" onClose={() => setModal(null)}><div className="button-grid">{[['Insert 3 × 3 table', c => c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }), false], ['Add row below', c => c.addRowAfter(), true], ['Add column', c => c.addColumnAfter(), true], ['Delete row', c => c.deleteRow(), true], ['Delete column', c => c.deleteColumn(), true], ['Remove table', c => c.deleteTable(), true]].map(([label, command, needsTable]) => <button className="secondary-button" key={label} disabled={needsTable && !editor?.isActive('table')} onClick={() => { editorCommand(command); setModal(null); }}>{label}</button>)}</div></Modal>}
     {modal?.type === 'format' && <Modal title="Paragraph and document formatting" onClose={() => setModal(null)} wide><div className="settings-section"><h3>Selected paragraphs</h3><div className="form-grid"><label>Line spacing<select className="field-input" defaultValue={editor?.getAttributes('paragraph').lineHeight || docStyle.lineHeight} onChange={e => editorCommand(c => c.setParagraphFormat({ lineHeight: Number(e.target.value) }))}>{[1, 1.15, 1.5, 2, 2.5, 3].map(n => <option key={n}>{n}</option>)}</select></label><label>Space after (pt)<input className="field-input" type="number" min="0" max="72" defaultValue={editor?.getAttributes('paragraph').spaceAfter ?? 8} onChange={e => editorCommand(c => c.setParagraphFormat({ spaceAfter: Math.max(0, Math.min(72, Number(e.target.value))) }))} /></label><label>First-line indent (pt)<input className="field-input" type="number" min="0" max="144" defaultValue={editor?.getAttributes('paragraph').firstLineIndent || 0} onChange={e => editorCommand(c => c.setParagraphFormat({ firstLineIndent: Math.max(0, Math.min(144, Number(e.target.value))) }))} /></label></div><div className="button-grid"><button className="secondary-button" onClick={() => editorCommand(c => c.setTextAlign('justify'))}>Justify</button><button className="secondary-button" onClick={() => editorCommand(c => c.toggleBlockquote())}>Block quote</button><button className="secondary-button" onClick={() => editorCommand(c => c.setHorizontalRule())}>Scene break</button><button className="secondary-button" onClick={() => editorCommand(c => c.toggleStrike())}>Strikethrough</button><button className="secondary-button" onClick={clearFormatting}>Clear formatting</button></div></div><div className="settings-section"><h3>Document defaults</h3><p className="small-muted">Applies to text without explicit formatting and to exports.</p><label className="check-label"><input type="checkbox" aria-label="Show reading statistics below chapter title" checked={project.showStatistics ?? layout.showStatistics} onChange={event => updateProject({ showStatistics: event.target.checked }, 'Show reading statistics')} />Show word count and reading time below chapter titles</label><div className="form-grid"><label>Default font<FontPicker label="Default document font" value={docStyle.fontFamily} fonts={fonts} onChange={font => updateProject({ documentStyle: { ...docStyle, fontFamily: font } })} /></label><label>Default size (pt)<input className="field-input" type="number" min="6" max="96" aria-label="Default document size" value={docStyle.fontSize} onChange={e => { const size = Number(e.target.value); if (size >= 6 && size <= 96) updateProject({ documentStyle: { ...docStyle, fontSize: size } }); }} /></label><label>Default line spacing<select className="field-input" value={docStyle.lineHeight} onChange={e => updateProject({ documentStyle: { ...docStyle, lineHeight: Number(e.target.value) } })}>{[1, 1.15, 1.5, 2, 2.5, 3].map(n => <option key={n}>{n}</option>)}</select></label></div></div><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Done</button></div></Modal>}
     {modal?.type === 'snapshot' && <Modal title="Save version" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); createSnapshot(new FormData(e.currentTarget).get('label')); }}><label className="field-label">Version description</label><input className="field-input" name="label" aria-label="Version description" placeholder="e.g. Before revising the opening" maxLength="200" /><div className="modal-footer"><button className="primary-button">Save version</button></div></form></Modal>}

@@ -96,6 +96,13 @@ class WorkspaceSession {
     try { await this.checkpoint(); return this.snapshot(); }
     catch (error) { this.activeId = previous; throw error; }
   }
+  async reorder(ids) {
+    if (!Array.isArray(ids) || ids.length !== this.entries.length || new Set(ids).size !== ids.length || ids.some(id => !this.entries.some(entry => entry.id === id))) throw new Error('The open project list changed. Drag the tab again.');
+    const previous = this.entries;
+    this.entries = ids.map(id => previous.find(entry => entry.id === id));
+    try { await this.checkpoint(); return this.snapshot().workspace; }
+    catch (error) { this.entries = previous; throw error; }
+  }
   findPath(target) { return this.entries.find(entry => samePath(entry.store.currentPath, target)); }
   assertSaveTarget(target) {
     const other = this.findPath(target);

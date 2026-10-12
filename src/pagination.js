@@ -40,8 +40,12 @@ export function arrangePages(lines, pageHeight, margin = 56, gap = 24) {
   return { pages, breaks, height: pages.at(-1).top + pages.at(-1).height };
 }
 
-function measureLines(view, sheet, scale, numberText = false) {
-  const top = sheet.getBoundingClientRect().top, lines = []; let paragraph = 0;
+// offsetWidth is rounded to whole pixels; deriving zoom from it accumulates
+// several pixels of error far down a long sheet with a fractional width.
+const sheetScale = sheet => sheet.currentCSSZoom || parseFloat(getComputedStyle(sheet).zoom) || 1;
+
+function measureLines(view, sheet, scale, numberText = false, viewport = null) {
+  const top = sheet.getBoundingClientRect().top, lines = [], containers = new Map(); let paragraph = 0;
   view.state.doc.descendants((node, pos) => {
     if (numberText && node.type.name === 'table') return;
     if (node.type.name === 'table' || node.type.name === 'image' || node.type.name === 'horizontalRule') {
@@ -50,15 +54,28 @@ function measureLines(view, sheet, scale, numberText = false) {
       return false;
     }
     if (!node.isTextblock) return;
+    // Count every paragraph in document order. Only nearby paragraph starts
+    // need glyph measurements when row and page numbering are disabled.
+    paragraph++;
     const element = view.nodeDOM(pos); if (!element?.getBoundingClientRect) return false;
+    if (viewport) {
+      const container = element.closest('.manuscript > *') || element;
+      if (!containers.has(container)) containers.set(container, container.getBoundingClientRect());
+      const box = containers.get(container);
+      if (box.bottom < viewport.top || box.top > viewport.bottom) return false;
+    }
     const style = getComputedStyle(element), lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5;
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT); const rows = [];
     while (walker.nextNode()) {
       const text = walker.currentNode;
       if (!text.length || text.parentElement.closest('.ghost-text,.ai-loading,.pagination-spacer')) continue;
-      const range = document.createRange(); range.selectNodeContents(text);
+      const range = document.createRange();
+      if (viewport) { range.setStart(text, 0); range.setEnd(text, 1); }
+      else range.selectNodeContents(text);
       for (const box of range.getClientRects()) {
-        if (!box.height || !box.width) continue;
+        if (!box.height || (!viewport && !box.width)) continue;
+        const y = (box.top - top) / scale - Math.max(0, lineHeight - box.height / scale) / 2;
+        if (viewport) { rows.push({ pos: pos + 1, top: y, height: Math.max(lineHeight, box.height / scale), inline: true }); break; }
         let low = 0, high = text.length;
         // Find the first character on this visual line without scanning each
         // character. Also works for CJK, long words, and styled text runs.
@@ -66,19 +83,20 @@ function measureLines(view, sheet, scale, numberText = false) {
           const mid = Math.floor((low + high) / 2); range.setStart(text, mid); range.setEnd(text, Math.min(text.length, mid + 1));
           if (range.getBoundingClientRect().top < box.top - 1) low = mid + 1; else high = mid;
         }
-        const y = (box.top - top) / scale - Math.max(0, lineHeight - box.height / scale) / 2;
         const previous = rows.find(row => Math.abs(row.top - y) < lineHeight * 0.45);
         if (previous && Math.abs(previous.top - y) < lineHeight * 0.45) { previous.height = Math.max(previous.height, lineHeight, box.height / scale); continue; }
         rows.push({ pos: view.posAtDOM(text, low), top: y, height: Math.max(lineHeight, box.height / scale), inline: true });
       }
+      if (viewport && rows.length) break;
     }
     for (const br of element.querySelectorAll('br:not(.ProseMirror-trailingBreak)')) {
       const box = br.getBoundingClientRect(), y = (box.top - top) / scale - Math.max(0, lineHeight - box.height / scale) / 2;
       if (!rows.some(row => Math.abs(row.top - y) < lineHeight * .45)) rows.push({ pos: view.posAtDOM(br, 0), top: y, height: lineHeight, inline: true });
+      if (viewport) break;
     }
     if (!rows.length) { const box = element.getBoundingClientRect(); rows.push({ pos: pos + 1, top: (box.top - top) / scale, height: lineHeight, inline: true }); }
     rows.sort((a, b) => a.top - b.top || a.pos - b.pos);
-    rows[0].force = Boolean(node.attrs.pageBreakBefore); rows[0].paragraph = ++paragraph; lines.push(...rows); return false;
+    rows[0].force = Boolean(node.attrs.pageBreakBefore); rows[0].paragraph = paragraph; lines.push(...rows); return false;
   });
   return lines;
 }
@@ -94,14 +112,17 @@ export const Pagination = Extension.create({
     } },
     props: { decorations: state => paginationKey.getState(state).decorations },
     view(view) {
-      let sheet;
-      let frame = 0, timer = 0, working = false, disposed = false, width = 0;
+      let sheet, scroller;
+      let frame = 0, numberFrame = 0, timer = 0, working = false, disposed = false, width = 0;
       const furniture = document.createElement('div'); furniture.className = 'page-furniture'; furniture.setAttribute('aria-hidden', 'true');
       const gutter = document.createElement('div'); gutter.className = 'text-numbering'; gutter.setAttribute('aria-hidden', 'true');
+      const viewportNumbering = state => !state.enabled && state.numbering?.paragraph && !state.numbering.row && !state.numbering.page;
       function numberLines(state, scale, pages) {
         const enabled = Object.entries(state.numbering || {}).filter(([, value]) => value);
         if (!enabled.length) return;
-        const rows = measureLines(view, sheet, scale, true).filter(line => line.inline);
+        const bounds = viewportNumbering(state) ? scroller.getBoundingClientRect() : null;
+        const viewport = bounds ? { top: bounds.top - bounds.height, bottom: bounds.bottom + bounds.height } : null;
+        const rows = measureLines(view, sheet, scale, true, viewport).filter(line => line.inline);
         const pageRows = state.enabled ? pages.map((page, index) => ({ top: index ? page.top + (parseFloat(getComputedStyle(sheet).paddingTop) || 56) : rows[0]?.top || 0, number: index + 1 })) : [];
         if (!state.enabled) {
           // Use the same virtual page boundaries in continuous view, without
@@ -122,16 +143,31 @@ export const Pagination = Extension.create({
           gutter.append(column);
         }
       }
+      function refreshNumbers() {
+        if (disposed || !sheet || !viewportNumbering(paginationKey.getState(view.state)) || numberFrame) return;
+        numberFrame = requestAnimationFrame(() => {
+          numberFrame = 0;
+          const state = paginationKey.getState(view.state);
+          if (disposed || working || !viewportNumbering(state)) return;
+          gutter.replaceChildren();
+          numberLines(state, sheetScale(sheet), { breaks: [] });
+        });
+      }
       function layout() {
         frame = 0; if (disposed || working || view.composing) { if (!disposed) schedule(false); return; }
-        if (!sheet) { sheet = view.dom.closest('.writing-sheet'); if (!sheet) { schedule(false); return; } sheet.prepend(furniture, gutter); resize.observe(sheet); }
+        if (!sheet) {
+          sheet = view.dom.closest('.writing-sheet'); if (!sheet) { schedule(false); return; }
+          scroller = sheet.closest('.writing-scroll'); scroller.addEventListener('scroll', refreshNumbers, { passive: true });
+          sheet.prepend(furniture, gutter); resize.observe(sheet); resize.observe(view.dom);
+        }
         working = true;
-        const state = paginationKey.getState(view.state), scroller = sheet.closest('.writing-scroll'), oldScroll = scroller.scrollTop;
+        cancelAnimationFrame(numberFrame); numberFrame = 0;
+        const state = paginationKey.getState(view.state), oldScroll = scroller.scrollTop;
         try {
           // Restore natural flow for measurement synchronously within one frame.
           view.dispatch(view.state.tr.setMeta(paginationKey, { decorations: DecorationSet.empty }).setMeta('addToHistory', false));
           sheet.style.removeProperty('min-height'); furniture.replaceChildren(); gutter.replaceChildren();
-          const scale = sheet.getBoundingClientRect().width / sheet.offsetWidth;
+          const scale = sheetScale(sheet);
           const height = Math.round(sheet.offsetWidth * Math.SQRT2), margin = parseFloat(getComputedStyle(sheet).paddingTop) || 56;
           if (!state.enabled) {
             delete sheet.dataset.pageCount;
@@ -170,15 +206,16 @@ export const Pagination = Extension.create({
         clearTimeout(timer);
         timer = setTimeout(() => { timer = 0; if (!frame && !disposed) frame = requestAnimationFrame(layout); }, 180);
       }
-      const resize = new ResizeObserver(() => { const next = sheet.getBoundingClientRect().width; if (Math.abs(next - width) > 0.5) { width = next; schedule(true); } });
-      const fonts = () => schedule(true); document.fonts?.addEventListener('loadingdone', fonts); view.dom.addEventListener('load', fonts, true); schedule(true);
+      const resize = new ResizeObserver(() => { const next = sheet.getBoundingClientRect().width; if (Math.abs(next - width) > 0.5) { width = next; schedule(true); } else refreshNumbers(); });
+      const fonts = () => schedule(true); document.fonts?.addEventListener('loadingdone', fonts); view.dom.addEventListener('load', fonts, true);
+      schedule(true);
       return { update(next, previous) {
         const current = paginationKey.getState(next.state), before = paginationKey.getState(previous);
         if (working) return;
         const configurationChanged = current.enabled !== before.enabled || current.revision !== before.revision;
         if (configurationChanged) schedule(true);
         else if (!next.state.doc.eq(previous.doc) && (current.enabled || Object.values(current.numbering || {}).some(Boolean))) schedule(false);
-      }, destroy() { disposed = true; clearTimeout(timer); cancelAnimationFrame(frame); resize.disconnect(); document.fonts?.removeEventListener('loadingdone', fonts); view.dom.removeEventListener('load', fonts, true); furniture.remove(); gutter.remove(); sheet?.style.removeProperty('min-height'); } };
+      }, destroy() { disposed = true; clearTimeout(timer); cancelAnimationFrame(frame); cancelAnimationFrame(numberFrame); resize.disconnect(); scroller?.removeEventListener('scroll', refreshNumbers); document.fonts?.removeEventListener('loadingdone', fonts); view.dom.removeEventListener('load', fonts, true); furniture.remove(); gutter.remove(); sheet?.style.removeProperty('min-height'); } };
     }
   })]; }
 });
