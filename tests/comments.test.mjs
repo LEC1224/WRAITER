@@ -52,6 +52,30 @@ test('anchor marks follow insertion and become detached only when their passage 
   assert.equal(validateProject(next), next, 'Deleting a chapter retains its private comment as a detached note.');
 });
 
+test('typing reconciles live comment anchors without reparsing the active chapter or comment panel', () => {
+  const original = anchored(), doc = schema.nodeFromJSON(original.chapters[0].content);
+  const state = EditorState.create({ schema, doc });
+  const transaction = state.tr.insertText('new ', 1);
+  const edited = { ...original, chapters: original.chapters.map(chapter => chapter.id === 'chapter-a' ? { ...chapter, content: transaction.doc.toJSON() } : chapter) };
+  const originalParse = schema.nodeFromJSON;
+  let parsed = 0;
+  schema.nodeFromJSON = json => { if (json.type === 'doc') parsed++; return originalParse(json); };
+  try {
+    const reconciled = reconcileCommentChapters(edited, schema, { chapterId: 'chapter-a', activeDoc: transaction.doc });
+    assert.equal(reconciled, edited);
+    assert.equal(parsed, 1, 'only the uncached inactive chapter needs parsing');
+    const row = projectCommentRows(reconciled, schema)[0];
+    assert.deepEqual(row.ranges, [{ from: 11, to: 15 }]);
+    assert.equal(row.detached, false);
+    assert.equal(parsed, 1, 'the comment panel reuses the live reconciliation result');
+    const deleted = transaction.delete(11, 15);
+    const detached = { ...edited, chapters: edited.chapters.map(chapter => chapter.id === 'chapter-a' ? { ...chapter, content: deleted.doc.toJSON() } : chapter) };
+    reconcileCommentChapters(detached, schema, { chapterId: 'chapter-a', activeDoc: deleted.doc });
+    assert.equal(projectCommentRows(detached, schema)[0].detached, true);
+    assert.equal(parsed, 1, 'later typing/deletion keeps using the editor tree');
+  } finally { schema.nodeFromJSON = originalParse; }
+});
+
 test('editing, resolving, reopening and deleting comments preserve overlapping anchors', () => {
   let next = anchored();
   next = addComment(next, { chapterId: 'chapter-a', from: 7, to: 17, text: 'Another note.', id: 'comment-b' }, schema).project;

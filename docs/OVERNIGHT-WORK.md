@@ -34,12 +34,19 @@ Find highlights now reuse their decoration set while the immutable chapter and q
 
 In a focused benchmark with 1,500 paragraphs and 1,500 highlights, 200 selection updates took 771–844 ms before and 0.75–1.44 ms after. This measures the search plugin, not total desktop interaction time. Four new regression groups cover selection/metadata updates, edits, option changes/clearing, editor isolation and the existing 2,000-highlight limit. All 291 unit tests and the production build passed. The real desktop search, replace-all, stale-preview rejection, comments, formatting, minimum-window and restart checks also passed.
 
+### Reuse the live chapter when locating comments
+
+Comment reconciliation now receives the actual editor document that produced the chapter snapshot. It also uses that editor's schema, so an open comment panel can reuse the reconciliation result. Inactive chapters keep their existing cache and imported/reloaded documents still follow the original parsing path.
+
+The regression verifies exact anchor positions after insertion, detachment after deletion, and that only an uncached inactive chapter is parsed; opening the comment rows causes no second parse. All 292 unit tests, the build and the desktop revision/comment workflows passed. A 120,000-word synthetic manuscript with 400 comments took 385 ms before and 380 ms after for 32 typed characters: no substantial stopwatch improvement is claimed from that single comparison. The small change removes a proven redundant parse without changing saved document data.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.
 
 - Desktop benchmarks run sequentially with isolated synthetic profiles. Build and unit-test loads should finish before timing runs.
 - No off-screen unloading, estimated paragraph heights, persistence delays or journal durability changes were introduced.
+- Rejected a prototype that cancelled the queued toolbar refresh after a content update. Instrumented desktop runs still executed the parent component 36 times for 32 fast characters and 64 times for paced typing, with no timing improvement. The prototype was removed; selection/formatting refresh behaviour remains intact.
 
 ## Final validation and local build
 

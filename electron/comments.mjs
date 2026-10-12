@@ -40,12 +40,14 @@ export function collectCommentRanges(content, schema) {
 }
 
 const rangeCache = new WeakMap();
-export function commentLocations(project, schema) {
+// activeDoc is the editor tree used to produce the active chapter's JSON
+// snapshot. Reuse it while typing instead of parsing that snapshot again.
+export function commentLocations(project, schema, { chapterId, activeDoc } = {}) {
   const locations = new Map();
   for (const chapter of project.chapters) {
     let cached = rangeCache.get(chapter.content);
     if (cached?.schema !== schema) {
-      cached = { schema, ranges: collectCommentRanges(chapter.content, schema) };
+      cached = { schema, ranges: collectCommentRanges(chapter.id === chapterId && activeDoc ? activeDoc : chapter.content, schema) };
       rangeCache.set(chapter.content, cached);
     }
     for (const [id, ranges] of cached.ranges) {
@@ -59,9 +61,9 @@ export function commentLocations(project, schema) {
 // Moving, splitting and merging chapters move their existing marks intact.
 // Reconcile the metadata's primary chapter using manuscript order, while keeping
 // a removed passage's original chapter ID so its detached note remains saved.
-export function reconcileCommentChapters(project, schema) {
+export function reconcileCommentChapters(project, schema, options) {
   if (!project.comments?.length) return project;
-  const locations = commentLocations(project, schema);
+  const locations = commentLocations(project, schema, options);
   let changed = false;
   const comments = project.comments.map(comment => {
     const chapterId = locations.get(comment.id)?.[0]?.chapter.id;

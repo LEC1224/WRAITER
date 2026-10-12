@@ -3,7 +3,7 @@ import { Transform } from '@tiptap/pm/transform';
 import { collectCommentRanges, commentLocations, reconcileCommentChapters as reconcileChapters, COMMENT_ID_PATTERN, MAX_COMMENT_TEXT, MAX_COMMENTS, stripCommentAnchors } from '../electron/comments.mjs';
 
 export { stripCommentAnchors };
-export const reconcileCommentChapters = (project, schema = editorialSchema) => reconcileChapters(project, schema);
+export const reconcileCommentChapters = (project, schema = editorialSchema, options) => reconcileChapters(project, schema, options);
 
 const textValue = value => {
   if (typeof value !== 'string' || !value.trim() || value.length > MAX_COMMENT_TEXT) throw new Error(`Write a comment of up to ${MAX_COMMENT_TEXT.toLocaleString()} characters.`);

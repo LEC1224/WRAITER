@@ -929,7 +929,7 @@ export default function App() {
     setProposal(null); setGhost(ghostKey.getState(current.state)?.text ? ghostKey.getState(current.state) : null);
     if (requestRef.current && requestRef.current.mode !== 'chat' && appendedDuringRequest(requestRef.current, current) === null) dismiss();
     const before = projectRef.current;
-    const next = reconcileCommentChapters({ ...before, updatedAt: new Date().toISOString(), chapters: before.chapters.map(chapter => chapter.id === activeId ? { ...chapter, content } : chapter) }, schema);
+    const next = reconcileCommentChapters({ ...before, updatedAt: new Date().toISOString(), chapters: before.chapters.map(chapter => chapter.id === activeId ? { ...chapter, content } : chapter) }, current.schema, { chapterId: activeId, activeDoc: current.state.doc });
     try {
       let history;
       try { history = recordTransaction(historyRef.current, { chapterId: activeId, transaction, beforeProject: before, afterProject: next, appendedTransactions: options.appendedTransactions || [], label: transaction.getMeta('historyLabel') || (transaction.getMeta('assistAccept') ? 'Accept AI suggestion' : undefined) }); }
