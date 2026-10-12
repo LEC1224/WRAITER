@@ -52,6 +52,7 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
     await waitFor(async () => (await search().getByRole('status').innerText()) === '0 matches' && await active().count() === 0, 'case change removes the previous active result');
     await page.getByLabel('Match case', { exact: true }).uncheck(); await find().fill('needle'); await activeVisible();
     assert.match(await search().getByRole('status').innerText(), /2405 of 2405/);
+    await waitFor(async () => (await search().locator('.manuscript-search-pages').innerText()).includes('Showing 2401–2405 of 2405') && await search().locator('.manuscript-search-result[aria-current="true"]').count() === 1, 'refreshed result list retains its selected late page');
     await page.getByLabel('Replacement text', { exact: true }).fill('target'); await search().getByRole('button', { name: 'Replace', exact: true }).click();
     await waitFor(async () => (await editor.locator(':scope > p').last().innerText()).includes('The target rests') && await active().count() === 0, 'editing the selected result clears its stale highlight');
     await command('undo'); await waitFor(async () => (await editor.locator(':scope > p').last().innerText()).includes('The needle rests'), 'replace undo');

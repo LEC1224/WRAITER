@@ -100,6 +100,14 @@ Two alternating-order comparisons used a 120,000-word synthetic TXT document and
 
 Seven new native-state groups cover notes/history/fidelity/source changes, fresh restart, deleted/corrupt/external state, optional read locks, failed flush/retry, destination changes and external source edits. All 321 unit tests and the production build passed. Native desktop workflows are queued after the frozen packaged soak.
 
+### Keep Find paging aligned with the selected result
+
+Refreshing the Find results could leave the status at result 2,405 while resetting the list to page one. A focused browser regression reproduced that mismatch. Result refresh and active-match changes now choose their page together; manual paging remains available until the results or selection change. Replacement previews still begin at page one and allow reviewing every page.
+
+The list also retains chapter counts and the current page's grouping when only the active result or replacement text changes, rather than regrouping the full results array on every render. No desktop latency claim is made for this small reduction.
+
+Four headless browser groups cover equivalent refreshes, query/options, manual paging, replacement text, active-result changes/removal, empty lists, repopulation and replacement previews. All 321 unit tests and the build passed. The late-result desktop regression now additionally checks that its selected passage appears on the correct results page; that run is queued after the soak.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.

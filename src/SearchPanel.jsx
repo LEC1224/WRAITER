@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Search, X } from 'lucide-react';
 import { groupSearchResults } from './search.js';
 
@@ -11,11 +11,14 @@ function ResultsList({ results, activeId, disabled, onActivate, replacement, pre
   const [page, setPage] = useState(0), list = useRef(), pageSize = 100;
   const activeIndex = results.findIndex(result => result.id === activeId), pages = Math.max(1, Math.ceil(results.length / pageSize));
   const currentPage = Math.min(page, pages - 1), start = currentPage * pageSize;
-  const groups = groupSearchResults(results.slice(start, start + pageSize));
-  const totals = new Map(groupSearchResults(results).map(group => [group.chapterId, group.results.length]));
-  useEffect(() => { setPage(0); }, [results]);
-  useEffect(() => { if (!preview && activeIndex >= 0) setPage(Math.floor(activeIndex / pageSize)); }, [activeIndex, preview]);
-  useEffect(() => { list.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' }); }, [activeId, currentPage]);
+  const groups = useMemo(() => groupSearchResults(results.slice(start, start + pageSize)), [results, start]);
+  const totals = useMemo(() => {
+    const counts = new Map();
+    for (const result of results) counts.set(result.chapterId, (counts.get(result.chapterId) || 0) + 1);
+    return counts;
+  }, [results]);
+  useEffect(() => { setPage(!preview && activeIndex >= 0 ? Math.floor(activeIndex / pageSize) : 0); }, [results, activeIndex, preview]);
+  useEffect(() => { list.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' }); }, [activeId, currentPage, results]);
   return <><div ref={list} className="manuscript-search-results" aria-label={preview ? 'Replacement preview results' : 'Search results'}>{groups.map(group => <section className="manuscript-search-group" key={group.chapterId}><h3>{group.chapterTitle}<span>{group.results.length < totals.get(group.chapterId) ? `${group.results.length} of ${totals.get(group.chapterId)}` : group.results.length}</span></h3>{group.results.map(result => preview ? <div className="manuscript-search-result preview" key={result.id}><Snippet result={result} replacement={replacement} preview /></div> : <button type="button" key={result.id} className={'manuscript-search-result' + (result.id === activeId ? ' active' : '')} aria-current={result.id === activeId ? 'true' : undefined} disabled={disabled} onClick={() => onActivate(result)}><Snippet result={result} /></button>)}</section>)}{!preview && query && !results.length && <p className="manuscript-search-empty">No matches found.</p>}{!preview && !query && <p className="manuscript-search-empty">Find passages across your chapters.</p>}</div>{pages > 1 && <div className="manuscript-search-pages"><button type="button" className="secondary-button" aria-label={preview ? 'Previous preview results' : 'Previous search results'} disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>Previous results</button><span>Showing {start + 1}–{Math.min(start + pageSize, results.length)} of {results.length}. {preview ? 'All matches will be replaced.' : ''}</span><button type="button" className="secondary-button" aria-label={preview ? 'More preview results' : 'More search results'} disabled={currentPage === pages - 1} onClick={() => setPage(currentPage + 1)}>More results</button></div>}</>;
 }
 
