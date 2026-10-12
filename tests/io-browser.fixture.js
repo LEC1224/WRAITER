@@ -190,12 +190,35 @@ export async function runIOTests() {
     importedProjects.push(restored.project);
   });
   await test('ODT refuses invalid visible XML characters instead of exporting missing manuscript text', async () => {
-    for (const character of ['\u0000', '\u000b', '\ufffe']) {
+    for (const character of ['\u0000', '\u000b', '\ufffe', '\ud800', '\udfff']) {
       const source = newProject(); source.chapters[0].content = { type: 'doc', content: [paragraph('An intact paragraph.'), paragraph(`Before${character}After`)] };
       let failure;
       try { await exportPayload(source, 'odt', extensions, { nativeSave: true }); } catch (error) { failure = error; }
       assert(failure?.message.includes('cannot be represented in an ODT file'), 'ODT silently accepted a parser error that can discard prose');
     }
+  });
+  await test('ODT checks emitted titles and font metadata without rejecting hidden JSON metadata or valid Unicode', async () => {
+    for (const field of ['title', 'chapter-title', 'default-font', 'run-font']) {
+      const source = newProject(); source.chapters[0].content = { type: 'doc', content: [paragraph('Complete synthetic wording.')] };
+      if (field === 'title') source.title += '\u0000';
+      if (field === 'chapter-title') source.chapters[0].title += '\u0000';
+      if (field === 'default-font') source.documentStyle.fontFamily += '\u0000';
+      if (field === 'run-font') source.chapters[0].content.content[0].content[0].marks = [{ type: 'textStyle', attrs: { fontFamily: 'Cambria\ud800' } }];
+      let failure;
+      try { await exportPayload(source, 'odt', extensions, { includeTitle: true, includeChapterTitles: true }); } catch (error) { failure = error; }
+      assert(failure?.message.includes('cannot be represented in an ODT file'), 'ODT accepted invalid XML metadata: ' + field);
+    }
+    const source = newProject(); source.title = 'Valid 🦉 𝄞 Unicode'; source.chapters[0].title = 'Hidden\u0000title';
+    source.chapters[0].content = { type: 'doc', content: [paragraph('Preserve 🦉 𝄞, a tab\tand a line\nbreak.')] };
+    const encoded = await exportPayload(source, 'odt', extensions, { nativeSave: true });
+    const zip = await JSZip.loadAsync(encoded.data);
+    for (const name of ['content.xml', 'styles.xml', 'meta.xml']) {
+      const xml = await zip.file(name).async('string');
+      assert(!new DOMParser().parseFromString(xml, 'application/xml').getElementsByTagName('parsererror').length, 'ODT rejected valid Unicode or produced invalid XML: ' + name);
+    }
+    const restored = await importDocument({ name: source.title, extension: '.odt', bytes: encoded.data }, extensions);
+    assert(nodeText(restored.project.chapters[0].content) === nodeText(source.chapters[0].content), 'ODT changed valid supplementary Unicode or whitespace');
+    assert(restored.project.chapters[0].title === source.chapters[0].title, 'ODT discarded a hidden JSON chapter title');
   });
   await test('Native HTML and Markdown roundtrips retain actual formatting without title growth', async () => {
     const html = await exportPayload(native, 'html', extensions, { nativeSave: true });
