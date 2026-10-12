@@ -32,6 +32,8 @@ Choose **Story**, **Article**, **Submission manuscript**, **Report**, or **Notes
 
 Use the paragraph settings button at the right of the formatting toolbar for document defaults. A toolbar font change affects selected text or newly typed text, like a conventional word processor. Zoom changes only the view.
 
+For keyboard font selection, focus the font control and press **Down arrow** to open its search. Type part of the font name, use **Up/Down** to choose, then press **Enter**. **Escape** closes the list and returns to the control; **Tab** continues through the surrounding form. The list opens above low controls when that gives it more room.
+
 **Images:** drag PNG, JPEG, GIF or WebP files from File Explorer onto the manuscript page, paste a copied image or screenshot, or choose **Insert image** in the formatting toolbar. Drops insert at the pointer; clipboard images and the file picker use the cursor or replace selected text. Multiple images keep their file order and insert together as one undo step. Each image is embedded in the document, so moving its original file does not break the picture. The page shows a dashed outline during a file drag and reports progress or unreadable/unsupported files. The limit is 10 MB per image and 32 million pixels.
 
 You can continue typing while an image loads; its insertion point follows those edits. Switching chapter/project or undoing before loading finishes cancels that import. Dragging an image already in the manuscript moves it through the editor's normal drag behavior. Images linked in pasted or dropped formatted text become labelled placeholders with guidance to copy the image itself or save and drop its file. Drop WRAITER, ODT, DOCX, Markdown, HTML or text documents anywhere in the window to open project tabs. Mixed drops report unsupported files by name; image files in a mixed page drop insert before the documents open. Existing file compatibility checks still apply.
@@ -149,6 +151,7 @@ Enable AI using the toolbar or Ctrl+Shift+Space. Inline suggestions and selectio
 | Save / save as | Ctrl+S / Ctrl+Shift+S |
 | New / open | Ctrl+N / Ctrl+O |
 | Find / replace | Ctrl+F / Ctrl+H |
+| Go to a numbered paragraph | Ctrl+G |
 | Settings / focus view | Ctrl+, / F11 |
 | Save a version | Ctrl+Alt+S |
 | Insert a manual page break | Ctrl+Enter |
