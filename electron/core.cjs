@@ -191,22 +191,26 @@ async function readLimited(file, max = 60 * 1024 * 1024) {
     return Buffer.concat(chunks, total);
   } finally { await handle.close(); }
 }
+async function writeSnapshot(file, data, previous = null, backup = false) {
+  const fingerprint = hash(data);
+  let unchanged = false;
+  if (previous?.path === file && previous.hash === fingerprint) {
+    // Reuse only a snapshot this process already flushed, after verifying
+    // its bytes still exist. Missing, changed or unreadable files rewrite.
+    try { unchanged = hash(await readLimited(file, 70 * 1024 * 1024)) === fingerprint; } catch {}
+  }
+  if (!unchanged) await atomicWrite(file, data, backup);
+  return { path: file, hash: fingerprint };
+}
 const samePath = (a, b) => Boolean(a && b && (process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b)));
 function safeFilename(title) { return String(title || 'Untitled').replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/[ .]+$/, '').slice(0, 100) || 'Untitled'; }
 // Call store operations through one queue. The project identifier rejects delayed renderer saves after a document switch.
 class DocumentStore {
-  constructor(directory) { this.directory = path.resolve(directory); this.currentPath = null; this.expectedHash = null; this.project = null; this.lastRecoveryHash = null; }
+  constructor(directory) { this.directory = path.resolve(directory); this.currentPath = null; this.expectedHash = null; this.project = null; this.lastRecoverySnapshot = null; }
   get recoveryPath() { return path.join(this.directory, 'recovery.json'); }
   async writeRecovery(project, target, expectedHash) {
-    const data = JSON.stringify({ project, path: target, expectedHash }), fingerprint = hash(data);
-    let unchanged = false;
-    if (this.lastRecoveryHash === fingerprint) {
-      // Only skip our own already-flushed snapshot, and verify that its bytes
-      // still exist. Changes, deletion, corruption and a fresh process rewrite.
-      try { unchanged = hash(await readLimited(this.recoveryPath, 70 * 1024 * 1024)) === fingerprint; } catch {}
-    }
-    if (!unchanged) await atomicWrite(this.recoveryPath, data, true);
-    this.lastRecoveryHash = fingerprint;
+    const data = JSON.stringify({ project, path: target, expectedHash });
+    this.lastRecoverySnapshot = await writeSnapshot(this.recoveryPath, data, this.lastRecoverySnapshot, true);
     this.project = project; this.currentPath = target; this.expectedHash = expectedHash;
   }
   async boot() {
@@ -329,4 +333,4 @@ function cleanResult(text, mode, words = 35, request = {}) {
   }
   return result;
 }
-module.exports = { hash, validateProject, validateRequest, atomicWrite, readLimited, buildPrompt, cleanResult, contextBefore, DocumentStore, samePath, safeFilename, MAX_DOCUMENT_BYTES, DEFAULT_SUGGESTION_COUNTS, getSuggestionCounts, getSuggestionLimit };
+module.exports = { hash, validateProject, validateRequest, atomicWrite, readLimited, writeSnapshot, buildPrompt, cleanResult, contextBefore, DocumentStore, samePath, safeFilename, MAX_DOCUMENT_BYTES, DEFAULT_SUGGESTION_COUNTS, getSuggestionCounts, getSuggestionLimit };

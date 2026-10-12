@@ -1,12 +1,12 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { hash, atomicWrite, readLimited, validateProject, samePath } = require('./core.cjs');
+const { hash, atomicWrite, readLimited, writeSnapshot, validateProject, samePath } = require('./core.cjs');
 const FORMATS = ['wraiter', 'odt', 'docx', 'txt', 'md', 'html'];
 const formatOf = target => ({ htm: 'html', markdown: 'md' }[path.extname(target).slice(1).toLowerCase()] || path.extname(target).slice(1).toLowerCase());
 const contentHash = project => hash(JSON.stringify({ title: project.title, chapters: project.chapters, documentStyle: project.documentStyle, language: project.language, layout: project.layout }, (key, value) => key === 'pageBreakBefore' && value == null ? undefined : value));
 class DocumentFiles {
-  constructor(store, directory) { this.store = store; this.directory = directory; this.binding = null; this.openings = new Map(); this.targets = new Map(); }
+  constructor(store, directory) { this.store = store; this.directory = directory; this.binding = null; this.openings = new Map(); this.targets = new Map(); this.lastSidecarSnapshot = null; }
   sidecar(target) { return path.join(this.directory, 'Format state', `${hash(process.platform === 'win32' ? path.resolve(target).toLowerCase() : path.resolve(target))}.json`); }
   async readSidecar(target) { try { return JSON.parse((await readLimited(this.sidecar(target), 70 * 1024 * 1024)).toString('utf8')); } catch { return null; } }
   async recover() {
@@ -51,7 +51,10 @@ class DocumentFiles {
     const token = crypto.randomUUID(); this.targets.set(token, { path: target, format, expectedHash }); return { path: target, format, token };
   }
   async saveSidecar(project) {
-    if (this.binding) await atomicWrite(this.sidecar(this.binding.path), JSON.stringify({ project, binding: this.binding, sourceHash: this.store.expectedHash }));
+    if (this.binding) {
+      const target = this.sidecar(this.binding.path), data = JSON.stringify({ project, binding: this.binding, sourceHash: this.store.expectedHash });
+      this.lastSidecarSnapshot = await writeSnapshot(target, data, this.lastSidecarSnapshot);
+    }
   }
   reviewWarnings(project, payload, options = {}) {
     const chosen = options.token ? this.targets.get(options.token) : null;

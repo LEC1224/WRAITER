@@ -92,6 +92,14 @@ Two alternating-order benchmark pairs used a 120,000-word synthetic novel and te
 
 Seven new regression groups cover identical cloned snapshots/backups, history-only and binding changes, missing/corrupt/externally changed recovery, read locks, failed writes, restart and injected flush failures. All 314 unit tests and the build passed. Damaged-history recovery, tab workflows with native files and background chat, and the complete app workflow passed with isolated local mocks. Every changed recovery still waits for its flush; failed flushes retain the preceding manuscript and can be retried.
 
+### Reuse unchanged native-document state
+
+Native-document saves also rewrote the format-state file containing private notes, editing-history sequence, comments and the source binding. Recovery and native format state now share the same verified snapshot writer. Each owner remembers only its latest path and digest; a changed destination, changed content or private metadata, a missing/altered file, or a fresh process takes the flushed write path. Optional verification failures fall back to writing. Source-document conflict checks still run before reusing native state.
+
+Two alternating-order comparisons used a 120,000-word synthetic TXT document and ten unchanged cloned saves. They took 1,132–1,158 ms before and 343–374 ms after; format-state replacements fell from ten to zero. Recovery reuse was already present in both versions. The packaged soak was running in the background, so these are scoped backend measurements rather than desktop timing claims.
+
+Seven new native-state groups cover notes/history/fidelity/source changes, fresh restart, deleted/corrupt/external state, optional read locks, failed flush/retry, destination changes and external source edits. All 321 unit tests and the production build passed. Native desktop workflows are queued after the frozen packaged soak.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.
