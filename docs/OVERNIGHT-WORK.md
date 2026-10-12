@@ -40,13 +40,21 @@ Comment reconciliation now receives the actual editor document that produced the
 
 The regression verifies exact anchor positions after insertion, detachment after deletion, and that only an uncached inactive chapter is parsed; opening the comment rows causes no second parse. All 292 unit tests, the build and the desktop revision/comment workflows passed. A 120,000-word synthetic manuscript with 400 comments took 385 ms before and 380 ms after for 32 typed characters: no substantial stopwatch improvement is claimed from that single comparison. The small change removes a proven redundant parse without changing saved document data.
 
+### Reduce duplicate typing renders
+
+The autosave effect now skips state setters when save status and session word count already have their displayed values. A real content update also cancels the separately queued toolbar refresh, because publishing that content updates the toolbar in the same transaction. Cursor, stored-mark and metadata-only changes retain their refresh.
+
+The combination matters: cancelling the frame alone and guarding status setters alone both still executed the parent component 64 times for 32 characters typed with a 30 ms gap. Together they reduced that count to **36**, with zero extra toolbar refreshes. Fast typing changed from 36 to 34 renders. Paced elapsed time includes deliberately inserted delays and remained about 1.5 seconds; the claim is reduced render work, not a timing gain from those delays.
+
+All 292 unit tests, the build, large-manuscript typing/search/tab checks, formatting/highlight checks and the complete desktop integration workflow passed. That includes locally mocked AI previews, partial acceptance, cancellation, checkpoints, exports, custom keys and full restart. The long-document check now verifies session word count and the durable recovery text as well. Autosave timing and journal durability are unchanged.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.
 
 - Desktop benchmarks run sequentially with isolated synthetic profiles. Build and unit-test loads should finish before timing runs.
 - No off-screen unloading, estimated paragraph heights, persistence delays or journal durability changes were introduced.
-- Rejected a prototype that cancelled the queued toolbar refresh after a content update. Instrumented desktop runs still executed the parent component 36 times for 32 fast characters and 64 times for paced typing, with no timing improvement. The prototype was removed; selection/formatting refresh behaviour remains intact.
+- An initial prototype cancelling only the queued toolbar refresh gave no render-count improvement and was removed. Later measurements identified a second source of duplicate work in unchanged status setters; the tested combination is described above.
 
 ## Final validation and local build
 

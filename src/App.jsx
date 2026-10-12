@@ -218,10 +218,14 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (!project) return;
-    setSaveState('pending');
+    // Avoid a second parent render when these displayed values are unchanged.
+    if (saveState !== 'pending') setSaveState('pending');
     clearTimeout(autosaveTimer.current);
     autosaveTimer.current = setTimeout(() => saveLocal().catch(() => {}), 650);
-    if (sessionStart.current !== null) setSessionWords(Math.max(0, projectWords(project) - sessionStart.current));
+    if (sessionStart.current !== null) {
+      const written = Math.max(0, projectWords(project) - sessionStart.current);
+      if (written !== sessionWords) setSessionWords(written);
+    }
     return () => clearTimeout(autosaveTimer.current);
   }, [project, saveLocal]);
 

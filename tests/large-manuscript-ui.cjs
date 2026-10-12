@@ -47,6 +47,12 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
     const typingStarted = Date.now(); await page.keyboard.type(typed); const typingMs = Date.now() - typingStarted;
     assert.ok(typingMs < 2000, `Typing ${typed.length} characters took ${typingMs} ms`);
     await waitFor(async () => (await editor.locator(':scope > p').last().innerText()).endsWith(typed), 'Tail typing did not appear');
+    const addedWords = typed.trim().split(/\s+/).length;
+    await waitFor(async () => (await page.locator('.session-progress > span').innerText()).startsWith(`Session: ${addedWords} /`), 'Session word count did not follow typing');
+    await waitFor(async () => {
+      const recovered = JSON.parse(await fs.readFile(path.join(userData, 'recovery.json'), 'utf8')).project;
+      return recovered.chapters[0].content.content.at(-1).content.map(node => node.text || '').join('').endsWith(typed);
+    }, 'Tail typing was not saved to recovery');
 
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('command', 'find'));
     const find = page.getByRole('textbox', { name: 'Find text', exact: true }); await find.fill('UNIQUE_TAIL_PASSAGE'); await find.press('Enter');

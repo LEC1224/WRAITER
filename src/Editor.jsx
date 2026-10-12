@@ -82,6 +82,9 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
       }
     },
     onUpdate: ({ editor, transaction, appendedTransactions }) => {
+      // The content callback publishes the UI state in this transaction.
+      // Selection, stored-mark and metadata-only transactions retain the frame.
+      cancelAnimationFrame(toolbarFrame.current); toolbarFrame.current = 0;
       transaction.setMeta(HISTORY_GROUP_BREAK_META, selectionBoundary.current);
       selectionBoundary.current = false;
       const content = associateHistoryContent(editor.getJSON(), editor.state.doc);
