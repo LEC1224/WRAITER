@@ -195,10 +195,18 @@ const samePath = (a, b) => Boolean(a && b && (process.platform === 'win32' ? pat
 function safeFilename(title) { return String(title || 'Untitled').replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/[ .]+$/, '').slice(0, 100) || 'Untitled'; }
 // Call store operations through one queue. The project identifier rejects delayed renderer saves after a document switch.
 class DocumentStore {
-  constructor(directory) { this.directory = path.resolve(directory); this.currentPath = null; this.expectedHash = null; this.project = null; }
+  constructor(directory) { this.directory = path.resolve(directory); this.currentPath = null; this.expectedHash = null; this.project = null; this.lastRecoveryHash = null; }
   get recoveryPath() { return path.join(this.directory, 'recovery.json'); }
   async writeRecovery(project, target, expectedHash) {
-    await atomicWrite(this.recoveryPath, JSON.stringify({ project, path: target, expectedHash }), true);
+    const data = JSON.stringify({ project, path: target, expectedHash }), fingerprint = hash(data);
+    let unchanged = false;
+    if (this.lastRecoveryHash === fingerprint) {
+      // Only skip our own already-flushed snapshot, and verify that its bytes
+      // still exist. Changes, deletion, corruption and a fresh process rewrite.
+      try { unchanged = hash(await readLimited(this.recoveryPath, 70 * 1024 * 1024)) === fingerprint; } catch {}
+    }
+    if (!unchanged) await atomicWrite(this.recoveryPath, data, true);
+    this.lastRecoveryHash = fingerprint;
     this.project = project; this.currentPath = target; this.expectedHash = expectedHash;
   }
   async boot() {

@@ -82,6 +82,16 @@ In a focused helper benchmark, 200 status calls for a 10,000-entry journal took 
 
 A new regression checks current labels/counts across typing, undo, redo, branching, reload, older journal snapshots, unrelated manuscripts and caller mutations. All 307 unit tests and the build passed, along with the large Find, revision, document-interaction and undo/scroll desktop checks.
 
+### Avoid rewriting an already durable recovery snapshot
+
+A tab-return profile took about 1.8 seconds, with roughly 50 ms of renderer script work and 53 ms of layout. A separate filesystem trace found seven flushes taking 28–102 ms each. Repeated autosaves were rewriting identical recovery snapshots, including legacy session mirrors.
+
+Each document store now remembers only the digest of its last successfully flushed recovery. It can skip an identical rewrite after reading and verifying the current bytes. Changed text, metadata, editing-history sequence, path or expected source fingerprint still takes the existing atomic writer and flush path. A missing/corrupt file is rewritten, an optional read failure falls back to writing, and a fresh process performs its first write normally. Named-source conflict checks still run on every save. The journal format, journal flushing and autosave interval are unchanged.
+
+Two alternating-order benchmark pairs used a 120,000-word synthetic novel and ten cloned unchanged saves per sample. Unnamed saves took 810–885 ms before and 219–233 ms after; named saves took 1,483–1,548 ms before and about 310–311 ms after. Recovery replacements dropped from ten (unnamed) or twenty (named) to zero. These are repeated-save measurements, not total tab-switch timings.
+
+Seven new regression groups cover identical cloned snapshots/backups, history-only and binding changes, missing/corrupt/externally changed recovery, read locks, failed writes, restart and injected flush failures. All 314 unit tests and the build passed. Damaged-history recovery, tab workflows with native files and background chat, and the complete app workflow passed with isolated local mocks. Every changed recovery still waits for its flush; failed flushes retain the preceding manuscript and can be retried.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.
