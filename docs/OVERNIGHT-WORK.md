@@ -89,6 +89,7 @@ Record benchmark conditions, rejected approaches and unresolved findings here, s
 - Desktop benchmarks run sequentially with isolated synthetic profiles. Build and unit-test loads should finish before timing runs.
 - No off-screen unloading, estimated paragraph heights, persistence delays or journal durability changes were introduced.
 - An initial prototype cancelling only the queued toolbar refresh gave no render-count improvement and was removed. Later measurements identified a second source of duplicate work in unchanged status setters; the tested combination is described above.
+- A first 45-minute packaged soak stopped after 37 cycles (13.7 minutes) when two height samples differed by approximately the zoom ratio. The harness had not awaited the asynchronous zoom setting or native resize. A rapid diagnostic completed 18 cycles in two minutes without reproducing it. The corrected harness awaits the requested zoom and renderer viewport, verifies equal zoom/viewport for both measurements, and retains the exact same-height assertion. A synchronized short packaged trial passed; the extended repeat is recorded below when complete.
 
 ## Final validation and local build
 

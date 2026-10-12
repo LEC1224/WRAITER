@@ -26,7 +26,7 @@ const geometry = () => {
     const text = range.getBoundingClientRect(), label = labels.get(index + 1);
     visible.push({ number: index + 1, offset: label ? Math.abs((text.top + text.bottom - label.top - label.bottom) / 2) : null });
   });
-  return { height: document.querySelector('.writing-scroll').scrollHeight, visible, labels: labels.size };
+  return { height: document.querySelector('.writing-scroll').scrollHeight, visible, labels: labels.size, zoom: Number(getComputedStyle(document.querySelector('.writing-sheet')).zoom), viewport: { width: innerWidth, height: innerHeight } };
 };
 
 (async () => {
@@ -69,6 +69,7 @@ const geometry = () => {
     await dialog.getByRole('spinbutton', { name: 'Paragraph number', exact: true }).fill(String(number));
     await dialog.getByRole('button', { name: 'Go to paragraph', exact: true }).click(); await dialog.waitFor({ state: 'hidden' });
     await waitFor(() => editor.evaluate((element, number) => element.editor.state.selection.$head.parent.textContent.startsWith(`Paragraph ${number}.`), number), 'paragraph destination');
+    await waitFor(() => editor.evaluate(element => { const current = element.editor, caret = current.view.coordsAtPos(current.state.selection.head), bounds = element.closest('.writing-scroll').getBoundingClientRect(); return caret.top >= bounds.top && caret.bottom <= bounds.bottom; }), 'destination caret remains visible');
     await aligned();
   }
   async function sample(label) {
@@ -80,6 +81,7 @@ const geometry = () => {
   }
   async function report(passed, failure) {
     const result = { passed, minutesRequested: minutes, elapsedMs: Date.now() - started, userData, executable: process.env.WRAITER_EXECUTABLE || 'development Electron', launches, completedCycles: cycles.length, cycles, samples, errors, ...(failure ? { failure: failure.message } : {}) };
+    result.status = failure ? 'failed' : passed ? 'passed' : 'running';
     await fs.writeFile(path.join(userData, 'report.json'), JSON.stringify(result, null, 2));
     await fs.writeFile(path.join(output, 'soak-ui-results.json'), JSON.stringify(result, null, 2));
   }
@@ -106,10 +108,16 @@ const geometry = () => {
       await waitFor(async () => await editor.locator('.search-match').filter({ hasText: `TAIL_C${chapter + 1}` }).count() === 1, 'unique tail Find result');
       await page.getByRole('button', { name: 'Close search', exact: true }).click();
       assert.equal(await page.evaluate(() => window.getSelection().toString()), `TAIL_C${chapter + 1}`);
-      await page.getByRole('combobox', { name: 'Document zoom', exact: true }).selectOption(cycle % 2 ? '100' : '150');
-      await app.evaluate(({ BrowserWindow }, cycle) => BrowserWindow.getAllWindows()[0].setSize(cycle % 2 ? 1440 : 960, cycle % 2 ? 900 : 650), cycle);
+      const zoom = cycle % 2 ? 100 : 150;
+      await page.getByRole('combobox', { name: 'Document zoom', exact: true }).selectOption(String(zoom));
+      await waitFor(() => page.evaluate(zoom => Number(getComputedStyle(document.querySelector('.writing-sheet')).zoom) === zoom / 100, zoom), 'requested zoom is applied before measuring');
+      const size = await app.evaluate(({ BrowserWindow }, cycle) => { const window = BrowserWindow.getAllWindows()[0]; window.setSize(cycle % 2 ? 1440 : 960, cycle % 2 ? 900 : 650); return window.getContentSize(); }, cycle);
+      await waitFor(() => page.evaluate(([width, height]) => innerWidth === width && innerHeight === height, size), 'native resize reaches the renderer');
+      await page.evaluate(() => document.fonts.ready); await twoFrames(page);
       await go(220 + cycle % 100); const first = await aligned();
       await go(1210); await go(220 + cycle % 100); const second = await aligned();
+      assert.equal(first.zoom, zoom / 100); assert.equal(second.zoom, first.zoom);
+      assert.deepEqual(second.viewport, first.viewport, 'compare heights only within the same viewport');
       assert.equal(first.height, second.height, 'scrolling cannot change the manuscript height');
       await go(1500);
       await page.getByRole('tab', { name: 'Untitled manuscript', exact: true }).click();
