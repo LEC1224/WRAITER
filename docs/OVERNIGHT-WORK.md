@@ -106,13 +106,13 @@ Refreshing the Find results could leave the status at result 2,405 while resetti
 
 The list also retains chapter counts and the current page's grouping when only the active result or replacement text changes, rather than regrouping the full results array on every render. No desktop latency claim is made for this small reduction.
 
-Four headless browser groups cover equivalent refreshes, query/options, manual paging, replacement text, active-result changes/removal, empty lists, repopulation and replacement previews. All 321 unit tests and the build passed. The late-result desktop regression now additionally checks that its selected passage appears on the correct results page; that run is queued after the soak.
+Four headless browser groups cover equivalent refreshes, query/options, manual paging, replacement text, active-result changes/removal, empty lists, repopulation and replacement previews. All 321 unit tests and the build passed. The final four-group late-result desktop regression also passed, including the selected passage's correct results page, replacement/undo and navigation across chapters.
 
 ### Recalculate only the page estimate in Statistics
 
 Changing the words-per-page input used to repeat vocabulary, character, paragraph and sentence analysis for the whole manuscript. The dialog now retains its analysis until the project changes and calculates the page estimate directly from the selected length. A 120,000-word fixture's full analysis took 35–59 ms per call in three samples; that redundant work is avoided for each estimate adjustment. This is a small interaction improvement, not a claimed startup or typing gain.
 
-All 321 unit tests and the production build passed. A browser interaction check adjusted a 120,000-word document to five page lengths, verified correct estimates and unchanged other statistics, and confirmed that its initial sentence analysis was reused. The existing proofreading/statistics desktop workflow is queued after the soak.
+All 321 unit tests and the production build passed. A browser interaction check adjusted a 120,000-word document to five page lengths, verified correct estimates and unchanged other statistics, and confirmed that its initial sentence analysis was reused. The final proofreading/statistics desktop workflow passed, including review, batch correction/undo, model selection and spelling controls.
 
 ### Keep the font picker usable by keyboard and in short windows
 
@@ -120,7 +120,7 @@ Choosing a font by keyboard left focus on the document body when the caller did 
 
 The popup opens above controls when there is more room there, follows form scrolling and viewport resize, and keeps its bounds inside the viewport. Filtering reveals the current option even if the preceding list had been scrolled far down. The available font names and filtered list are also retained while their inputs are unchanged, avoiding full-font-list work during ordinary toolbar rerenders.
 
-Four headless browser groups cover keyboard choice/escape/tab order, the caller's editor-focus policy, 502-font lists and filtering at 960×650, upward/downward placement, form scrolling, resize and reopening. All 321 unit tests and the build passed. The real desktop font/settings workflows and visual checks are queued after the soak.
+Four headless browser groups cover keyboard choice/escape/tab order, the caller's editor-focus policy, 502-font lists and filtering at 960×650, upward/downward placement, form scrolling, resize and reopening. All 321 unit tests and the build passed. The final native format, general app and settings desktop workflows passed. An additional real desktop check used a selected word at paragraph 600 and the document-default font inside the formatting dialog. It verified keyboard choice, both Tab directions, Escape closing only the popup, retained selection, native minimum/enlarged windows and all three themes, with no renderer errors. The minimum-size dark-theme screenshot was visually inspected. Evidence: `test-output/overnight-font-desktop.json` and `test-output/font-desktop-1cswlJ/`.
 
 ### Parse ODT chapter XML in bounded batches
 
@@ -151,4 +151,17 @@ Record benchmark conditions, rejected approaches and unresolved findings here, s
 
 ## Final validation and local build
 
-Record the final checks and artifact paths here at the end of the working window.
+The final source checks passed for large Find, paragraph navigation, settings, proofreading/statistics, document interaction, the general app workflow, project tabs/startup and native formats. Encoding-failure recovery also passed separately. Synthetic AI interactions used local mock services. Unit validation stands at **321 passing tests**, up from the initial 287. The final production build passed.
+
+Local Windows x64 preview artifacts are in `tmp/overnight-preview-2026-10-13/`:
+
+| Artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `WRAITER-0.16.0-Overnight-Windows.exe` | 112,772,800 | `2d51cce504cf3adfce926915fe27460c222aa2bf8a289be7343bbc1cabfad612` |
+| `WRAITER-0.16.0-Overnight-Setup.exe` | 113,019,935 | `0cc021ee60c41e93382e2f5c3b41c0e0061a993fb52e58618fbd5f93afa7084c` |
+
+The preview was built from clean source commit **`193ba967cbdab418542db354b200dc21c3376cc9`**. Its archive's renderer assets, editor schema and native persistence files match their source hashes. Runtime package metadata and dependency versions also match; electron-builder removes development/build metadata as expected. `BUILD-MANIFEST.json` beside the executables records that verification. Later documentation commits do not change the packaged code.
+
+The final packaged ODT endurance test is running for 60 minutes in the private synthetic profile `test-output/soak-YIB4ZK/`. Its completed report, final packaged smoke checks and quiet desktop timing comparison will be recorded here before 03:00. The preceding 45-minute WRAITER soak already passed 127 cycles and six launches on the earlier frozen build described above.
+
+The preview has not been installed or published. Close the current WRAITER window before launching the portable preview with regular settings, because the application's single-instance handling otherwise forwards to the running copy. All overnight GUI checks use separate private profiles. Manuscripts and the existing installed application were not modified.
