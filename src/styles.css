@@ -1257,6 +1257,7 @@ button.severity-pill:hover { background:color-mix(in srgb,var(--severity) 18%,va
 .comment-error { color:var(--danger); font-size:12px; }
 .comment-edit-form { margin-top:10px; }
 .comment-locations { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.go-paragraph-preview { min-height:64px; max-height:160px; overflow:auto; padding:12px; border:1px solid var(--line); border-radius:3px; background:var(--panel-soft); color:var(--text); font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
 @media (max-height:760px) {
   .manuscript-search-results { max-height:90px; }
   .manuscript-search-panel { padding-top:4px; padding-bottom:4px; max-height:38vh; overflow:auto; }

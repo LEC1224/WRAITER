@@ -40,6 +40,8 @@ Select an image to show its corner handles and **Image properties…**. Corner d
 
 Double-click a chapter in the outline, or focus it and press **F2**, to rename it. **Enter** commits; **Escape** cancels. Drag chapters to reorder them using the insertion marker. Chapter rename and reorder each have one undo step; the existing Move earlier/later buttons are also available.
 
+**Ctrl+G** or **Edit → Go to paragraph…** jumps to a numbered paragraph in the current chapter. Enter its number, check the passage preview, then press **Enter**. Numbers match paragraph numbering in the page margin, including headings and paragraphs inside lists, quotes and tables. Navigation preserves your text and undo history. If Ctrl+G was already assigned to another action, that assignment is preserved; Go to paragraph remains available from Edit and can receive its own shortcut in Settings.
+
 **Ctrl+K** or the link toolbar button creates a link for selected text or edits the current link. **Ctrl+click** opens HTTP, HTTPS and mailto links in the default application. Ordinary clicking keeps editing; right-click provides Open, Edit and Remove link.
 
 The status percentage, **View → Zoom document in/out / Actual document size**, **Ctrl+=**, **Ctrl+-**, **Ctrl+0**, and **Ctrl+mouse wheel** over the writing page share document zoom. The interface keeps its size and your reading position is retained.

@@ -38,6 +38,8 @@ import { selectedImage, applyImageProperties } from './images.js';
 import ImageProperties from './ImageProperties.jsx';
 import ChapterOutline from './ChapterOutline.jsx';
 import ProjectTabs from './ProjectTabs.jsx';
+import GoToParagraph from './GoToParagraph.jsx';
+import { paragraphLocations } from './navigation.js';
 import { DOCUMENT_EXTENSIONS, IMAGE_EXTENSIONS, ZOOM_LEVELS, extensionOf, moveItem, nextZoom, captureReadingAnchor, restoreReadingAnchor } from './document-ux.js';
 import ProofreadingDialog from './ProofreadingDialog.jsx';
 import StatisticsDialog from './StatisticsDialog.jsx';
@@ -63,7 +65,9 @@ function Modal({ title, subtitle, children, onClose, wide = false, className = '
   closeRef.current = onClose;
   useEffect(() => {
     const previous = document.activeElement;
-    ref.current?.querySelector('input,button,select,textarea')?.focus();
+    const field = ref.current?.querySelector('input:not(:disabled):not([type="hidden"]),select:not(:disabled),textarea:not(:disabled)');
+    (field || ref.current?.querySelector('button:not(:disabled)'))?.focus();
+    if (field?.hasAttribute('data-autoselect')) field.select();
     const handler = event => {
       if (event.defaultPrevented) return;
       if (event.key === 'Escape') closeRef.current();
@@ -75,7 +79,13 @@ function Modal({ title, subtitle, children, onClose, wide = false, className = '
       }
     };
     document.addEventListener('keydown', handler);
-    return () => { document.removeEventListener('keydown', handler); previous?.focus?.(); };
+    return () => {
+      document.removeEventListener('keydown', handler);
+      // Native DOM focus can reset a blurred contenteditable cursor to its
+      // beginning. The editor view restores its existing selection safely.
+      if (previous?.editor && !previous.editor.isDestroyed) previous.editor.view.focus();
+      else previous?.focus?.({ preventScroll: true });
+    };
   }, []);
   return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><section ref={ref} className={`modal ${wide ? 'wide' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={title}>
     <div className="modal-heading"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><IconButton icon={X} title="Close dialog" onClick={onClose} /></div>{children}
@@ -983,7 +993,7 @@ export default function App() {
       'clear-recents': async () => { try { setRecents(await api.clearRecents()); } catch (error) { notify(errorText(error)); } },
       recent: async () => { setRecents(await api.getRecents()); setModal({ type: 'recent' }); }, reveal: () => api.reveal(),
       undo: () => travelHistory('undo'), redo: () => travelHistory('redo'), 'select-all': () => current?.chain().focus().selectAll().run(),
-      find: openSearch, replace: openSearch, 'find-next': () => nextSearchResult(1), 'find-previous': () => nextSearchResult(-1), 'close-search': closeSearch, 'image-properties': showImageProperties, focus: () => { setFocus(value => !value); tourRef.current?.emit('focus'); }, 'toggle-outline': () => { setFocus(false); setLeftOpen(value => !value); },
+      find: openSearch, replace: openSearch, 'find-next': () => nextSearchResult(1), 'find-previous': () => nextSearchResult(-1), 'close-search': closeSearch, 'go-paragraph': () => { if (current && !current.isDestroyed && !requestRef.current && !document.querySelector('[role="dialog"]')) setModal({ type: 'go-paragraph' }); }, 'image-properties': showImageProperties, focus: () => { setFocus(value => !value); tourRef.current?.emit('focus'); }, 'toggle-outline': () => { setFocus(false); setLeftOpen(value => !value); },
       'toggle-assistant': () => { setFocus(false); setPanel(value => value === 'assist' ? null : 'assist'); }, 'page-view': async () => { await updatePrefs({ pageMode: prefsRef.current.pageMode === 'pages' ? 'continuous' : 'pages' }); tourRef.current?.emit('page-view'); }, 'page-break': () => { dismiss(); if (!insertPageBreak(current)) notify('Place the cursor in a paragraph to insert a page break.'); }, history: () => setPanel('history'), snapshot: () => createSnapshot(),
       complete: () => askAI(current?.state.selection.empty ? 'continue' : 'rewrite'), correct: () => askAI('correct'), rewrite: () => askAI('rewrite'), accept: () => acceptGhost(), dismiss: () => rejectSuggestion(),
       comments: () => showComments(), 'add-comment': () => showComments(true), 'copy-format': copyFormat, 'paste-format': pasteFormat, 'clear-format': clearFormatting,
@@ -998,7 +1008,7 @@ export default function App() {
       if (event.defaultPrevented || document.querySelector('[role="dialog"]')) return;
       const pressed = shortcutFromEvent(event), keys = { ...DEFAULT_HOTKEYS, ...prefsRef.current.hotkeys };
       if (!pressed) return;
-      const documentKeys = { find: 'find', replace: 'replace', findNext: 'find-next', findPrevious: 'find-previous', insertLink: 'edit-link', zoomIn: 'zoom-in', zoomOut: 'zoom-out', zoomReset: 'zoom-reset' };
+      const documentKeys = { find: 'find', replace: 'replace', findNext: 'find-next', findPrevious: 'find-previous', goParagraph: 'go-paragraph', insertLink: 'edit-link', zoomIn: 'zoom-in', zoomOut: 'zoom-out', zoomReset: 'zoom-reset' };
       const action = Object.keys(documentKeys).find(key => keys[key] && keys[key] === pressed);
       if (action) { event.preventDefault(); actionRef.current.command(documentKeys[action]); return; }
       if (pressed === keys.toggleAI) { event.preventDefault(); actionRef.current.command('toggle-ai'); }
@@ -1044,6 +1054,13 @@ export default function App() {
     setSearchOpen(true); setSearchFocus(value => value + 1);
   }
   function closeSearch() { if (!searchOpen) return; setSearchOpen(false); editorRef.current?.view.dom.focus({ preventScroll: true }); }
+  function goToParagraph(number) {
+    const current = editorRef.current;
+    if (!current || current.isDestroyed || requestRef.current || transition.current) return;
+    const paragraph = Number.isSafeInteger(number) && number >= 1 ? paragraphLocations(current.state.doc)[number - 1] : null;
+    if (!paragraph) { notify('That paragraph no longer exists. Enter a different number.'); return; }
+    setModal(null); current.chain().focus().setTextSelection(paragraph.from).scrollIntoView().run();
+  }
   function nextSearchResult(direction) {
     if (!query) { openSearch(); return; }
     if (requestRef.current || document.querySelector('[role="dialog"]')) return;
@@ -1269,6 +1286,7 @@ export default function App() {
     <WritingWalkthrough tour={tour} state={walkthroughState} onSetup={() => setModal({ type: 'setup' })} onEnable={() => updatePrefs({ enabled: true })} onExport={openExport} />
     {modal?.type === 'proofread' && <ProofreadingDialog Modal={Modal} project={project} activeChapterId={activeId} editor={editor} schema={schema} prefs={prefs} updatePrefs={updatePrefs} onApply={applyProofreadSuggestions} onClose={() => setModal(null)} onConnectionSettings={() => setModal({ type: 'settings', tab: 'connections', task: 'proofread' })} />}
     {modal?.type === 'statistics' && <StatisticsDialog Modal={Modal} project={project} onClose={() => setModal(null)} />}
+    {modal?.type === 'go-paragraph' && <Modal title="Go to paragraph" subtitle={chapter?.title || 'Current chapter'} onClose={() => setModal(null)}><GoToParagraph doc={editor?.state.doc} position={editor?.state.selection.head} onGo={goToParagraph} onCancel={() => setModal(null)} /></Modal>}
     {modal?.type === 'settings' && <Settings Modal={Modal} fonts={fonts} initialTab={modal.tab} initialTask={modal.task} prefs={prefs} updatePrefs={updatePrefs} onClose={() => setModal(null)} notify={notify} />}
     {modal?.type === 'rename' && <Modal title="Document title" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); setModal(null); }}><label className="field-label">TITLE</label><input className="field-input" aria-label="Manuscript title" value={project.title} onChange={e => updateProject({ title: e.target.value })} /><div className="modal-footer"><button className="primary-button">Done</button></div></form></Modal>}
     {modal?.type === 'export' && <ExportDialog Modal={Modal} project={project} chapterId={activeId} hasSelection={Boolean(modal.selectionDoc)} onExport={exportDocument} onClose={() => setModal(null)} />}

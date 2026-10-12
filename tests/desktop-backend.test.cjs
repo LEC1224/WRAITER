@@ -38,6 +38,16 @@ test('settings reject malformed task profiles, languages, and out-of-range AI kn
   for (const settings of [{ taskProfiles: [] }, { taskProfiles: { __bad: {} } }, { taskProfiles: { correct: { provider: 'other' } } }, { hotkeys: { badAction: 'Q' } }, { fontSize: Infinity }, { nativeLanguage: '<script>' }, { contextWords: 0 }, { tokenCap: 100000 }, { allowReasoning: 'yes' }]) assert.throws(() => validateSettings(settings), /invalid|unknown/i);
   assert.equal(validateSettings({ nativeLanguage: '', predictionWords: 500, ollamaMode: 'guided' }).predictionWords, 500);
 });
+
+test('the Go to paragraph default preserves an existing Ctrl+G assignment', () => {
+  const migrated = mergeSettings(defaults, { hotkeys: { complete: 'Ctrl+G' } });
+  assert.equal(migrated.hotkeys.complete, 'Ctrl+G');
+  assert.equal(migrated.hotkeys.goParagraph, '');
+  assert.equal(mergeSettings(migrated, { theme: 'dark' }).hotkeys.goParagraph, '');
+  const assigned = mergeSettings(migrated, { hotkeys: { goParagraph: 'Ctrl+Alt+J' } });
+  assert.equal(assigned.hotkeys.complete, 'Ctrl+G');
+  assert.equal(assigned.hotkeys.goParagraph, 'Ctrl+Alt+J');
+});
 test('suggestion targets have independent defaults and survive partial settings updates', () => {
   const migrated = mergeSettings(defaults, { predictionWords: 60 });
   assert.equal(migrated.translationSuggestions, 3);

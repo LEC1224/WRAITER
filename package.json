@@ -38,6 +38,7 @@
     "test:v05": "node tests/v05-app.cjs",
     "test:v06": "node tests/v06-app.cjs",
     "test:large": "node tests/large-manuscript-ui.cjs",
+    "test:navigation": "node tests/paragraph-navigation-ui.cjs",
     "test:scrolling": "node tests/scrolling-ui.cjs",
     "test:reload-numbering": "node tests/reload-numbering-ui.cjs",
     "test:long-numbering": "node tests/long-numbering-ui.cjs",

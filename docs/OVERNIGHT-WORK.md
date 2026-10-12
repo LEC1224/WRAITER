@@ -48,6 +48,14 @@ The combination matters: cancelling the frame alone and guarding status setters 
 
 All 292 unit tests, the build, large-manuscript typing/search/tab checks, formatting/highlight checks and the complete desktop integration workflow passed. That includes locally mocked AI previews, partial acceptance, cancellation, checkpoints, exports, custom keys and full restart. The long-document check now verifies session word count and the durable recovery text as well. Autosave timing and journal durability are unchanged.
 
+### Go directly to a numbered paragraph
+
+The Edit menu and Ctrl+G now open a small paragraph picker with the current number, the chapter's range and a prose preview. It follows the same text-block order as the margin, including headings, lists, quoted paragraphs, table cells and empty paragraphs. It leaves prose and editing history unchanged. Existing custom Ctrl+G assignments are preserved during preference migration; the new action remains unassigned if that key is already taken.
+
+Testing this exposed an existing dialog issue: restoring focus through the contenteditable DOM element reset a distant cursor to paragraph one. Dialogs now restore focus through the editor view, preserving its selection, and give their first editable field initial focus. The number field selects its current value so typing immediately replaces it.
+
+Validation: all 296 unit tests and the build passed. Five new desktop groups cover keyboard and native menu navigation, late paragraphs, invalid inputs, cancellation without selection/history changes, all three themes at 960×650 and existing link-dialog focus. The broader document-interaction, settings and undo/scroll workflows also passed. One earlier interaction run caught a transient Windows file-replacement failure; that reliability finding is investigated separately below.
+
 ## Experiments and observations
 
 Record benchmark conditions, rejected approaches and unresolved findings here, so a faster result is not mistaken for a general guarantee.
