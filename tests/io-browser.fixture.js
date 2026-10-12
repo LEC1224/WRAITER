@@ -173,6 +173,29 @@ export async function runIOTests() {
     const zip = await JSZip.loadAsync(docx.data), source = await zip.file('word/document.xml').async('string');
     assert(source.includes('ONLY THIS SELECTION') && !source.includes('Invisible chapter') && !source.includes('Exact'), 'Selected DOCX content scope incorrect');
   });
+  await test('ODT chapter serialization retains quoted paragraphs, empty chapters and following chapter boundaries', async () => {
+    const source = newProject(); source.title = 'Synthetic chapter boundaries';
+    source.chapters = [
+      { id: 'batch-first', title: 'Quoted chapter', status: 'Draft', content: { type: 'doc', content: [paragraph('Before the quotation.'), { type: 'blockquote', content: [paragraph('First quoted paragraph.'), { type: 'paragraph', content: [{ type: 'text', text: 'Second quoted paragraph.', marks: [{ type: 'bold' }] }] }] }, paragraph('After the quotation.')] } },
+      { id: 'batch-empty', title: 'Empty chapter', status: 'Notes', content: { type: 'doc', content: [] } },
+      { id: 'batch-last', title: 'Following chapter', status: 'Draft', content: { type: 'doc', content: [paragraph('The next chapter retains Å, é and 🦉.')] } }
+    ];
+    const encoded = await exportPayload(source, 'odt', extensions, { nativeSave: true });
+    const restored = await importDocument({ name: source.title, extension: '.odt', bytes: encoded.data }, extensions);
+    assert(restored.project.chapters.length === 3, 'ODT chapter batching merged chapter boundaries');
+    assert(restored.project.chapters.map(chapter => chapter.id).join('|') === source.chapters.map(chapter => chapter.id).join('|'), 'ODT chapter identities changed');
+    assert(restored.project.chapters.map(chapter => nodeText(chapter.content)).join('|') === source.chapters.map(chapter => nodeText(chapter.content)).join('|'), 'ODT chapter batching lost, reordered or merged paragraphs');
+    assert(all(restored.project.chapters[0].content).some(node => node.text === 'Second quoted paragraph.' && node.marks?.some(mark => mark.type === 'bold')), 'Quoted paragraph lost its emphasis');
+    importedProjects.push(restored.project);
+  });
+  await test('ODT refuses invalid visible XML characters instead of exporting missing manuscript text', async () => {
+    for (const character of ['\u0000', '\u000b', '\ufffe']) {
+      const source = newProject(); source.chapters[0].content = { type: 'doc', content: [paragraph('An intact paragraph.'), paragraph(`Before${character}After`)] };
+      let failure;
+      try { await exportPayload(source, 'odt', extensions, { nativeSave: true }); } catch (error) { failure = error; }
+      assert(failure?.message.includes('cannot be represented in an ODT file'), 'ODT silently accepted a parser error that can discard prose');
+    }
+  });
   await test('Native HTML and Markdown roundtrips retain actual formatting without title growth', async () => {
     const html = await exportPayload(native, 'html', extensions, { nativeSave: true });
     const restored = await importDocument({ name: 'native html', extension: '.html', bytes: new TextEncoder().encode(html.data) }, extensions);

@@ -118,9 +118,13 @@ export async function toODT(project, options = {}) {
   for (const chapter of project.chapters) {
     if (titles.includeChapterTitles) fragments.push(`<text:h text:style-name="Heading_20_1" text:outline-level="1">${preservedText(chapter.title)}</text:h>`);
     const start = fragments.length;
-    for (const node of chapter.content.content || []) {
-      // A quote may serialize as several paragraphs; offsets describe XML blocks.
-      const value = block(node), parsed = new DOMParser().parseFromString(`<root ${namespaces}>${value}</root>`, 'application/xml');
+    const value = (chapter.content.content || []).map(node => block(node)).join('');
+    if (value) {
+      // A quote may serialize as several paragraphs; offsets describe XML
+      // blocks. Parse the chapter together instead of reparsing its namespaces
+      // for every paragraph, while retaining those exact block boundaries.
+      const parsed = new DOMParser().parseFromString(`<root ${namespaces}>${value}</root>`, 'application/xml');
+      if (parsed.getElementsByTagName('parsererror').length) throw new Error('This document contains text that cannot be represented in an ODT file. Save a WRAITER copy to preserve it.');
       for (const child of [...parsed.documentElement.children]) fragments.push(new XMLSerializer().serializeToString(child));
     }
     if (fragments.length === start) fragments.push('<text:p/>');
