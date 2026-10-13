@@ -9,8 +9,11 @@ const xmlCharacterError = 'This document contains text that cannot be represente
 // XML 1.0 Char: https://www.w3.org/TR/xml/#charsets. Check raw text too,
 // because parsing or UTF-8 encoding can replace an isolated surrogate.
 const unsupportedXMLCharacter = /[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
+// A conservative UTF-16 check is cheaper for ordinary BMP text. Surrogates
+// reach the full Unicode check, which accepts pairs and rejects isolated units.
+const xmlCharacterCandidate = /[\x00-\x08\x0B\x0C\x0E-\x1F\uD800-\uDFFF\uFFFE\uFFFF]/;
 function requireXMLCharacters(value) {
-  if (unsupportedXMLCharacter.test(value)) throw new Error(xmlCharacterError);
+  if (xmlCharacterCandidate.test(value) && unsupportedXMLCharacter.test(value)) throw new Error(xmlCharacterError);
 }
 const attributes = object => Object.entries(object).filter(([, value]) => value != null).map(([name, value]) => ` ${name}="${esc(value)}"`).join('');
 const preservedText = value => String(value || '').split(/( +|\t|\n)/).map(part => /^ +$/.test(part) ? `<text:s text:c="${part.length}"/>` : part === '\t' ? '<text:tab/>' : part === '\n' ? '<text:line-break/>' : esc(part)).join('');
