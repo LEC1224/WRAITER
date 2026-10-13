@@ -46,6 +46,24 @@ const textOf = node => node?.text || (node?.content || []).map(textOf).join('');
     await page.getByRole('button', { name: 'Saved', exact: true }).waitFor();
     await app.close(); app = null; await launch(); assert.equal(await editor.evaluate(element => element.editor.state.doc.textContent), text + valid);
     assert.equal((await page.evaluate(() => window.wraiter.boot())).binding.format, 'odt'); checks.push('Removing the invalid edit resumes genuine ODT saveback and preserves the native binding across restart.');
+    const validOffice = await fs.readFile(target), invalidTitle = project.title + '\u0000staged title';
+    await page.locator('.document-name').click();
+    const titleDialog = page.getByRole('dialog', { name: 'Document title', exact: true });
+    await titleDialog.getByRole('textbox', { name: 'Manuscript title', exact: true }).fill(invalidTitle);
+    await titleDialog.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.getByRole('button', { name: 'Save needs attention', exact: true }).waitFor();
+    await waitFor(async () => (await recovery()).title === invalidTitle, 'invalid title still reaches durable recovery');
+    assert.deepEqual(await fs.readFile(target), validOffice, 'invalid XML metadata cannot replace valid office bytes');
+    await app.close(); app = null; await launch();
+    assert.equal((await recovery()).title, invalidTitle); assert.equal(await editor.evaluate(element => element.editor.state.doc.textContent), text + valid);
+    await command('undo'); await waitFor(async () => (await recovery()).title === project.title, 'undo restores the representable title');
+    await page.getByRole('button', { name: 'Saved', exact: true }).waitFor();
+    const restoredOffice = await JSZip.loadAsync(await fs.readFile(target));
+    for (const name of ['content.xml', 'styles.xml', 'meta.xml']) {
+      const xml = await restoredOffice.file(name).async('string');
+      assert.ok(await page.evaluate(xml => !new DOMParser().parseFromString(xml, 'application/xml').getElementsByTagName('parsererror').length, xml), 'Saveback after title undo produced invalid XML: ' + name);
+    }
+    checks.push('Invalid title metadata preserves the complete draft and original ODT through close/restart; undo restores ordinary saveback.');
     assert.deepEqual(errors, []); await page.screenshot({ path: path.join(userData, 'final.png') });
     const result = { passed: true, checks, errors, userData }; await fs.writeFile(path.join(output, 'native-save-errors-ui-results.json'), JSON.stringify(result, null, 2)); console.log(JSON.stringify(result, null, 2));
   } catch (error) { await page?.screenshot({ path: path.join(userData, 'failure.png') }).catch(() => {}); console.error(JSON.stringify({ userData, checks, errors })); throw error; }

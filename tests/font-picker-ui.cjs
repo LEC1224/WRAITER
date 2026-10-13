@@ -11,9 +11,9 @@ const wait=async(fn,label)=>{const end=Date.now()+15000;while(Date.now()<end){if
  await fs.writeFile(path.join(userData,'settings.json'),JSON.stringify({setupComplete:true,tutorialComplete:true,enabled:false,startup:'restore',spellcheck:false}));
  const env={...process.env,WRAITER_USER_DATA:userData};delete env.ELECTRON_RUN_AS_NODE;
  const options=process.env.WRAITER_EXECUTABLE?{executablePath:process.env.WRAITER_EXECUTABLE,args:[],env}:{args:[root],env};
- let app;const errors=[],checks=[];
+ let app,page;const errors=[],checks=[];
  try{
-  app=await _electron.launch(options);const page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));
+  app=await _electron.launch(options);page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));
   const editor=page.getByRole('textbox',{name:'Manuscript editor',exact:true});await editor.waitFor();
   const command=name=>app.evaluate(({BrowserWindow},name)=>BrowserWindow.getAllWindows()[0].webContents.send('command',name),name);
   const focus=control=>control.evaluate(e=>e===document.activeElement);
@@ -37,7 +37,7 @@ const wait=async(fn,label)=>{const end=Date.now()+15000;while(Date.now()<end){if
   await resize(960,650);
   for(const theme of ['Light','Dark','High contrast']){
    await command('settings-appearance');await page.getByRole('button',{name:theme,exact:true}).click();await page.getByRole('button',{name:'Save settings',exact:true}).click();await page.getByRole('heading',{name:'Settings',exact:true}).waitFor({state:'hidden'});
-   await page.waitForFunction(theme=>document.documentElement.dataset.theme===theme,{'Light':'light','Dark':'dark','High contrast':'contrast'}[theme]);
+   await page.waitForFunction(theme=>document.documentElement.dataset.theme===theme,{'Light':'paper','Dark':'dark','High contrast':'contrast'}[theme]);
    await page.getByRole('button',{name:'Paragraph and document formatting',exact:true}).click();await modal().waitFor();
    await font().focus();await font().press('ArrowDown');await search().fill('Cambria');await search().press('Enter');await wait(()=>focus(font()),'document font choice returns focus to picker');
    await font().press('ArrowDown');await search().press('Tab');assert.equal(await page.locator('.font-picker-popup').count(),0);assert.ok(await focus(modal().getByRole('spinbutton',{name:'Default document size',exact:true})));
@@ -53,5 +53,6 @@ const wait=async(fn,label)=>{const end=Date.now()+15000;while(Date.now()<end){if
   checks.push('Document-default font choice, Escape and both Tab directions work within the real formatting dialog.');
   checks.push('Popup bounds stay within native minimum and enlarged windows in all three themes; closing retains the selected word.');
   const result={passed:true,userData,checks,errors};await fs.writeFile(path.join(output,'font-picker-ui-results.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result,null,2));
- }finally{await app?.close().catch(()=>{})}
+ }catch(error){await page?.screenshot({path:path.join(userData,'failure.png')}).catch(()=>{});console.error(JSON.stringify({userData,checks,errors}));throw error}
+ finally{await app?.close().catch(()=>{})}
 })().catch(e=>{console.error(e);process.exitCode=1});
