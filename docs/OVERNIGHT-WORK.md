@@ -8,7 +8,7 @@ The working tree already contains the tested scrolling/paragraph-numbering fix, 
 
 - Starting branch: `codex/project-tabs-and-startup`; base release commit: `5bf31ca`; initial local-work checkpoint: `113c2cc`.
 - Overnight branch: `codex/overnight-2026-10-12`.
-- Local comparison tags: `codex/overnight-start-2026-10-12` preserves checkpoint `113c2cc`, including the earlier scrolling fix; `codex/overnight-preview-2026-10-13` names packaged runtime commit `193ba96`. The previous project branch remains at its release commit, so use the start tag when comparing with the fixed scrolling baseline.
+- Local comparison tags: `codex/overnight-start-2026-10-12` preserves checkpoint `113c2cc`, including the earlier scrolling fix; `codex/overnight-preview-2026-10-13` names the first packaged runtime `193ba96`; `codex/overnight-final-2026-10-13` names final runtime `ccc82a3`. The previous project branch remains at its release commit, so use the start tag when comparing with the fixed scrolling baseline.
 - Baseline `npm test`: 287 passing tests; `npm run build`: passed.
 - Author manuscripts, account settings and the installed application are outside the experiment profiles.
 - Baseline scrolling remains stable with real paragraph heights. The earlier large-chapter typing tradeoff is the first performance investigation.
@@ -127,11 +127,13 @@ Four headless browser groups cover keyboard choice/escape/tab order, the caller'
 
 ### Parse ODT chapter XML in bounded batches
 
-ODT encoding reparsed an XML namespace wrapper for every top-level manuscript node. It now parses bounded batches within each chapter while retaining the exact serialized XML block boundaries used by chapter metadata. Combined batches are limited to 512K XML characters; an individually larger node follows the same parsing path as before. In a 120,000-word, 6,000-paragraph fixture, parser calls fell from 6,000 to eight. Three samples took 535–660 ms before and 336–395 ms after. The generated `content.xml` digest and archive size were identical. The packaged soak was running separately, so these measurements describe the codec rather than complete autosave latency.
+ODT encoding reparsed an XML namespace wrapper for every top-level manuscript node. It now parses bounded batches within each chapter while retaining the exact serialized XML block boundaries used by chapter metadata. Combined batches are limited to 512K XML characters; an individually larger node follows the same parsing path as before. In a 120,000-word, 6,000-paragraph fixture, parser calls fell from 6,000 to eight. Initial samples took 535–660 ms before and 336–395 ms after, before the additional metadata guard below. The generated `content.xml` digest and archive size were identical. The packaged soak was running separately, so these measurements describe the codec rather than complete autosave latency.
 
 The parser now rejects invalid visible XML characters instead of putting parser-error content into an office file. Three new import/export groups check multi-paragraph quotations, an empty chapter, following chapters, a chapter exceeding the batch limit, emphasis, Unicode, invalid XML characters and emitted metadata. All 26 browser import/export groups, 321 unit tests and the production build passed. Independent LibreOffice rendering passed for ODT and DOCX with lists, a merged table, an embedded image, Arial text and a manual page break. The rendered ODT first page was visually inspected.
 
 A further check reproduced invalid ODT XML from NUL characters in document/chapter titles or default/run font names. Raw block batches and each XML package part now check the [XML 1.0 character range](https://www.w3.org/TR/xml/#charsets), including isolated surrogate rejection before a parser can replace it. Valid supplementary Unicode and whitespace remain accepted. A hidden chapter title stored only in JSON remains intact. The 42-document output-equivalence corpus passed again after this change; the original packaged ODT endurance build predates this additional guard.
+
+The full Unicode check initially added noticeable scanning work. A conservative UTF-16 precheck now sends possible invalid characters or surrogate pairs through the full check. Equivalence was checked for all 1,114,112 code points and malformed-surrogate combinations. Thirty scans of the synthetic ODT's 4.2-million-character XML changed from 457–478 ms to 92 ms for ordinary BMP text. A final alternating codec comparison measured 387–453 ms before the added guard and 400–438 ms after it, with medians of 421 and 426 ms across three samples each; every content digest and archive size matched. These are codec observations with the separate endurance run active, without an end-to-end autosave claim. Evidence: `test-output/overnight-xml-guard-measure.json` and `test-output/overnight-odt-guard-comparison.json`.
 
 A further 42-document browser corpus compared the previous and final encoders. Every uncompressed package part was byte-identical, including office XML and chapter-structure metadata; warnings were identical too. Cases include mixed formatting/namespaces, nested quotations and lists, merged tables, embedded images, headings/code/rules, Unicode and XML literals, whitespace, title options, empty/following chapters, multiple batches and an individual quote node larger than a batch. This is output-equivalence verification, without a timing claim. Evidence: `test-output/overnight-odt-corpus.json`.
 
@@ -139,7 +141,7 @@ A further 42-document browser corpus compared the previous and final encoders. E
 
 An office encoder could fail before its save reached the recovery writer, and closing repeated the same failure before contacting the main process. Save and autosave now stage the complete captured project and journal through the normal durable backend when encoding fails, then report the original encoding error. Closing can submit that recovery-only save; the main process still confirms persistence before it closes the window. The last valid native file remains intact.
 
-Three genuine ODT desktop groups passed with an invalid visible XML character. They verify automatic and explicit save failures, identical original office bytes, durable complete recovery and private notes, close/restart, persistent undo/redo, later valid ODT saveback and the native binding after another restart. All 321 unit tests and the production build passed. The broader eight-group native format workflow passed with real ODT/DOCX files, scoped exports, PDF/EPUB and cross-session undo/redo; its three provider requests used the local mock.
+Four genuine ODT desktop groups passed with invalid visible text or title metadata. They verify automatic and explicit save failures, identical original office bytes, durable complete recovery and private notes, close/restart, persistent undo/redo, later valid ODT saveback, valid package XML after title undo, and the native binding after another restart. All 321 unit tests and the production build passed. The broader eight-group native format workflow passed with real ODT/DOCX files, scoped exports, PDF/EPUB and cross-session undo/redo; its three provider requests used the local mock. Both suites also passed against the final packaged preview.
 
 ### Exercise actual ODT files in the endurance harness
 
@@ -161,15 +163,35 @@ Record benchmark conditions, rejected approaches and unresolved findings here, s
 
 The final source checks passed for large Find, paragraph navigation, settings, proofreading/statistics, document interaction, the general app workflow, project tabs/startup and native formats. Encoding-failure recovery also passed separately. Synthetic AI interactions used local mock services. Unit validation stands at **321 passing tests**, up from the initial 287. The final production build passed.
 
-Local Windows x64 preview artifacts are in `tmp/overnight-preview-2026-10-13/`:
+### Quiet desktop comparison
+
+Six sequential source-desktop runs alternated the starting checkpoint `113c2cc` and final runtime `ccc82a3` in before/after/after/before/before/after order. Both used the same Electron 44.3.0 binary, fresh synthetic profiles and the same 120,000-word novel with a 30,000-word active chapter. No other GUI test or build was running. Both variants retain the earlier scrolling fix.
+
+| Operation | Starting median (range), ms | Final median (range), ms |
+| --- | ---: | ---: |
+| Launch to editor | 972 (966–988) | 1,026 (1,008–1,081) |
+| Type 32 characters | 339 (335–382) | 349 (334–379) |
+| Return to large tab | 1,744 (1,721–1,820) | 1,202 (1,173–1,213) |
+
+Large-tab return improved by about 31% in this workload. Typing ranges overlap; no overall stopwatch typing gain is claimed. Startup was 54 ms slower at the median in these three samples per variant. The measured reductions in repeated editor/render/search work above remain separate claims. Evidence: `test-output/overnight-desktop-comparison.json`.
+
+The final packaged font check passed three groups: toolbar selection/focus, document-default keyboard choice and both Tab directions, and popup bounds at native minimum/enlarged sizes across all three themes. The first execution used the wrong internal key for the Light theme (`light` instead of `paper`); the corrected wait passed without changing application code. Evidence: `test-output/font-picker-ui-results.json`.
+
+Forced-crash checks passed for both WRAITER and actual ODT files. Each delays only the isolated test window's ordinary autosave timer, waits for the real editing journal to flush, verifies that both source and recovery still predate the edit, then exits immediately with code 91. Restart recovered the unsaved journal tail, private notes and other chapter; normal named saving, undo/redo and a further restart all passed. Evidence: `test-output/crash-recovery-ui-results.json`.
+
+All nine final packaged workflow suites passed sequentially: font controls, forced crashes, native encoding failures, native formats/exports, distant Find, paragraph navigation, scrolling, external reload/numbering, and undo viewport restoration. Scrolling retained identical document height and tail position, manuscript text and journal event count. The font popup screenshots at minimum size were visually checked in all three themes. Evidence: `test-output/overnight-packaged-checks.json` and its per-suite logs.
+
+The temporary benchmark checkout remains at `tmp/overnight-baseline-compare-2026-10-13/`, detached at `113c2cc`, with a verified junction to the main checkout's dependencies. It has no tracked changes. Automatic approval rejected both cleanup attempts with only “blocked by policy”; no deletion ran. It remains available to reproduce the comparison.
+
+Final Windows x64 preview artifacts are in `tmp/overnight-final-2026-10-13/`:
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `WRAITER-0.16.0-Overnight-Windows.exe` | 112,772,800 | `2d51cce504cf3adfce926915fe27460c222aa2bf8a289be7343bbc1cabfad612` |
-| `WRAITER-0.16.0-Overnight-Setup.exe` | 113,019,935 | `0cc021ee60c41e93382e2f5c3b41c0e0061a993fb52e58618fbd5f93afa7084c` |
+| `WRAITER-0.16.0-Overnight-Windows.exe` | 112,772,866 | `69fc51df75cbf197fa9363eb73ccfe3d82dc2b50cfea65c9f7cf061db808aa38` |
+| `WRAITER-0.16.0-Overnight-Setup.exe` | 113,019,985 | `459aa4de51110d823045476135da2f288ea58654fe98d8feb2db5904285c7595` |
 
-The preview was built from clean source commit **`193ba967cbdab418542db354b200dc21c3376cc9`**. Its archive's renderer assets, editor schema and native persistence files match their source hashes. Runtime package metadata and dependency versions also match; electron-builder removes development/build metadata as expected. `BUILD-MANIFEST.json` beside the executables records that verification. Later documentation commits do not change the packaged code.
+The final preview's runtime source is commit **`ccc82a30d953ed3690a22823087ec718e8c2d7bf`**. All 42 checked packaged files match their source hashes, including renderer assets, editor schema, native persistence files, artwork and license notices. Runtime package metadata and dependency versions also match; electron-builder removes development/build metadata as expected. `BUILD-MANIFEST.json` beside the executables records that verification. Later test/documentation commits do not change the packaged code.
 
-The final packaged ODT endurance test is running for 60 minutes in the private synthetic profile `test-output/soak-YIB4ZK/`. Its completed report, final packaged smoke checks and quiet desktop timing comparison will be recorded here before 03:00. The preceding 45-minute WRAITER soak already passed 127 cycles and six launches on the earlier frozen build described above.
+The first overnight preview is preserved in `tmp/overnight-preview-2026-10-13/` at commit `193ba96`. Its 60-minute packaged ODT endurance run passed **157 cycles and seven launches**, retaining all 6,000 paragraphs and intended edits with no renderer errors. Evidence: `test-output/soak-YIB4ZK/report.json`. It predates the additional invalid-metadata guard. The final runtime's 40-minute WRAITER endurance run is active in `test-output/soak-k0nAWI/`; its complete report will be recorded before finishing. The preceding 45-minute WRAITER soak passed 127 cycles and six launches on the earlier frozen build described above.
 
 The preview has not been installed or published. Close the current WRAITER window before launching the portable preview with regular settings, because the application's single-instance handling otherwise forwards to the running copy. All overnight GUI checks use separate private profiles. Manuscripts and the existing installed application were not modified.
