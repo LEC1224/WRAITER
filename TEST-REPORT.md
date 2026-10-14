@@ -1,3 +1,32 @@
+# WRAITER 0.17.0 release validation — 2026-10-14
+
+This release includes the scrolling and margin-numbering repair, image import and interaction improvements, and measured performance/recovery work from 12–13 October. Application source in `src/`, `electron/`, `assets/` and `build/` is unchanged from final overnight runtime `ccc82a3`; the release preparation commit `d602b53` updates the application version, lockfile and public documentation. The source is published under `v0.17.0`, with [release notes](docs/releases/v0.17.0.md), updated download links and the current user guide.
+
+## Fresh release checks
+
+- `npm test`: **321 passing tests**, zero failures, cancellations or skips.
+- `npm run package -- --publish never --config.directories.output=release/v0.17.0`: passed. Regenerated notices for 109 locked application dependencies without changing the notices file; built the frontend and both unsigned Windows x64 packages.
+- `npm run test:io`: **26 passing groups**; 19 imported projects satisfy native save validation, including office metadata and invalid XML character checks.
+- **13 sequential release workflow suites** passed: onboarding, tutorial, installer associations, image import, document interactions, large Find results, paragraph navigation, desktop font picker, scrolling, reload/numbering, native-save failures, forced-crash recovery and native formats. Twelve suites run the packaged `release/v0.17.0/win-unpacked/WRAITER.exe`; the installer suite exercises the actual NSIS wizard/registry macros in a private test registry.
+- Scrolling: **1,500 paragraphs, 51 wheel samples**, zero document-height and tail-position changes; p95 frame sample 7.0 ms. The numbering suite checks real text placement after zoom/resize and external reloads. These are workload-specific observations, not universal timing guarantees.
+- Forced exits recovered the durable journal tail for WRAITER and ODT, preserved private notes, resumed named saves, and retained undo/redo across a further restart. Native-save failure checks preserve the preceding ODT and full recovery when body or title XML cannot be encoded.
+- A separate packaged launch reports **0.17.0**, Windows x64 and the intended isolated profile. Installer and portable executable resources both report file/product version **0.17.0**. Verified 41 packaged files against source hashes, plus runtime package metadata and locked dependency versions. SHA-256 hashes were rechecked after the workflow tests.
+- `git diff --check`: passed. All test manuscripts/profiles are synthetic; provider interactions use local mocks. The installed app, personal profiles and author manuscripts were not changed by release checks.
+
+The longer development checks remain documented in [OVERNIGHT-WORK.md](docs/OVERNIGHT-WORK.md), including 45 minutes of WRAITER endurance, 60 minutes of real ODT saveback on an earlier preview, and 40 minutes / 113 cycles / five launches on the final application source before the version bump. These are prior development runs, separate from this release's fresh checks. The matched 120,000-word desktop benchmark improved median large-tab return from 1,744 to 1,202 ms; typing ranges overlap and median startup was 54 ms slower.
+
+## Exact release artifacts
+
+Build folder: `release/v0.17.0/`.
+
+- `WRAITER-0.17.0-Setup.exe`: **113,018,689 bytes**, SHA-256 `7bf5319e0d40a4703c6d1633980a8bee0a34dd5a1e477513504d8704b4ddfe24`.
+- `WRAITER-0.17.0-Windows.exe`: **112,771,549 bytes**, SHA-256 `2936a69007bb6f22de3467b8adc1ee3036ccc3888bd726e656c0547738d598a9`.
+- `WRAITER-0.17.0-SHA256SUMS.txt` contains the hashes of the exact executable files. `BUILD-MANIFEST.json` and `VALIDATION-RESULTS.json` retain local source/package verification and complete workflow outcomes.
+
+Evidence logs: `test-output/release-0.17.0-unit.log`, `release-0.17.0-build.log`, `release-0.17.0-io.log`, `release-0.17.0-manifest.log`, the thirteen per-suite logs with the same prefix, and `test-output/release-0.17.0-packaged-results.json`. Fresh-PC installation, code signing and live-provider output quality remain outside these checks. The portable wrapper is built and its resource version is checked; automated application workflows use its packaged executable directly.
+
+---
+
 # Seven intuitive UX improvements — 2026-10-12
 
 All seven findings from [UX-AUDIT.md](docs/UX-AUDIT.md) are implemented. Image controls and Find were handled first: selected images have proportional corner resizing and a description/dimensions dialog; Find seeds selected prose, refocuses/selects its query on Ctrl+F, preserves field focus across chapters, supports Enter/Shift+Enter and F3/Shift+F3, and returns to the passage on Escape. Closed Find retains its query without searching the novel on each keystroke.
