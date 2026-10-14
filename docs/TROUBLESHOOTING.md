@@ -8,7 +8,7 @@ If WRAITER is showing setup or another dialog, close or finish it first; the req
 
 ## Which download should I open?
 
-Choose **WRAITER-0.9.0-Setup.exe** from the [release page](https://github.com/LEC1224/WRAITER/releases/latest). It is the guided Windows installer. The file ending in **Windows.exe** is the portable version. GitHub's **Source code** archives contain development files, not an installed application.
+Choose **WRAITER-0.17.0-Setup.exe** from the [release page](https://github.com/LEC1224/WRAITER/releases/latest). It is the guided Windows installer. The file ending in **Windows.exe** is the portable version. GitHub's **Source code** archives contain development files, not an installed application.
 
 This release is for Windows on a 64-bit Intel or AMD computer. It has not been packaged for macOS, Linux or Windows on ARM.
 

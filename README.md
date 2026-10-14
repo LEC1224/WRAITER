@@ -8,16 +8,16 @@ You do not need to know how to code. A guided setup helps you connect **Codex** 
 
 ## Download WRAITER
 
-**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.16.0/WRAITER-0.16.0-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
+**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.17.0/WRAITER-0.17.0-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
 
-Version **0.16.0** is the current public preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
+Version **0.17.0** is the current public preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
 
-This release includes the wording descriptions, vibe guidance, phrase ratings and suggestion-count settings shown below, alongside the latest manuscript revision tools. See the [0.16.0 release notes](docs/releases/v0.16.0.md) for what changed since 0.13.0.
+This release fixes uneven scrolling and paragraph-number alignment, reduces repeated work in large manuscripts, and adds image imports, paragraph navigation and more familiar keyboard interactions. It also includes the wording descriptions, vibe guidance, phrase ratings and revision tools shown below. See the [0.17.0 release notes](docs/releases/v0.17.0.md) for what changed since 0.16.0.
 
 | Choose a download | Who it is for |
 | --- | --- |
-| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.16.0/WRAITER-0.16.0-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
-| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.16.0/WRAITER-0.16.0-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
+| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.17.0/WRAITER-0.17.0-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
+| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.17.0/WRAITER-0.17.0-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
 
 Download one of these `.exe` files. GitHub's **Source code** downloads are for developers; they are not the installer.
 
@@ -191,7 +191,7 @@ Unit tests and these desktop suites use synthetic data and local test services. 
 
 **Live tests are opt-in:** `npm run test:tutorial:live` sends two requests through your saved Codex account and uses its allowance. It is not part of CI. See the contributor guide for local-model, PDF and office-format test prerequisites.
 
-The [validation report](TEST-REPORT.md) records checks and remaining limitations. [0.16.0 release notes](docs/releases/v0.16.0.md) describe the current version; [0.13.0 release notes](docs/releases/v0.13.0.md) cover the previous public release. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts.
+The [validation report](TEST-REPORT.md) records checks and remaining limitations. [0.17.0 release notes](docs/releases/v0.17.0.md) describe the current version; [0.16.0 release notes](docs/releases/v0.16.0.md) cover the previous public release. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts.
 
 ## License and acknowledgements
 

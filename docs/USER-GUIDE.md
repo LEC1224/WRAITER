@@ -1,6 +1,6 @@
 # WRAITER user guide
 
-Detailed controls and behaviour for version 0.16.0. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
+Detailed controls and behaviour for version 0.17.0. For the download and a short introduction, start with the [README](../README.md). If you get stuck, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Projects and startup
 
