@@ -1,9 +1,9 @@
 const inlineAttributes = {
-  bold: [], italic: [], underline: [], strike: [],
+  bold: [], italic: [], underline: [], strike: [], superscript: [], subscript: [],
   textStyle: ['fontFamily', 'fontSize', 'color', 'backgroundColor', 'lineHeight'],
   highlight: ['color']
 };
-const paragraphAttributes = ['textAlign', 'lineHeight', 'spaceAfter', 'firstLineIndent'];
+const paragraphAttributes = ['textAlign', 'lineHeight', 'spaceBefore', 'spaceAfter', 'leftIndent', 'rightIndent', 'firstLineIndent', 'tabStops'];
 const owns = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 
 function textblockAtSelection(selection, doc) {

@@ -16,7 +16,8 @@ function CommentCard({ row, active, disabled, onNavigate, onChange }) {
     catch (error) { setError(error.message); }
   }
   return <article ref={card} className={`comment-card ${comment.resolved ? 'resolved' : ''} ${active ? 'active' : ''}`} data-comment-id={comment.id}>
-    <div className="comment-card-heading"><strong>{chapter?.title || 'Removed chapter'}</strong><span className="comment-state">{comment.resolved ? 'Resolved' : 'Open'}</span></div>
+    <div className="comment-card-heading"><strong>{chapter?.title || 'Removed chapter'}{comment.author ? ` · ${comment.author}` : ''}</strong><span className="comment-state">{comment.resolved ? 'Resolved' : 'Open'}</span></div>
+    {['docx', 'odt'].includes(comment.origin) && <p className="small-muted">Imported from an Office file · included when saving that file format.</p>}
     <button className="comment-passage" disabled={disabled || detached} onClick={() => onNavigate?.({ ...comment, chapterId: chapter.id }, ranges[0])} title={detached ? 'The original passage has been removed. The comment is still saved.' : 'Go to this passage'}>
       <MapPin size={13} /><span>{comment.quote}</span>
     </button>
@@ -29,8 +30,8 @@ function CommentCard({ row, active, disabled, onNavigate, onChange }) {
     </form> : <p className="comment-body">{comment.text}</p>}
     <div className="comment-actions">
       <button className="text-button" disabled={disabled} onClick={() => { setDraft(comment.text); setEditing(true); }}><Pencil size={13} />Edit</button>
-      <button className="text-button" disabled={disabled} onClick={() => onChange({ resolved: !comment.resolved }, comment.resolved ? 'Reopen comment' : 'Resolve comment')}>{comment.resolved ? <CornerUpLeft size={13} /> : <Check size={13} />}{comment.resolved ? 'Reopen' : 'Resolve'}</button>
-      <button className="text-button comment-delete" disabled={disabled} onClick={() => onChange(null, 'Delete comment')}><Trash2 size={13} />Delete</button>
+      <button className="text-button" disabled={disabled} onClick={() => onChange({ resolved: !comment.resolved }, comment.resolved ? 'Reopen comment' : 'Resolve comment')} title={comment.resolved ? "Move this comment back to the open list." : "Mark this comment as resolved. It stays available in resolved comments."}>{comment.resolved ? <CornerUpLeft size={13} /> : <Check size={13} />}{comment.resolved ? 'Reopen' : 'Resolve'}</button>
+      <button className="text-button comment-delete" disabled={disabled} onClick={() => onChange(null, 'Delete comment')} title="Delete this comment while keeping the passage."><Trash2 size={13} />Delete</button>
     </div>
   </article>;
 }
@@ -63,13 +64,13 @@ export default function CommentsPanel({ project, editor, selection = null, onCha
     onChange(next, label, comment.chapterId);
   }
   return <div className="inspector-body comments-panel">
-    <div className="panel-description"><h3>Comments</h3><p>Attach private revision notes to a selected passage. Comments stay in this manuscript and are excluded from exports and AI context.</p></div>
+    <div className="panel-description"><h3>Comments</h3><p>Comments you add here are private. Comments imported from an Office file remain in that format when saved. Comments are excluded from AI context and publication exports unless explicitly included.</p></div>
     <form className="comment-compose" onSubmit={add}>
       <label className="field-label" htmlFor="new-comment-text">NEW COMMENT</label>
       <textarea ref={textarea} id="new-comment-text" className="field-input comment-textarea" aria-label="New comment text" placeholder={selected ? 'What would you like to revisit here?' : 'Select a passage, then write a comment…'} value={draft} onChange={event => setDraft(event.target.value)} maxLength={MAX_COMMENT_TEXT} rows={4} disabled={disabled} />
       <p className="small-muted">{selected ? 'This comment will follow the selected passage as you edit.' : 'Select text in the manuscript to attach a comment.'}</p>
       {error && <p className="comment-error" role="alert">{error}</p>}
-      <button className="primary-button full" disabled={disabled || !selected || !draft.trim()}><MessageSquarePlus size={15} />Add comment</button>
+      <button className="primary-button full" disabled={disabled || !selected || !draft.trim()} title={selected ? "Attach your comment to the selected passage." : "Select a passage first to attach a comment."}><MessageSquarePlus size={15} />Add comment</button>
     </form>
     <div className="comment-list-heading"><strong>{openCount} open · {rows.length} total</strong><select aria-label="Comment filter" value={filter} onChange={event => setFilter(event.target.value)}><option value="open">Open comments</option><option value="resolved">Resolved comments</option><option value="all">All comments</option></select></div>
     {!visible.length && <div className="empty-state"><MessageSquarePlus size={30} /><p>{rows.length ? `No ${filter === 'resolved' ? 'resolved' : 'open'} comments.` : 'No comments yet.'}</p><small>{rows.length ? 'Choose another filter to see your saved notes.' : 'Select a passage to leave a revision note.'}</small></div>}

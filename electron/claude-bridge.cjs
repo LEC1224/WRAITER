@@ -7,7 +7,7 @@ async function resolveClaude(configured = '') {
   if (configured && (!path.isAbsolute(configured) || (process.platform === 'win32' && !/\.exe$/i.test(configured)))) throw new Error('Choose the full path to claude.exe.');
   const candidates = configured ? [configured] : [path.join(os.homedir(), '.local', 'bin', process.platform === 'win32' ? 'claude.exe' : 'claude'), ...(process.env.PATH || '').split(path.delimiter).filter(Boolean).map(dir => path.join(dir, process.platform === 'win32' ? 'claude.exe' : 'claude'))];
   for (const candidate of candidates) if ((await fs.stat(candidate).catch(() => null))?.isFile()) return candidate;
-  throw new Error('Claude Code was not found. Use Install in the setup wizard, then check again.');
+  throw new Error('Claude Code was not found. Open Help → Set up AI to get the helper, then check again.');
 }
 function environment() {
   const env = { ...process.env, NO_COLOR: '1' };

@@ -1,9 +1,11 @@
+import { officeStyleId, odtStyleDefinitions } from './named-office.js';
 import JSZip from 'jszip';
 import { XML_HEADER, xmlEscape as esc, addStructure } from './package.js';
 import { titleOptions } from './scope.js';
 import { imageDimensions } from '../document-ux.js';
+import { normalizePrintLayout, pageDimensions } from '../print-layout.js';
 
-const namespaces = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"';
+const namespaces = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:dc="http://purl.org/dc/elements/1.1/"';
 const mime = 'application/vnd.oasis.opendocument.text';
 const xmlCharacterError = 'This document contains text that cannot be represented in an ODT file. Save a WRAITER copy to preserve it.';
 // XML 1.0 Char: https://www.w3.org/TR/xml/#charsets. Check raw text too,
@@ -34,6 +36,7 @@ export async function toODT(project, options = {}) {
   const defaults = { fontFamily: 'Cambria', fontSize: 12, lineHeight: 1.5, ...project.documentStyle };
   zip.file('mimetype', mime, { compression: 'STORE' });
   async function image(node) {
+    if (node.attrs?.wrap) warnings.add('Image text wrapping is not retained in OpenDocument files.');
     const source = node.attrs?.src || '', match = source.match(/^data:image\/(png|jpe?g|gif|webp);base64,([a-z0-9+/=\s]+)$/i);
     if (!match) { warnings.add('An external or unsupported image is replaced by a labelled placeholder.'); return; }
     const picture = new Image();
@@ -49,25 +52,33 @@ export async function toODT(project, options = {}) {
     pictures.push({ path, type: `image/${extension === 'jpg' ? 'jpeg' : extension}` }); zip.file(path, base64, { base64: true });
     imageNodes.set(node, `<draw:frame draw:name="${esc(node.attrs.alt || 'Image')}" text:anchor-type="as-char" svg:width="${width * 0.75}pt" svg:height="${height * 0.75}pt"><draw:image xlink:href="${path}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>${node.attrs.alt ? `<svg:desc>${esc(node.attrs.alt)}</svg:desc>` : ''}</draw:frame>`);
   }
-  async function collect(node) { if (node.type === 'image') await image(node); for (const child of node.content || []) await collect(child); }
+  async function collect(node) { if (node.type === 'image') await image(node); if (['tableCell', 'tableHeader'].includes(node.type) && (node.attrs?.cellBackground || node.attrs?.cellBorder)) warnings.add('Custom table cell colours are not retained in OpenDocument files.'); for (const child of node.content || []) await collect(child); }
   for (const chapter of project.chapters) await collect(chapter.content);
-  function style(family, para, run, parent) {
-    const key = JSON.stringify([family, para, run, parent]);
+  function style(family, para, run, parent, tabStops = []) {
+    const key = JSON.stringify([family, para, run, parent, tabStops]);
     if (!styleCache.has(key)) {
       const name = `W${styles.length + 1}`;
-      styles.push(`<style:style style:name="${name}" style:family="${family}"${parent ? ` style:parent-style-name="${parent}"` : ''}>${para ? `<style:paragraph-properties${attributes(para)}/>` : ''}${run ? `<style:text-properties${attributes(run)}/>` : ''}</style:style>`);
+      const tabs = tabStops.length ? `<style:tab-stops>${tabStops.map(value => `<style:tab-stop style:position="${Number(value)}pt" style:type="left"/>`).join('')}</style:tab-stops>` : '';
+      styles.push(`<style:style style:name="${name}" style:family="${family}"${parent ? ` style:parent-style-name="${parent}"` : ''}>${para ? `<style:paragraph-properties${attributes(para)}>${tabs}</style:paragraph-properties>` : ''}${run ? `<style:text-properties${attributes(run)}/>` : ''}</style:style>`);
       styleCache.set(key, name);
     }
     return styleCache.get(key);
   }
+  let noteIndex = 0;
+  const revisions = [];
+  const sharedComments = new Map((project.comments || []).filter(comment => options.includeComments || (options.nativeSave && comment.origin === 'odt')).map(comment => [comment.id, comment]));
+  let annotationIndex = 0;
   function inline(node) {
     if (node.type === 'hardBreak') return '<text:line-break/>';
+    if (node.type === 'note') { const index = ++noteIndex; return `<text:note text:id="note${index}" text:note-class="${node.attrs?.kind === 'endnote' ? 'endnote' : 'footnote'}"><text:note-citation>${index}</text:note-citation><text:note-body><text:p>${preservedText(node.attrs?.text || '')}</text:p></text:note-body></text:note>`; }
     if (node.type !== 'text') return (node.content || []).map(inline).join('');
     const marks = node.marks || [], textStyle = marks.find(mark => mark.type === 'textStyle')?.attrs || {}, props = {};
     if (marks.some(m => m.type === 'bold')) props['fo:font-weight'] = 'bold';
     if (marks.some(m => m.type === 'italic')) props['fo:font-style'] = 'italic';
     if (marks.some(m => m.type === 'underline')) props['style:text-underline-style'] = 'solid';
     if (marks.some(m => m.type === 'strike')) props['style:text-line-through-style'] = 'solid';
+    if (marks.some(m => m.type === 'superscript')) props['style:text-position'] = 'super 58%';
+    if (marks.some(m => m.type === 'subscript')) props['style:text-position'] = 'sub 58%';
     if (marks.some(m => m.type === 'code')) props['fo:font-family'] = 'Consolas';
     if (textStyle.fontFamily) props['fo:font-family'] = textStyle.fontFamily;
     if (textStyle.fontSize) props['fo:font-size'] = odtSize(textStyle.fontSize);
@@ -76,9 +87,23 @@ export async function toODT(project, options = {}) {
     if (highlight || textStyle.backgroundColor) props['fo:background-color'] = cssColour(highlight?.attrs?.color || textStyle.backgroundColor || '#ffff00');
     let result = preservedText(node.text);
     if (Object.keys(props).length) result = `<text:span text:style-name="${style('text', null, props)}">${result}</text:span>`;
+    const named = marks.find(m => m.type === 'namedStyle')?.attrs?.id;
+    if (officeStyleId(named)) result = `<text:span text:style-name="${officeStyleId(named)}">${result}</text:span>`;
     const link = marks.find(m => m.type === 'link')?.attrs?.href;
     if (link && /^(https?:|mailto:)/i.test(link)) result = `<text:a xlink:href="${esc(link)}" xlink:type="simple">${result}</text:a>`;
     else if (link) warnings.add('An unsupported link retains its wording but is not active.');
+    const revision = options.includeTrackedChanges && marks.find(mark => mark.type === 'trackedChange');
+    if (revision) {
+      const id = `wraiterchange${revisions.length + 1}`, kind = revision.attrs.kind;
+      const info = `<office:change-info><dc:creator>${esc(revision.attrs.author)}</dc:creator><dc:date>${esc(revision.attrs.date)}</dc:date></office:change-info>`;
+      revisions.push(`<text:changed-region xml:id="${id}"><text:${kind === 'delete' ? 'deletion' : 'insertion'}>${info}${kind === 'delete' ? `<text:p>${result}</text:p>` : ''}</text:${kind === 'delete' ? 'deletion' : 'insertion'}></text:changed-region>`);
+      result = kind === 'delete' ? `<text:change text:change-id="${id}"/>` : `<text:change-start text:change-id="${id}"/>${result}<text:change-end text:change-id="${id}"/>`;
+    }
+    const annotations = marks.filter(mark => mark.type === 'commentAnchor' && sharedComments.has(mark.attrs?.id)).map(mark => {
+      const comment = sharedComments.get(mark.attrs.id), name = `wraitercomment${++annotationIndex}`;
+      return { start: `<office:annotation office:name="${name}"><dc:creator>${esc(comment.author || 'WRAITER')}</dc:creator><dc:date>${esc(comment.createdAt)}</dc:date><text:p>${preservedText(comment.text)}</text:p></office:annotation>`, end: `<office:annotation-end office:name="${name}"/>` };
+    });
+    if (annotations.length) result = annotations.map(annotation => annotation.start).join('') + result + annotations.reverse().map(annotation => annotation.end).join('');
     return result;
   }
   let tableIndex = 0;
@@ -89,11 +114,14 @@ export async function toODT(project, options = {}) {
       if (attrs.textAlign) props['fo:text-align'] = attrs.textAlign;
       if (attrs.pageBreakBefore) props['fo:break-before'] = 'page';
       if (attrs.spaceAfter != null) props['fo:margin-bottom'] = `${Number(attrs.spaceAfter)}pt`;
+      if (attrs.spaceBefore != null) props['fo:margin-top'] = `${Number(attrs.spaceBefore)}pt`;
+      if (attrs.leftIndent != null) props['fo:margin-left'] = `${Number(attrs.leftIndent)}pt`;
+      if (attrs.rightIndent != null) props['fo:margin-right'] = `${Number(attrs.rightIndent)}pt`;
       if (attrs.firstLineIndent != null) props['fo:text-indent'] = `${Number(attrs.firstLineIndent)}pt`;
       if (attrs.lineHeight) props['fo:line-height'] = /^[\d.]+$/.test(String(attrs.lineHeight)) ? `${Number(attrs.lineHeight) * 100}%` : attrs.lineHeight;
-      if (quote) { props['fo:margin-left'] = '18pt'; props['fo:margin-right'] = '18pt'; }
+      if (quote) { props['fo:margin-left'] ||= '18pt'; props['fo:margin-right'] ||= '18pt'; }
       const level = Math.min(6, Math.max(1, Number(attrs.level) || 1)), heading = node.type === 'heading';
-      const styleName = style('paragraph', props, header ? { 'fo:font-weight': 'bold' } : null, heading ? `Heading_20_${level}` : quote ? 'Wraiter_Quote' : 'Standard');
+      const styleName = style('paragraph', props, header ? { 'fo:font-weight': 'bold' } : null, officeStyleId(attrs.namedStyle) || (heading ? `Heading_20_${level}` : quote ? 'Wraiter_Quote' : 'Standard'), attrs.tabStops || []);
       return heading ? `<text:h text:style-name="${styleName}" text:outline-level="${level}">${children.map(inline).join('')}</text:h>` : `<text:p text:style-name="${styleName}">${children.map(inline).join('')}</text:p>`;
     }
     if (node.type === 'image') return `<text:p>${imageNodes.get(node) || esc(`[Image omitted: ${attrs.alt || 'unsupported format'}]`)}</text:p>`;
@@ -151,11 +179,14 @@ export async function toODT(project, options = {}) {
     chapters.push({ id: chapter.id, title: chapter.title, status: chapter.status || 'Draft', start, end: fragments.length });
   }
   const listStyles = ['WBullet', 'WNumber'].map(name => `<text:list-style style:name="${name}">${Array.from({ length: 10 }, (_, i) => name === 'WNumber' ? `<text:list-level-style-number text:level="${i + 1}" style:num-format="1" style:num-suffix="."><style:list-level-properties text:space-before="${(i + 1) * 0.5}cm" text:min-label-width="0.4cm"/></text:list-level-style-number>` : `<text:list-level-style-bullet text:level="${i + 1}" text:bullet-char="•"><style:list-level-properties text:space-before="${(i + 1) * 0.5}cm" text:min-label-width="0.4cm"/></text:list-level-style-bullet>`).join('')}</text:list-style>`).join('');
-  addXML('content.xml', `${XML_HEADER}<office:document-content ${namespaces} office:version="1.3"><office:automatic-styles>${styles.join('')}${listStyles}<style:style style:name="WCell" style:family="table-cell"><style:table-cell-properties fo:padding="0.08in" fo:border="0.5pt solid #aaaaaa"/></style:style><style:style style:name="WHeaderCell" style:family="table-cell"><style:table-cell-properties fo:padding="0.08in" fo:border="0.5pt solid #aaaaaa" fo:background-color="#f2f2f2"/></style:style></office:automatic-styles><office:body><office:text>${fragments.join('')}</office:text></office:body></office:document-content>`);
+  addXML('content.xml', `${XML_HEADER}<office:document-content ${namespaces} office:version="1.3"><office:automatic-styles>${styles.join('')}${listStyles}<style:style style:name="WCell" style:family="table-cell"><style:table-cell-properties fo:padding="0.08in" fo:border="0.5pt solid #aaaaaa"/></style:style><style:style style:name="WHeaderCell" style:family="table-cell"><style:table-cell-properties fo:padding="0.08in" fo:border="0.5pt solid #aaaaaa" fo:background-color="#f2f2f2"/></style:style></office:automatic-styles><office:body><office:text>${revisions.length ? `<text:tracked-changes>${revisions.join('')}</text:tracked-changes>` : ''}${fragments.join('')}</office:text></office:body></office:document-content>`);
   const [language = 'en', country = 'US'] = (project.language || 'en-US').split('-');
-  addXML('styles.xml', `${XML_HEADER}<office:document-styles ${namespaces} office:version="1.3"><office:styles><style:default-style style:family="paragraph"><style:paragraph-properties fo:line-height="${defaults.lineHeight * 100}%" fo:margin-bottom="${defaults.fontSize * 0.8}pt"/><style:text-properties fo:font-family="${esc(defaults.fontFamily)}" fo:font-size="${defaults.fontSize}pt" fo:language="${esc(language)}" fo:country="${esc(country)}"/></style:default-style><style:style style:name="Standard" style:family="paragraph" style:class="text"/><style:style style:name="Title" style:family="paragraph"><style:text-properties fo:font-size="28pt" fo:font-weight="bold"/></style:style>${Array.from({ length: 6 }, (_, index) => `<style:style style:name="Heading_20_${index + 1}" style:family="paragraph"><style:paragraph-properties fo:keep-with-next="always"/><style:text-properties fo:font-size="${24 - index * 2}pt" fo:font-weight="bold"/></style:style>`).join('')}<style:style style:name="Wraiter_Code" style:family="paragraph"><style:text-properties fo:font-family="Consolas"/></style:style><style:style style:name="Wraiter_Quote" style:family="paragraph"/><style:style style:name="Wraiter_Rule" style:family="paragraph"><style:paragraph-properties fo:border-bottom="0.5pt solid #999999"/></style:style></office:styles><office:automatic-styles><style:page-layout style:name="WPage"><style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin="2.2cm" style:print-orientation="portrait"/></style:page-layout></office:automatic-styles><office:master-styles><style:master-page style:name="Standard" style:page-layout-name="WPage"/></office:master-styles></office:document-styles>`);
-  addXML('meta.xml', `${XML_HEADER}<office:document-meta ${namespaces} xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" office:version="1.3"><office:meta><meta:generator>WRAITER</meta:generator><dc:title>${esc(project.title)}</dc:title><dc:language>${esc(project.language || 'en-US')}</dc:language></office:meta></office:document-meta>`);
-  await addStructure(zip, 'content.xml', project, chapters);
+  const pageSetup = normalizePrintLayout(project.printLayout), dimensions = pageDimensions(pageSetup);
+  const runningText = value => String(value).split(/(\{page\}|\{pages\})/g).map(part => part === '{page}' ? '<text:page-number text:select-page="current"/>' : part === '{pages}' ? '<text:page-count/>' : preservedText(part)).join('');
+  const masterContent = (pageSetup.header ? `<style:header><text:p>${runningText(pageSetup.header)}</text:p></style:header>` : '') + (pageSetup.footer ? `<style:footer><text:p>${runningText(pageSetup.footer)}</text:p></style:footer>` : '');
+  addXML('styles.xml', `${XML_HEADER}<office:document-styles ${namespaces} office:version="1.3"><office:styles>${odtStyleDefinitions(project)}<style:default-style style:family="paragraph"><style:paragraph-properties fo:line-height="${defaults.lineHeight * 100}%" fo:margin-bottom="${defaults.fontSize * 0.8}pt"/><style:text-properties fo:font-family="${esc(defaults.fontFamily)}" fo:font-size="${defaults.fontSize}pt" fo:language="${esc(language)}" fo:country="${esc(country)}"/></style:default-style><style:style style:name="Standard" style:family="paragraph" style:class="text"/><style:style style:name="Title" style:family="paragraph"><style:text-properties fo:font-size="28pt" fo:font-weight="bold"/></style:style>${Array.from({ length: 6 }, (_, index) => `<style:style style:name="Heading_20_${index + 1}" style:family="paragraph"><style:paragraph-properties fo:keep-with-next="always"/><style:text-properties fo:font-size="${24 - index * 2}pt" fo:font-weight="bold"/></style:style>`).join('')}<style:style style:name="Wraiter_Code" style:family="paragraph"><style:text-properties fo:font-family="Consolas"/></style:style><style:style style:name="Wraiter_Quote" style:family="paragraph"/><style:style style:name="Wraiter_Rule" style:family="paragraph"><style:paragraph-properties fo:border-bottom="0.5pt solid #999999"/></style:style></office:styles><office:automatic-styles><style:page-layout style:name="WPage"><style:page-layout-properties fo:page-width="${dimensions.width}mm" fo:page-height="${dimensions.height}mm" fo:margin-top="${pageSetup.top}mm" fo:margin-right="${pageSetup.right}mm" fo:margin-bottom="${pageSetup.bottom}mm" fo:margin-left="${pageSetup.left}mm" style:print-orientation="${pageSetup.orientation}"/></style:page-layout></office:automatic-styles><office:master-styles><style:master-page style:name="Standard" style:page-layout-name="WPage">${masterContent}</style:master-page></office:master-styles></office:document-styles>`);
+  addXML('meta.xml', `${XML_HEADER}<office:document-meta ${namespaces} xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" office:version="1.3"><office:meta><meta:generator>WRAITER</meta:generator><dc:title>${esc(project.title)}</dc:title><dc:language>${esc(project.language || 'en-US')}</dc:language></office:meta></office:document-meta>`);
+  await addStructure(zip, 'content.xml', project, revisions.length ? chapters.map(chapter => ({ ...chapter, start: chapter.start + 1, end: chapter.end + 1 })) : chapters);
   addXML('META-INF/manifest.xml', `${XML_HEADER}<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="${mime}"/>${['content.xml', 'styles.xml', 'meta.xml'].map(path => `<manifest:file-entry manifest:full-path="${path}" manifest:media-type="text/xml"/>`).join('')}<manifest:file-entry manifest:full-path="wraiter/structure.json" manifest:media-type="application/json"/>${pictures.map(picture => `<manifest:file-entry manifest:full-path="${picture.path}" manifest:media-type="${picture.type}"/>`).join('')}</manifest:manifest>`);
   return { data: await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' }), warning: [...warnings].join(' ') };
 }

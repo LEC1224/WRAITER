@@ -1,10 +1,16 @@
 const { randomUUID } = require('node:crypto');
 
-const CONTEXT_FLAGS = ['hasSelection', 'hasTextSelection', 'blocked', 'canUndo', 'canRedo', 'canCopyFormatting', 'canPasteFormatting', 'aiEnabled', 'hasSuggestion', 'hasImage', 'hasLink'];
+const CONTEXT_FLAGS = ['hasSelection', 'hasTextSelection', 'blocked', 'canUndo', 'canRedo', 'canCopyFormatting', 'canPasteFormatting', 'canSplitChapter', 'aiEnabled', 'hasSuggestion', 'hasImage', 'hasLink'];
 function editorMenuContext(value) {
   if (value?.tab === true && typeof value.tabId === 'string' && /^[a-f0-9-]{36}$/.test(value.tabId)) return { tab: true, tabId: value.tabId, canMoveLeft: value.canMoveLeft === true, canMoveRight: value.canMoveRight === true, canCloseOthers: value.canCloseOthers === true, blocked: value.blocked === true };
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.editor !== true) return null;
-  return { editor: true, ...Object.fromEntries(CONTEXT_FLAGS.map(key => [key, value[key] === true])) };
+  const context = { editor: true, ...Object.fromEntries(CONTEXT_FLAGS.map(key => [key, value[key] === true])) };
+  const hint = value.grammarHint;
+  if (context.aiEnabled && !context.blocked && typeof hint?.preview === 'string' && hint.preview.length <= 104 &&
+      typeof hint.reviewOnly === 'boolean' && (hint.preview.length || hint.reviewOnly) && !/[\p{Cc}\p{Bidi_Control}\u2028\u2029]/u.test(hint.preview)) {
+    context.grammarHint = { preview: hint.preview, reviewOnly: hint.reviewOnly };
+  }
+  return context;
 }
 
 function contextMenuTemplate(params, context, handlers, shortcuts = {}) {
@@ -17,6 +23,12 @@ function contextMenuTemplate(params, context, handlers, shortcuts = {}) {
   const items = (params.dictionarySuggestions || []).slice(0, 5).map(word => ({ label: word.replace(/&/g, '&&'), click: () => handlers.replaceMisspelling(word) }));
   if (params.misspelledWord) items.push({ label: 'Add to dictionary', click: () => handlers.addToDictionary(params.misspelledWord) });
   if (items.length) items.push(separator);
+  if (params.isEditable && editor?.grammarHint) {
+    const { preview, reviewOnly } = editor.grammarHint, label = preview.replace(/&/g, '&&');
+    if (reviewOnly) items.push(action(label ? 'Review AI grammar: ' + label : 'Review AI grammar suggestion…', 'review-grammar-hint'));
+    else items.push(action('AI grammar: ' + label, 'apply-grammar-hint'), action('Explain suggestion…', 'review-grammar-hint'));
+    items.push(separator);
+  }
   items.push(...(editor ? [action('Undo', 'undo', editor.canUndo && !editor.blocked, 'Ctrl+Z'), action('Redo', 'redo', editor.canRedo && !editor.blocked, 'Ctrl+Y')] : [{ role: 'undo', enabled: flags.canUndo !== false }, { role: 'redo', enabled: flags.canRedo !== false }]), separator,
     { role: 'cut', enabled: editor ? editor.hasSelection && !editor.blocked : flags.canCut !== false },
     { role: 'copy', enabled: editor ? editor.hasSelection : flags.canCopy !== false },
@@ -29,7 +41,8 @@ function contextMenuTemplate(params, context, handlers, shortcuts = {}) {
     action('Copy formatting', 'copy-format', editor.canCopyFormatting && !editor.blocked),
     action('Paste formatting', 'paste-format', editor.canPasteFormatting && !editor.blocked),
     action('Clear formatting', 'clear-format', !editor.blocked),
-    action('Add comment…', 'add-comment', editor.hasTextSelection && !editor.blocked), separator);
+    action('Add comment…', 'add-comment', editor.hasTextSelection && !editor.blocked), separator,
+    action('Divide to new chapter here', 'split-chapter', editor.canSplitChapter && !editor.blocked), separator);
   const aiAvailable = editor.aiEnabled && !editor.blocked;
   if (!editor.hasSelection) items.push(action('Continue writing here', 'complete', aiAvailable, shortcuts.complete));
   items.push(action('Rephrase / translate selection', 'rewrite', aiAvailable && editor.hasTextSelection, shortcuts.rewrite),

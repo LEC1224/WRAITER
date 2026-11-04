@@ -1,0 +1,7 @@
+{
+  "identityName": "COPY_FROM_PACKAGE_IDENTITY_NAME",
+  "publisher": "CN=COPY_FROM_PACKAGE_IDENTITY_PUBLISHER",
+  "publisherDisplayName": "COPY_FROM_PACKAGE_PROPERTIES_PUBLISHERDISPLAYNAME",
+  "displayName": "WRAITER",
+  "applicationId": "WRAITER"
+}

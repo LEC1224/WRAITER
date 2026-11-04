@@ -1,3 +1,153 @@
+# WRAITER 0.20.2 release — remembered exports — 2026-11-04
+
+The final 0.20.2 packages include persistent export settings and **Reset to defaults** in the export popup, in addition to the writing/review, grammar, diagnostics and distribution work recorded below. The [complete changelist](docs/releases/v0.20.2.md) covers changes since public version 0.17.0. Earlier entries are historical validation records; their older package paths and publication status describe those earlier checks.
+
+Current validation:
+
+- Production build and `npm test`: **445/445 unit tests passed**. `npm run test:io`: **38 passing checks**, including native validation of **28 imported projects**.
+- `npm run test:export-settings` passed against source, the final unpacked Windows runtime and the exact unpacked Store runtime. Covered persistence after closing/cancelling, export and app restart; PDF and Office options; Reset and its persistence; unavailable selection; remembered chapters in the same/different manuscript and removed chapters; corrupt preferences; Print's PDF-preview override; and minimum/larger window layouts.
+- `npm run test:clipboard` passed for eight clipboard formats and four chat file formats, including scoped selection/chapter exports, failed-copy retry and IPC. `npm run test:v03` passed editing/history, local mock AI, Office save and real PDF/EPUB export workflows.
+- The final Store runtime passed `test:store`, `test:onboarding` and `test:file-open`: AI-off named Unicode-path save/recovery without Git, official helper guides, bundled privacy/reporting, synthetic sign-in gates, and actual second-process opening with spaces/Unicode, modal queuing and missing/malformed-file handling.
+- The MSIX passed native MakeAppx packaging and the repository verifier: exact public identity **LEC1224.WRAITER**, application **0.20.2**, package **1.20.2.0**, CRCs, required files, branding, privacy/report text and Store runtime metadata.
+- Final source/archive audit matched **50 owned runtime files per package** (Electron code, frontend, assets, license and notices), allowing only Git-normalized CRLF/LF differences in text files, all ten declared runtime dependency versions, and application version 0.20.2. The MSIX's embedded app archive matches the tested Store runtime exactly. SHA-256 checksums were recalculated from the final download files. Local evidence: `tmp/release-0.20.2-audit.json`, `tmp/export-settings-unit-tests.log` and `release/store/v0.20.2/STORE-PACKAGE-RESULTS.json`.
+
+Final GitHub artifacts:
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `WRAITER-0.20.2-Setup.exe` | 118,356,680 | `4efef4dac7cf8a9eca788029628580638ecec66397956a8de64a06b6b7d2d3b6` |
+| `WRAITER-0.20.2-Windows.exe` | 118,109,549 | `91e7d3c1592cef8ceaaedef069fec32f442ff1adbbfabab4bc24f810fe8502cb` |
+| `WRAITER-0.20.2-Store-x64.msix` | 171,932,733 | `e4dbda137292fff96b0ee784516a2e41b50559887358e8e0f6ba5e3acdcb71c6` |
+
+EXEs and `WRAITER-0.20.2-SHA256SUMS.txt` are under `release/unsigned-preview/v0.20.2-export-settings/`; the MSIX is under `release/store/v0.20.2/`. All three packages are unsigned. The MSIX is for Partner Center upload and requires Store signing. The final installer was not run, and registered-MSIX lifecycle, clean-PC deployment and WACK checks remain outstanding. Automated workflows used isolated profiles, synthetic prose and local mocks; no paid inference or personal manuscripts were used. The Store update has not been submitted.
+
+---
+
+# AI grammar in the right-click menu — 0.20.2 — 2026-11-04
+
+All 445 unit tests passed. The packaged Windows app passed both the AI grammar and editor context-menu workflows in isolated profiles with synthetic manuscripts and a local test provider. Mouse and Shift+F10 targeted the intended underline among multiple findings; the menu handled replacement, deletion, and full review for long changes. Quick corrections retained formatting and comment anchors. Undo restored the selected word and its cached hint without another request. Editing invalidated old menu actions. The existing spelling, formatting, clipboard, comment, and chapter commands retained their separate routing.
+
+Evidence: `test-output/v0.20.2-unit.txt`, `test-output/v0.20.2-packaged-grammar.txt`, and `test-output/v0.20.2-packaged-context-menu.txt`. The unsigned installer, portable app, and their SHA-256 checksums are under `release/unsigned-preview/v0.20.2/`. The installer was not run.
+
+---
+
+# Writer tools redesign — 0.20.0 — 2026-11-02
+
+Removed the extra writer-tools toolbar and moved its commands to the native Tools menu. Track changes now uses a side panel with original/proposed wording, a legend, explicit recording state, individual review decisions, chapter/document scope and confirmed bulk review. Newly recorded replacements share one decision; repeated deletion advances through visible text. Stopping recording keeps pending edits. The status indicator and menu checkmark reflect the current recording state, which starts off on document switches.
+
+Note markers now have a usable click target and open their edit dialog directly. The new chapter note list supports reading, editing and deleting notes. Paragraph layout replaces raw tab positions with labelled centimetre/point controls, an illustrative preview, regular tab spacing and a clear target scope. Only touched fields are applied, preserving other formatting across a mixed selection. Small-window Apply/Cancel controls stay visible.
+
+Validation:
+
+- `npm test`: **440/440 passing**, including replacement grouping, repeated deletion, review context, whole-document review and caret mapping, native menu groups, and the existing diagnostic logging tests.
+- `npm run test:io`: **38 passing checks**; 28 imported projects pass native validation. Includes a new DOCX/ODT saveback check for both sides of a combined replacement.
+- Production build and scoped `git diff --check`: passed.
+- Packaged desktop workflows passed: `tracked-ui.cjs`, `notes-ui.cjs`, `paragraph-layout-ui.cjs`, and `ai-grammar-ui.cjs`. They cover native Tools actions, stopping without accepting, before/after review, whole-document batch undo, blocked-action guidance, repeated Backspace, note marker editing/deletion/undo, paragraph scope and mixed formatting, tab insertion, and opt-in AI grammar with mock responses and stale-result protection.
+- Actual packaged screenshots were checked: `test-output/review-redesign-dark.png`, `review-redesign-small.png`, `note-redesign.png`, `paragraph-layout-light.png`, and `paragraph-layout-small.png`. The minimum-size paragraph dialog keeps its footer available while its content scrolls.
+
+Evidence: `test-output/writer-tools-unit-regression.txt`, `writer-tools-io-regression.txt`, `writer-tools-package.txt`, and `v0.20.0-packaged-*-ui.txt`. All desktop tests use synthetic manuscripts and isolated profiles; AI grammar uses a local mock.
+
+Built the unsigned NSIS installer and portable app under `release/unsigned-preview/v0.20.0/`, with SHA-256 checksums. Packaged executable metadata reports 0.20.0. The existing installation still reports 0.19.0; **the new installer was not run**. No release was published.
+
+Remaining limits are explicit in the UI/guide: recording covers text within one paragraph, not paragraph structure, formatting, objects or composition; Office files may reopen a replacement as separate insertion/deletion records. Notes have plain-text bodies and PDF/EPUB collect them in a note section. Imported uneven tab positions are preserved unless edited but remain approximated in the editor/PDF.
+
+---
+
+# WRAITER 0.19.0 installed — 2026-11-02
+
+Updated package and lockfile versions to 0.19.0 and built the unsigned local installer and portable app under `release/unsigned-preview/v0.19.0/`. The installer upgraded the existing per-user installation with exit code 0. Installed executable metadata and Windows uninstall registration both confirm 0.19.0.
+
+`npm run test:logging` passed against `C:\Users\carl1\AppData\Local\Programs\WRAITER\WRAITER.exe` with an isolated synthetic profile, including persisted cleanup settings, deletion, privacy filtering, actual renderer crash recording and abnormal-exit detection after restart. Evidence: `test-output/v0.19.0-installed-logging.txt`. No public release was published.
+
+---
+
+# Local diagnostic logging — 2026-11-02
+
+WRAITER now stores local JSON Lines logs for settings changes, panel/dialog/window activity, explicit operations and their duration, errors and process-crash summaries. Successful typing/autosave/history updates and background polling are excluded. Logs retain safe setting values and error source locations while excluding manuscript text, chats, document titles/paths, credentials, free-text preferences and raw error messages. Settings → Logging provides the log-folder action and automatic cleanup, enabled by default for one calendar month and configurable to 1–24 months or disabled. Cleanup runs at startup, hourly and when the saved policy changes.
+
+Validation:
+
+- `npm test`: **434/434 passing**, including 10 logging tests for privacy, file rotation, month-end/leap-year retention, cleanup scope, linked-directory rejection, retention changes, hourly cleanup, interrupted sessions and bounded repeated errors. The logging tests were rerun after correcting nonzero-exit handling.
+- `npm run build` and scoped `git diff --check`: passed.
+- `npm run test:logging`: passed against the source build and the packaged Windows runtime. Checks cover startup deletion, persisted cleanup/retention settings, immediate retention changes, no entries during typing/autosave, panel/native-dialog/setting/error events, secret sentinels excluded from logs, normal exit, an actual renderer crash, and a forced nonzero main-process exit detected on restart.
+- `npm run test:settings`, `npm run test:desktop`, `npm run test:app` and `npm run test:crash-recovery`: passed sequentially. Existing native menus, settings, mocked AI connections, document save/export and WRAITER/ODT recovery workflows remain covered.
+- The Logging page was visually checked in light mode at 960 × 650 and dark mode at the standard window size. Screenshots: `test-output/logging-settings-minimum.png` and `test-output/logging-settings-dark.png`.
+
+All checks used isolated profiles and synthetic data. Evidence is in `test-output/logging-ui-results.json`, `test-output/logging-packaged-results.json`, `test-output/logging-unit-regression.txt` and `test-output/logging-regression-test-*.txt`.
+
+A separate unsigned local installer and portable preview are available under `release/unsigned-preview/v0.18.0-logging/`. The packaged workflow used that folder's `win-unpacked/WRAITER.exe`. Earlier artifacts were preserved; this logging build has not been installed over the user's existing application or published. Crash records are diagnostic summaries, not native memory dumps.
+
+---
+
+# Classic writer tools and opt-in AI grammar — 2026-11-02
+
+Version 0.18.0 changes add named paragraph/character styles, paragraph spacing and indents, a ruler with tab stops, formatting marks, optional smart punctuation and text substitutions, RE2 search with capture replacements, saved page setup and header/footer page fields, PDF print preview, heading navigation/bookmarks, local templates, notes, tracked text editing, Office comment/revision interchange, table controls, image wrapping, case conversion/superscript/subscript, and bundled offline English thesaurus lookup. A fresh contents list can be generated during PDF/Office export. Realtime collaboration is excluded.
+
+AI grammar hints are a separate default-off setting under Tools → Spelling and grammar → Spelling and grammar settings…. With AI enabled, the current plain paragraph is checked after a three-second pause through the selected proofreading connection. Requests contain at most 4,000 characters and exclude titles, private notes/comments, references, conversations and writing-voice guidance. Hints are view decorations; Apply/Ignore is explicit. Corrections preserve unchanged rich-text runs, respect tracked editing, remain undoable, and refuse ambiguous formatting/comment boundaries. Stale responses are discarded. Background requests yield to manual AI tasks, use scoped cancellation, and back off on failures. Local English grammar checks remain independent.
+
+Validation:
+
+- `npm test`: **424/424 passing**. Includes schema/default and old journal compatibility, local/AI grammar ranges, formatting/comment boundaries, notes, named styles/tabs, search captures, page setup, bookmarks/templates, dictionary lookup, comments and tracked revisions.
+- `npm run build` and `git diff --check`: passed.
+- Browser import/export suite: **37 passing checks**, including DOCX/ODT named styles, notes, page fields, revisions/comments and rejecting forged anchors or revisions from untrusted HTML. Imported fixtures pass native document validation. An independent LibreOffice ODT→DOCX conversion retained tracked text and anchored comments.
+- Desktop workflows passed for named styles; tracked review; notes; page setup; bookmarks/templates; table insertion/headers/merge/split/row-column changes/cell colours/removal; actual left/right/inline image flow; local grammar and regex corrections/undo; and offline thesaurus lookup.
+- `npm run test:ai-grammar` passed with an isolated mock provider: opt-out sends no request; opt-in displays wavy hints; apply/undo retains styling and comment anchors; Ignore persists; Close/Ignore/refused corrections restore focus; repeated hint clicks work while ordinary double-click word selection is preserved; delayed replies after edits, disabling or chapter switches cannot introduce stale hints. Screenshot `test-output/ai-grammar-suggestion.png` was visually checked.
+- `npm run test:ai-grammar-ipc` passed: background request privacy, opt-in enforcement, foreground priority, and cancellation confined to the intended background request.
+- `node tests/print-preview-ui.cjs` passed: visible PDF preview, landscape orientation, printable header/footer and page number, and removal of the temporary PDF on close.
+
+Tests used synthetic prose and isolated application data. AI grammar was tested against local mocks; no paid inference or author manuscripts were used. Version 0.18.0 was packaged as a local unsigned NSIS installer and portable application under `release/unsigned-preview/v0.18.0/`. The installer upgraded the existing per-user installation successfully (exit 0); installed executable metadata reports 0.18.0.0 and Windows uninstall registration reports 0.18.0. The inline AI grammar desktop workflow also passed against that installed executable with an isolated profile and mock provider. No public release was published.
+
+Current fidelity limits: tracked editing covers text within one paragraph, not formatting/structural edits or input composition. Notes have plain-text bodies; PDF/EPUB collect them in an end list. Contents export is a generated text list without page numbers or a live Office field. Page setup supports one layout with plain headers/footers. Uneven tab stops are retained in Office files but approximated in the editor/PDF. Office image wrapping and custom cell colours flatten with explicit compatibility warnings. See the user guide for the supported workflows.
+
+---
+
+# Chapter division at the cursor — 2026-10-23
+
+The editor's native right-click menu now offers **Divide to new chapter here**. It moves the remaining content into a chapter immediately after the source, preserves rich text and comment anchors, and opens the new chapter. A formatted heading at the cursor or beside it becomes the chapter title; its body copy is removed unless it carries a passage comment. Ordinary prose divides at the exact cursor. The entire split is one persistent undo/redo action, including the active chapter and cursor restoration.
+
+Validation: **339 unit tests passed**, including nine chapter-split cases and the menu capability regression. The production frontend build, `npm run test:context-menu`, and `npm run test:revision-tools` passed. The native menu workflow covers splitting with AI disabled, heading promotion at the end of the title, rich text/comment movement, and exact undo/redo before and after restart. The resulting chapter was visually checked at 960 × 650. Evidence: `test-output/context-menu-results.json`, `test-output/chapter-split-minimum.png`, and `test-output/revision-tools-results.json`. Tests use isolated profiles and synthetic prose; this change has not been packaged or published.
+
+---
+
+# Microsoft Store preparation — 2026-10-15
+
+WRAITER has a separate x64 MSIX build using the publisher-supplied Partner Center identity `LEC1224.WRAITER`, publisher `CN=0F8F5317-D963-40BC-AA83-A870AC9737A9`, display name `LEC1224`. Application 0.17.0 maps to Store version **1.17.0.0**. Microsoft Windows SDK **10.0.26100.0 MakeAppx** packed and validated the exact manifest, with only `runFullTrust` and quoted `.wraiter` activation. The package uses the existing branded logos and excludes NSIS installation/uninstall state.
+
+The Store runtime opens official provider guides for helper installation. Setup explains AI data sharing before connection. **Help → Privacy and AI data** shows the bundled policy; **Help → Report an AI concern** opens user-controlled email/public issue forms without including writing. The supplied support email and GitHub profile are used in the policy and prepared listing. Listing text, four actual-app screenshots, an app tile and the owner checklist are in [docs/MICROSOFT-STORE.md](docs/MICROSOFT-STORE.md) and [docs/store/LISTING.md](docs/store/LISTING.md).
+
+Validation:
+
+- `npm test`: **329 passing unit tests**, including four new Store version/identity/signing-separation/activation regressions.
+- `npm run package:store` and `npm run verify:store`: pass. The verifier reads the embedded app archive, checks its Store identity/version/privacy/report contact, all package CRCs, required payloads and PNG dimensions. Native SDK unpacking also passes; the unpacked `WRAITER.exe` and `app.asar` hashes match the tested runtime exactly.
+- `npm run test:store`: passes against the packaged Store executable with an isolated profile and **Git unavailable**. Checks both official helper-guide actions and provider allowlisting, AI disclosure, writing/named Unicode-path save/restart with AI off and no account, privacy keyboard links and minimum-window fit, report links without manuscript content, and a distribution marker that cannot be changed through preferences. No renderer errors.
+- Packaged `npm run test:onboarding`, `npm run test:file-open`, and `npm run test:app`: pass. Covers account/test gates using a synthetic provider, actual second-process file opening with Unicode/spaces and dialog queuing, editing/recovery/history, native PDF export, local mock AI routing and persistence. The general app test made 11 local mock requests. The source-development `npm run test:desktop` also passes native menus, encrypted endpoint-scoped keys, task routing, fonts, language and Git history.
+- Store setup/privacy screenshots were visually checked at the 960 × 650 minimum outer window and a larger size. Four listing screenshots are **1600 × 1000** PNGs, show genuine app controls with synthetic prose and contain no simulated AI results. The optional app tile is **300 × 300**.
+- `git diff --check`: passes. The running installed WRAITER processes, personal profiles and author manuscripts were preserved. No live cloud AI, email, public issue, Store registration/submission, signing-key installation or Windows security change was performed.
+
+Exact local artifact: `release/store/v0.17.0/WRAITER-0.17.0-Store-x64.msix`, **166,457,768 bytes**, SHA-256 **`ecb5e2e4173662b037be1000a6de9f6f2c7cd01bbc7c9d729c40dd2b514c3cf8`**. It is deliberately unsigned for Partner Center upload. Public GitHub EXE artifacts remain unchanged.
+
+Evidence: `release/store/v0.17.0/STORE-PACKAGE-RESULTS.json`, `MAKEAPPX.log`, `test-output/store-unit.log`, `store-build.log`, `store-verification.log`, `store-unpack-results.json`, `store-ui-results.json`, `store-onboarding.log`, `store-file-open.log`, `store-app.log`, `store-desktop.log` and `store-screenshots.log`.
+
+The privacy policy was published separately to public GitHub `main` in commit `6d66aba778f5b08ad58a3f6b78bf4145ad0cf95e`. Its [public URL](https://github.com/LEC1224/WRAITER/blob/main/docs/PRIVACY.md) returned HTTP 200 without authentication, and the downloaded raw file exactly matched the prepared 4,972-byte local policy (SHA-256 `6ac227ccb087a0b77f2415250f13f2b72b3741e1d702db28bdca003779c48725`).
+
+Submission status update, 15 October 2026: the owner chose a free initial Store release. Their screenshot shows the uploaded MSIX **Validated** and all six submission sections **Complete**. The connected Partner Center overview now shows **Submission 1: In certification**, with pre-processing in progress and publishing configured for after approval. The current price, listing text and audience were not exposed by that read-only overview. The agent did not change or cancel the submission. Local listing/owner guidance now reflects free launch, deferred paid pricing and the shorter capability explanation.
+
+Remaining: await certification feedback, reconcile any earlier paid-purchase Store listing wording, review/publish the application source and listing assets, and test registered Store installation/activation/virtualized data/update/uninstall on a clean PC with WACK. Tax/payout setup is deferred until paid sales. Fresh helper installation/sign-in and live provider behavior under Store package identity are not proven by these tests. Local SDK/package validation does not establish Store approval or resolve the original friend's exact Windows block.
+
+---
+
+# Windows installer repair and distribution checks — 2026-10-15
+
+The public 0.17.0 artifacts remain unchanged. A tester reported Windows' generic device/path/file access error during installation; the screenshot names the downloaded setup executable. No protection history or event log is available from that PC, so its exact cause is unconfirmed.
+
+The new full NSIS test reproduced a separate post-install launch problem with a valid Start menu shortcut present: one run timed out, and another completed without starting the installed synthetic probe. The same package without a Start menu shortcut launched directly. The production `customInstall` macro now sets the post-install target to the installed executable. With the shortcut still present, the full test passes installation, reinstallation, launch without administrator rights and uninstall, including spaces and Swedish characters in the install path. The test uses a unique application identity and private registry keys; it does not alter the user's WRAITER installation.
+
+Release packaging now requires an explicit signing identity, enables executable/DLL signing and verifies valid, timestamped Windows signatures after building. Unsigned local previews have a separate command and output folder. The current public installer, portable wrapper and runtime binaries fail the new signature gate as expected. No trusted Windows signing identity is configured, so a signed public build remains pending. This machine has Smart App Control off and no Windows Sandbox installed; these checks do not prove acceptance on a clean protected PC.
+
+Validation: `npm test` passed **325 tests**; frontend build and unsigned preview packaging passed. The packaged onboarding workflow passed with isolated profiles and mock providers. Production installer association tests and the full install/reinstall/launch/uninstall test passed. The public asset digests match the unchanged local artifacts. See [Windows distribution](docs/WINDOWS-DISTRIBUTION.md) for signing setup and the required exact-artifact fresh-PC check. No release was published, protection setting changed, or signing subscription created.
+
+---
+
 # WRAITER 0.17.0 release validation — 2026-10-14
 
 This release includes the scrolling and margin-numbering repair, image import and interaction improvements, and measured performance/recovery work from 12–13 October. Application source in `src/`, `electron/`, `assets/` and `build/` is unchanged from final overnight runtime `ccc82a3`; the release preparation commit `d602b53` updates the application version, lockfile and public documentation. The source is published under `v0.17.0`, with [release notes](docs/releases/v0.17.0.md), updated download links and the current user guide.

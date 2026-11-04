@@ -1,6 +1,6 @@
 # WRAITER privacy and AI data
 
-Updated: 15 October 2026.
+Updated: 2 November 2026.
 
 This policy describes WRAITER's current desktop application, published by LEC1224. For private support, privacy requests or AI-content concerns, contact [carl.1224@outlook.com](mailto:carl.1224@outlook.com). Source code and public support are available at [LEC1224/WRAITER](https://github.com/LEC1224/WRAITER); the publisher's profile is [LEC1224 on GitHub](https://github.com/LEC1224).
 
@@ -10,11 +10,19 @@ Manuscripts, saved assistant conversations, preferences, reference links and rec
 
 Save important manuscripts as named files in a folder you control. Those files remain after uninstalling WRAITER. Windows may remove the Store app's private settings, recovery history and unnamed drafts when you uninstall or reset it. Local backups and Windows account/disk security are your responsibility.
 
+## Local diagnostic logs
+
+WRAITER keeps local diagnostic logs of settings changes, panels and windows opening or closing, explicit document/connection operations, operation timing, errors, and detected process crashes. Records include timestamps, a random app-session identifier, app/runtime versions and operating-system version. Typing, manuscript contents, chats, document names and paths, credentials and free-text setting values are excluded. Errors retain types, known codes and application source locations rather than raw messages or memory dumps.
+
+Logs stay in the app's `Logs` folder and are not uploaded to the publisher or attached to reports automatically. **Settings → Logging → Open log folder** opens that folder. Automatic cleanup is on by default and deletes log files last written more than one calendar month ago. You can select 1–24 months or turn cleanup off. The app also keeps a small local marker to detect sessions that ended without a normal exit. Diagnostic cleanup does not delete manuscripts, settings, recovery files or editing history.
+
 ## Optional AI processing
 
 You can write, save and export with AI turned off. When you enable and use cloud AI, WRAITER sends the text needed for the chosen task to your selected provider. This can include manuscript passages, writing-voice instructions, enabled reference content, recent messages from the selected assistant conversation, and instructions such as your requested writing vibe. The writing assistant can request relevant passages and references for an editing task. Private notes and passage comments are excluded from AI prompts; assistant conversations are excluded from manuscript exports.
 
 Automatic suggestions and AI-generated checkpoint labels can make requests while AI is enabled. You can turn AI off, disable automatic suggestions, choose different task models or disable references in the app. The connection test sends a short sample sentence, not your manuscript. AI requests use your provider's account allowance or billing; buying WRAITER does not include an AI subscription or credits.
+
+AI grammar hints while typing require a separate opt-in under Tools → Spelling and grammar → Spelling and grammar settings… and are off by default. When enabled alongside AI, a three-second typing pause can send the current paragraph (at most 4,000 characters) to the selected proofreading connection. These checks exclude chapter titles, private notes, comments, reference files, conversations and writing-voice instructions. Turning off AI or the grammar setting cancels pending checks. Local rule-based grammar hints run on your computer independently.
 
 Your provider controls its own processing, retention and use of data. Review its terms and privacy information before sharing writing or personal information:
 

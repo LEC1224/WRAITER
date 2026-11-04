@@ -1,0 +1,10 @@
+.chapter-headings { padding: 0 8px 5px 31px; color: var(--muted); font-size: 11px; }
+.chapter-headings summary, .bookmarks-panel summary { cursor: pointer; }
+.chapter-heading-link { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding: 4px 0; color: var(--muted); }
+.chapter-heading-link:hover { color: var(--text); }
+.bookmarks-panel { padding: 8px 4px; color: var(--muted); font-size: 11px; }
+.bookmarks-panel form { display: grid; gap: 5px; padding: 8px 0; }
+.bookmarks-panel form input { margin-top: 5px; }
+.bookmark-row { display: flex; align-items: start; gap: 4px; }
+.bookmark-row > button:first-child { flex: 1; min-width: 0; padding: 5px 0; text-align: left; overflow-wrap: anywhere; }
+.bookmark-row small { display: block; color: var(--faint); }

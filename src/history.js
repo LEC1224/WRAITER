@@ -12,6 +12,10 @@ const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const id = () => globalThis.crypto.randomUUID();
 const valueFingerprints = new WeakMap(), projectFingerprints = new WeakMap(), structuralFingerprints = new WeakMap();
 const statusCache = new WeakMap();
+const OPTIONAL_SCHEMA_DEFAULTS = new Set(['pageBreakBefore', 'spaceBefore', 'leftIndent', 'rightIndent', 'wrap', 'cellBackground', 'cellBorder', 'namedStyle', 'tabStops']);
+const compatibilityFingerprints = new Map();
+const compatibilityModes = ['editing', 'preview', true];
+const optionalDefault = (key, value, compatibility) => value == null && (key === 'pageBreakBefore' || !compatibility && OPTIONAL_SCHEMA_DEFAULTS.has(key) || compatibility === 'preview' && ['namedStyle', 'tabStops'].includes(key) || compatibility === 'editing' && ['wrap', 'cellBackground', 'cellBorder', 'namedStyle', 'tabStops'].includes(key));
 
 export class HistoryMismatchError extends Error {
   constructor(message = 'This editing history no longer matches the document. The saved history has been preserved.') {
@@ -19,19 +23,19 @@ export class HistoryMismatchError extends Error {
   }
 }
 
-function stable(value) {
+function stable(value, compatibility = false) {
   if (value === undefined) return 'null';
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']';
+  if (Array.isArray(value)) return '[' + value.map(item => stable(item, compatibility)).join(',') + ']';
   // A new optional schema attribute must not invalidate journals made before
   // it existed. An absent page break and the schema's null default are equal.
-  return '{' + Object.keys(value).sort().filter(key => value[key] !== undefined && !(key === 'pageBreakBefore' && value[key] == null)).map(key => JSON.stringify(key) + ':' + stable(value[key])).join(',') + '}';
+  return '{' + Object.keys(value).sort().filter(key => value[key] !== undefined && !optionalDefault(key, value[key], compatibility)).map(key => JSON.stringify(key) + ':' + stable(value[key], compatibility)).join(',') + '}';
 }
 
 // Two independent 32-bit hashes plus serialized length catch accidental stale
 // state without requiring an asynchronous crypto call in each editor transaction.
-export function historyFingerprint(value) {
-  const text = stable(value); let a = 0x811c9dc5, b = 0x9e3779b9;
+export function historyFingerprint(value, compatibility = false) {
+  const text = stable(value, compatibility); let a = 0x811c9dc5, b = 0x9e3779b9;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
     a = Math.imul(a ^ code, 0x01000193);
@@ -59,13 +63,13 @@ function digest(parts, weight = 1) {
   }
   return `v2:${(a >>> 0).toString(16).padStart(8, '0')}${(b >>> 0).toString(16).padStart(8, '0')}:${weight}`;
 }
-function fingerprintArray(items) {
-  const children = items.map(structuralFingerprint);
+function fingerprintArray(items, compatibility = false) {
+  const children = items.map(item => structuralFingerprint(item, compatibility));
   return digest(['array', items.length, ...children], 1 + children.reduce((sum, value) => sum + Number(value.slice(value.lastIndexOf(':') + 1)), 0));
 }
-function fingerprintEntries(entries) {
-  const sorted = entries.filter(([, value]) => value !== undefined).sort(([a], [b]) => a.localeCompare(b));
-  const children = sorted.map(([key, value]) => [key, structuralFingerprint(value)]);
+function fingerprintEntries(entries, compatibility = false) {
+  const sorted = entries.filter(([key, value]) => value !== undefined && !optionalDefault(key, value, compatibility)).sort(([a], [b]) => a.localeCompare(b));
+  const children = sorted.map(([key, value]) => [key, structuralFingerprint(value, compatibility)]);
   return digest(['object', sorted.length, ...children.flat()], 1 + children.reduce((sum, [, value]) => sum + Number(value.slice(value.lastIndexOf(':') + 1)), 0));
 }
 function proseMirrorJSON(value) {
@@ -84,15 +88,17 @@ function proseMirrorJSON(value) {
   if (value.attrs && Object.keys(value.attrs).length) entries.push(['attrs', value.attrs]);
   return entries;
 }
-export function structuralFingerprint(value) {
+export function structuralFingerprint(value, compatibility = false) {
   if (value === undefined) return digest(['undefined'], 1);
   if (value === null) return digest(['null'], 1);
   if (typeof value !== 'object') return digest([typeof value, JSON.stringify(value)], typeof value === 'string' ? value.length + 1 : 1);
-  const cached = structuralFingerprints.get(value);
+  if (compatibility && !compatibilityFingerprints.has(compatibility)) compatibilityFingerprints.set(compatibility, new WeakMap());
+  const cache = compatibility ? compatibilityFingerprints.get(compatibility) : structuralFingerprints;
+  const cached = cache.get(value);
   if (cached) return cached;
   const pm = proseMirrorJSON(value);
-  const result = pm ? fingerprintEntries(pm) : Array.isArray(value) ? fingerprintArray(value) : fingerprintEntries(Object.entries(value).filter(([key, item]) => !(key === 'pageBreakBefore' && item == null)));
-  structuralFingerprints.set(value, result);
+  const result = pm ? fingerprintEntries(pm, compatibility) : Array.isArray(value) ? fingerprintArray(value, compatibility) : fingerprintEntries(Object.entries(value), compatibility);
+  cache.set(value, result);
   return result;
 }
 
@@ -118,19 +124,25 @@ function cachedFingerprint(value) {
 }
 // The legacy hash remains readable forever. A journal naturally moves to v2 on
 // its next edit; no history migration or destructive reset is needed.
-function legacyProjectFingerprint(project) {
+function legacyProjectFingerprint(project, compatibility = false) {
   const fields = Object.keys(project).filter(key => !IGNORED.has(key) && project[key] !== undefined).sort().map(key => [key,
-    key === 'chapters' ? project.chapters.map(chapter => Object.keys(chapter).filter(name => chapter[name] !== undefined).sort().map(name => [name, cachedFingerprint(chapter[name])])) : cachedFingerprint(project[key])
+    key === 'chapters' ? project.chapters.map(chapter => Object.keys(chapter).filter(name => chapter[name] !== undefined).sort().map(name => [name, compatibility ? historyFingerprint(chapter[name], compatibility) : cachedFingerprint(chapter[name])])) : compatibility ? historyFingerprint(project[key], compatibility) : cachedFingerprint(project[key])
   ]);
-  return historyFingerprint(fields);
+  return historyFingerprint(fields, compatibility);
 }
 function projectFingerprint(project, expected = 'v2:') {
-  if (!String(expected).startsWith('v2:')) return legacyProjectFingerprint(project);
+  if (!String(expected).startsWith('v2:')) { const current = legacyProjectFingerprint(project); if (current === expected) return current; for (const mode of compatibilityModes) { const alternate = legacyProjectFingerprint(project, mode); if (alternate === expected) return alternate; } return current; }
   if (!projectFingerprints.has(project)) projectFingerprints.set(project, fingerprintEntries(Object.entries(project).filter(([key]) => !IGNORED.has(key))));
-  return projectFingerprints.get(project);
+  const current = projectFingerprints.get(project);
+  // Early preview journals included null defaults from the new schema. Keep
+  // reading those exact fingerprints while new edits use the canonical form.
+  if (expected !== 'v2:' && current !== expected) for (const mode of compatibilityModes) { const alternate = fingerprintEntries(Object.entries(project).filter(([key]) => !IGNORED.has(key)), mode); if (alternate === expected) return alternate; }
+  return current;
 }
 function matchingFingerprint(value, expected) {
-  return String(expected).startsWith('v2:') ? structuralFingerprint(value) : historyFingerprint(proseMirrorJSON(value) ? value.toJSON() : value);
+  const current = String(expected).startsWith('v2:') ? structuralFingerprint(value) : historyFingerprint(proseMirrorJSON(value) ? value.toJSON() : value);
+  if (current !== expected) for (const mode of compatibilityModes) { const alternate = String(expected).startsWith('v2:') ? structuralFingerprint(value, mode) : historyFingerprint(proseMirrorJSON(value) ? value.toJSON() : value, mode); if (alternate === expected) return alternate; }
+  return current;
 }
 
 function validateEntry(entry) {
@@ -322,7 +334,7 @@ function projectPatches(before, after) {
   return patches;
 }
 
-export function recordProjectChange(journal, before, after, { label = 'Edit manuscript', chapterId = null, revertsEntryId = null, selectionBefore = null, selectionAfter = null } = {}) {
+export function recordProjectChange(journal, before, after, { label = 'Edit manuscript', chapterId = null, chapterIdAfter = null, revertsEntryId = null, selectionBefore = null, selectionAfter = null } = {}) {
   verifyCurrent(journal, before);
   if (after.id !== before.id || !Array.isArray(after.chapters) || !after.chapters.length || new Set(after.chapters.map(chapter => chapter.id)).size !== after.chapters.length) throw new HistoryMismatchError('A manuscript history entry must retain its identity and valid chapters.');
   const afterFingerprint = projectFingerprint(after);
@@ -330,6 +342,7 @@ export function recordProjectChange(journal, before, after, { label = 'Edit manu
   return appendEntry(journal, {
     id: id(), kind: 'project', timestamp: new Date().toISOString(), label: String(label).slice(0, 200), chapterId,
     chapterTitle: after.chapters.find(chapter => chapter.id === chapterId)?.title,
+    ...(chapterIdAfter && chapterIdAfter !== chapterId ? { chapterIdAfter } : {}),
     ...(selectionBefore ? { selectionBefore: clone(selectionBefore) } : {}),
     ...(selectionAfter ? { selectionAfter: clone(selectionAfter) } : {}),
     beforeFingerprint: journal.headFingerprint, afterFingerprint,
@@ -385,7 +398,7 @@ function applyEntry(project, entry, direction, schema) {
     next = applyPatches(project, entry.patches, direction);
     selection = clone(direction === 'undo' ? entry.selectionBefore : entry.selectionAfter);
     if (selection) {
-      try { const chapter = next.chapters.find(item => item.id === entry.chapterId); Selection.fromJSON(schema.nodeFromJSON(chapter.content), selection); }
+      try { const chapter = next.chapters.find(item => item.id === (direction === 'redo' ? entry.chapterIdAfter || entry.chapterId : entry.chapterId)); Selection.fromJSON(schema.nodeFromJSON(chapter.content), selection); }
       catch { selection = null; }
     }
   }
@@ -415,7 +428,8 @@ export function applyHistory(project, journal, direction, schema) {
     next = result.project; selection = result.selection; lastEntry = member;
   }
   next.historySequence = updated.sequence;
-  return { project: next, journal: updated, chapterId: next.chapters.some(chapter => chapter.id === lastEntry.chapterId) ? lastEntry.chapterId : next.chapters[0].id, selection, entry: lastEntry };
+  const chapterId = direction === 'redo' ? lastEntry.chapterIdAfter || lastEntry.chapterId : lastEntry.chapterId;
+  return { project: next, journal: updated, chapterId: next.chapters.some(chapter => chapter.id === chapterId) ? chapterId : next.chapters[0].id, selection, entry: lastEntry };
 }
 
 export function recoverHistoryProject(project, { events = [], recoverySequence = project.historySequence } = {}, schema) {

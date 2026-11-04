@@ -17,6 +17,10 @@ function registerSetup({ ipcMain, app, dialog, shell, win, draftConnection }) {
   ipcMain.handle('setup:cancel', () => { job?.abort(); return true; });
   ipcMain.handle('setup:install', async (_event, value) => {
     provider(value);
+    if (require('./distribution.cjs').isStore) {
+      await shell.openExternal(HELP[value]);
+      return { message: 'Install the helper using its official guide, then return to WRAITER and check your account.' };
+    }
     if (process.platform !== 'win32') throw new Error('Automatic installation is available on Windows. Open the official installation guide.');
     if (job) throw new Error('Another setup operation is running.');
     const controller = new AbortController(); job = controller;
@@ -36,7 +40,8 @@ function registerSetup({ ipcMain, app, dialog, shell, win, draftConnection }) {
     // The provider owns browser authentication and any one-time code entry.
     // A visible console is intentional for this interactive sign-in operation.
     const command = `& '${executable.replace(/'/g, "''")}' auth login; Read-Host 'You can close this window and return to WRAITER'`;
-    const child = spawn('powershell.exe', ['-NoProfile', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], { cwd: os.tmpdir(), env: require('./claude-bridge.cjs').environment(), windowsHide: false, detached: true, stdio: 'ignore' });
+    const storeBuild = require('./distribution.cjs').isStore;
+    const child = spawn(storeBuild ? executable : 'powershell.exe', storeBuild ? ['auth', 'login'] : ['-NoProfile', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')], { cwd: os.tmpdir(), env: require('./claude-bridge.cjs').environment(), windowsHide: false, detached: true, stdio: 'ignore' });
     await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); }); child.unref();
     return { message: 'Follow the sign-in window, then return here and check your account.' };
   });

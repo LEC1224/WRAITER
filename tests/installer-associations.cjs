@@ -23,7 +23,7 @@ const powershell = code => execFileSync('powershell.exe', ['-NoProfile', '-NonIn
     `!define WRAITER_CLASSES_KEY "${classes}"`, `!define WRAITER_CAPABILITIES_KEY "${capabilities}"`,
     `!define WRAITER_ASSOC_STATE_KEY "${state}"`, `!define WRAITER_REGISTERED_APPS_KEY "${registered}"`,
     'Name "WRAITER association test"', `OutFile "${nsisQuote(executable)}"`, `InstallDir "${nsisQuote(installDirectory)}"`,
-    'RequestExecutionLevel user', 'Var TestMode', 'Var TestUpdated',
+    'RequestExecutionLevel user', 'Var TestMode', 'Var TestUpdated', 'Var launchLink',
     '!macro _TestUpdated _a _b _t _f', '  StrCmp $TestUpdated "1" `${_t}` `${_f}`', '!macroend', '!define isUpdated \'"" TestUpdated ""\'',
     `!include "${nsisQuote(path.join(root, 'build', 'installer.nsh'))}"`,
     '!insertmacro customWelcomePage', '!insertmacro customPageAfterChangeDir', '!insertmacro MUI_PAGE_INSTFILES', '!insertmacro MUI_LANGUAGE "English"',

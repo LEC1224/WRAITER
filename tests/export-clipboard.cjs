@@ -11,7 +11,7 @@ const root = path.resolve(__dirname, '..');
     { id: 'second', title: 'Second', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Other chapter' }] }] } }
   ] };
   await fs.writeFile(path.join(userData, 'recovery.json'), JSON.stringify({ project: initial, path: null, expectedHash: null }));
-  await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ enabled: false, continuous: false }));
+  await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ setupComplete: true, tutorialComplete: true, enabled: false, continuous: false }));
   const env = { ...process.env, WRAITER_USER_DATA: userData }; delete env.ELECTRON_RUN_AS_NODE;
   let app;
   try {
@@ -47,7 +47,7 @@ const root = path.resolve(__dirname, '..');
     await open(); await select('Export format', 'discord'); await select('Export destination', 'clipboard');
     for (const format of ['docx', 'odt', 'epub', 'pdf']) {
       await select('Export format', format); assert.equal(await page.getByLabel('Export destination', { exact: true }).inputValue(), 'file');
-      assert.equal(await page.getByLabel('Export destination', { exact: true }).isDisabled(), true);
+      assert.equal(await page.getByLabel('Export destination', { exact: true }).isDisabled(), format !== 'pdf');
     }
     await select('Export format', 'discord');
     await app.evaluate(() => { global.failCopy = true; });
@@ -66,7 +66,7 @@ const root = path.resolve(__dirname, '..');
       console.log('Checking file ' + format);
       const target = path.join(userData, format);
       await app.evaluate((_electron, target) => { global.exportTarget = target; }, target);
-      await open(); await select('Export format', format); await page.getByRole('button', { name: 'Export', exact: true }).click(); await page.getByRole('dialog').waitFor({ state: 'hidden' });
+      await open(); await select('Export format', format); await select('Export scope', 'manuscript'); await select('Export destination', 'file'); await page.getByRole('button', { name: 'Export', exact: true }).click(); await page.getByRole('dialog').waitFor({ state: 'hidden' });
       const exported = await fs.readFile(target + (format === 'rich-text' ? '.html' : '.txt'), 'utf8');
       assert.ok(exported.includes('Bold passage')); assert.ok(exported.includes('Other chapter')); assert.ok(!exported.includes('PRIVATE NOTES'));
     }

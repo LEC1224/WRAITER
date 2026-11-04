@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog: electronDialog, Menu, safeStorage, shell, clipboard } = require('electron');
+const { Diagnostics, installDiagnostics } = require('./diagnostics.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
@@ -18,12 +19,19 @@ const { LocalModels } = require('./local-models.cjs');
 const { WorkspaceSession } = require('./workspace-session.cjs');
 const { documentArguments } = require('./file-open.cjs');
 const { runProofread, validateProofreadRequest } = require('./proofreading.cjs');
+const { validateInlineRequest, canReserveInline, cancelInline } = require('./inline-grammar.cjs');
+const { isStore } = require('./distribution.cjs');
 
 if (process.env.WRAITER_USER_DATA) app.setPath('userData', path.resolve(process.env.WRAITER_USER_DATA));
 app.setName('WRAITER');
 const pendingExternalFiles = documentArguments(process.argv, process.cwd(), process.defaultApp);
 const primaryInstance = app.requestSingleInstanceLock({ files: pendingExternalFiles });
 if (!primaryInstance) app.quit();
+const diagnostics = new Diagnostics(app.getPath('userData'));
+const { handle, dialog } = primaryInstance
+  ? installDiagnostics({ app, ipcMain, dialog: electronDialog, shell, log: diagnostics })
+  : { handle: ipcMain.handle.bind(ipcMain), dialog: electronDialog };
+if (primaryInstance) diagnostics.start({ version: app.getVersion(), electron: process.versions.electron, node: process.versions.node, platform: process.platform, arch: process.arch, osRelease: require('node:os').release() });
 let win, closing = false, closePending = false, closeFinishing = false, closeTimer, store, bootResult, gitHistory, fontList, referenceLibrary, documentFiles, editJournal, localModels, workspace, lastReferenceWarnings = '';
 let externalFilesReady = false;
 function notifyExternalFiles() {
@@ -48,6 +56,7 @@ let writeQueue = Promise.resolve();
 let checkpointLabelQueue = Promise.resolve();
 let checkpointFallbackQueue = Promise.resolve();
 let prefs = {};
+let reviewMenuState = { tracking: false, blocked: false };
 const activeRequests = new Map();
 let foregroundPending = 0;
 const cancelRequests = async (predicate = () => true) => {
@@ -61,7 +70,7 @@ async function reserveForegroundRequest(id, controller, busyMessage) {
   foregroundPending++;
   try {
     // Author-initiated writing assistance takes priority over a background label.
-    await cancelRequests(active => active.kind === 'checkpoint');
+    await cancelRequests(active => active.kind === 'checkpoint' || active.kind === 'inline-grammar');
     if (activeRequests.size) throw new Error(busyMessage);
     activeRequests.set(id, controller);
   } finally { foregroundPending--; }
@@ -102,16 +111,16 @@ function queueCheckpointLabel({ id, before, after, revision, label, automatic = 
       win?.webContents.send('command', 'git-history-updated');
     }
   });
-  checkpointLabelQueue = work.catch(error => console.error('Checkpoint label:', error.message));
+  checkpointLabelQueue = work.catch(error => diagnostics.error('checkpoint.label-failed', error));
 }
 const file = name => path.join(app.getPath('userData'), name);
 const serial = fn => { const result = writeQueue.then(async () => { try { return await fn(); } finally { await workspace?.checkpoint(); } }); writeQueue = result.catch(() => {}); return result; };
 function syncWorkspace() { store = workspace.active.store; documentFiles = workspace.active.files; }
-const tryRead = async (name, fallback) => { try { return JSON.parse(await fs.readFile(file(name), 'utf8')); } catch (e) { if (e.code !== 'ENOENT') console.error(`Could not load ${name}:`, e.message); return fallback; } };
+const tryRead = async (name, fallback) => { try { return JSON.parse(await fs.readFile(file(name), 'utf8')); } catch (e) { if (e.code !== 'ENOENT') diagnostics.error('preferences.read-failed', e); return fallback; } };
 function publicPrefs() {
   const { keys, ...rest } = prefs;
   const taskHasKey = Object.fromEntries(TASKS.map(task => [task, Boolean(keys?.[keySlot(resolveTask(prefs, task))])]));
-  return { ...defaults, ...rest, hasKey: taskHasKey.continue, taskHasKey };
+  return { ...defaults, ...rest, hasKey: taskHasKey.continue, taskHasKey, distribution: isStore ? 'microsoft-store' : 'direct' };
 }
 async function getKey(settings) {
   const encrypted = prefs.keys?.[keySlot(settings)];
@@ -121,13 +130,13 @@ async function getKey(settings) {
 async function rememberPath(target) {
   prefs.recent = [target, ...(prefs.recent || []).filter(x => !samePath(x, target))].slice(0, 12);
   // Opening has already committed its recovery. A preferences error must not leave the renderer on the preceding document.
-  await atomicWrite(file('settings.json'), JSON.stringify(prefs)).catch(error => console.error('Could not save recent documents:', error.message));
+  await atomicWrite(file('settings.json'), JSON.stringify(prefs)).catch(error => diagnostics.error('preferences.recents-save-failed', error));
   updateMenu();
 }
 async function openPath(target) {
   const result = await workspace.open(target); syncWorkspace();
   if (result.project) {
-    gitHistory.record(result.project, 'Opened manuscript').catch(error => console.error('Git history:', error.message));
+    gitHistory.record(result.project, 'Opened manuscript').catch(error => diagnostics.error('history.checkpoint-failed', error));
     if (result.recoveredPath) await rememberPath(result.recoveredPath);
     await rememberPath(target);
   }
@@ -143,7 +152,7 @@ async function persistDocument(project, payload, events, options) {
   return documentFiles.persist(project, payload, options);
 }
 function updateMenu() {
-  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys, prefs.recent, prefs)));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys, prefs.recent, prefs, reviewMenuState)));
 }
 function setDocumentLanguage(language) {
   const session = win.webContents.session;
@@ -199,7 +208,12 @@ app.whenReady().then(async () => {
   // Existing installations receive the tour without rerunning account setup.
   if (!Object.hasOwn(savedPrefs, 'setupComplete') && Object.keys(savedPrefs).some(key => key !== 'setupMode')) savedPrefs.setupComplete = true;
   try { prefs = { ...mergeSettings(defaults, savedPrefs), keys: savedPrefs.keys || {}, recent: savedPrefs.recent || [] }; }
-  catch (error) { console.error('Some preferences were invalid:', error.message); prefs = { ...defaults, keys: savedPrefs.keys || {}, recent: savedPrefs.recent || [] }; }
+  catch (error) {
+    diagnostics.error('preferences.invalid', error);
+    // A malformed unrelated preference must not re-enable log deletion.
+    prefs = { ...defaults, logCleanupEnabled: savedPrefs.logCleanupEnabled !== false, logRetentionMonths: Number.isInteger(savedPrefs.logRetentionMonths) && savedPrefs.logRetentionMonths >= 1 && savedPrefs.logRetentionMonths <= 24 ? savedPrefs.logRetentionMonths : 1, keys: savedPrefs.keys || {}, recent: savedPrefs.recent || [] };
+  }
+  await diagnostics.configure(prefs);
   // Keys in the original preview had no endpoint scope. Preserve the active connection only; never guess another key's destination.
   if (typeof prefs.keys?.[prefs.provider] === 'string') prefs.keys[keySlot(prefs)] = prefs.keys[prefs.provider];
   for (const provider of PROVIDERS) {
@@ -214,13 +228,14 @@ app.whenReady().then(async () => {
   localModels = new LocalModels(app.getPath('userData'), { notify: value => win?.webContents.send('local-progress', value) });
   providers.configureLocalModels(localModels);
   gitHistory = new GitHistory(app.getPath('userData'), { onCheckpoint: queueCheckpointLabel });
-  if (store.project) gitHistory.record(store.project, 'Recovered manuscript').catch(error => console.error('Git history:', error.message));
+  if (store.project) gitHistory.record(store.project, 'Recovered manuscript').catch(error => diagnostics.error('history.checkpoint-failed', error));
   updateMenu();
   createWindow();
-  require('./setup.cjs').registerSetup({ ipcMain, app, dialog, shell, win: () => win, draftConnection });
-  ipcMain.handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
-  ipcMain.handle('workspace:view', (_e, view) => serial(async () => { workspace.rememberView(view); return true; }));
-  ipcMain.handle('workspace:reload', (_e, project, events = []) => serial(async () => {
+  require('./setup.cjs').registerSetup({ ipcMain: { handle }, app, dialog, shell, win: () => win, draftConnection });
+  handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
+  handle('thesaurus:lookup', (_event, word, language) => require('./thesaurus.cjs').lookup(word, language));
+  handle('workspace:view', (_e, view) => serial(async () => { workspace.rememberView(view); return true; }));
+  handle('workspace:reload', (_e, project, events = []) => serial(async () => {
     await cancelAll();
     validateProject(project);
     if (store.project?.id !== project.id) throw new Error('This reload belongs to another document.');
@@ -229,7 +244,7 @@ app.whenReady().then(async () => {
     if (result.preservedPath) await rememberPath(result.preservedPath);
     return result;
   }));
-  ipcMain.handle('workspace:activate', (_e, id, cached = {}) => serial(async () => {
+  handle('workspace:activate', (_e, id, cached = {}) => serial(async () => {
     await cancelForegroundRequests(); const result = await workspace.activate(id); syncWorkspace();
     // A renderer may retain a bounded warm copy. If its manuscript identity and
     // durable journal position match, avoid cloning the complete novel through
@@ -237,18 +252,18 @@ app.whenReady().then(async () => {
     const warmMatch = cached && typeof cached === 'object' && typeof cached.projectId === 'string' && cached.projectId === result.project?.id && cached.historySequence === result.project?.historySequence;
     return warmMatch ? { ...result, project: null, cachedProject: true } : result;
   }));
-  ipcMain.handle('workspace:close', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.close(id); syncWorkspace(); if (result.archivedPath) await rememberPath(result.archivedPath); return result; }));
-  ipcMain.handle('workspace:reorder', (_e, ids) => serial(() => workspace.reorder(ids)));
-  ipcMain.handle('drop:open', (_e, target) => serial(() => openPath(droppedPath(target))));
-  ipcMain.handle('drop:reference', (_e, target) => referenceLibrary.addFiles([droppedPath(target, true)]));
-  ipcMain.handle('link:open', (_e, href) => shell.openExternal(externalLink(href)));
-  ipcMain.handle('recent:list', () => [...(prefs.recent || [])]);
-  ipcMain.handle('recent:clear', () => serial(async () => { const next = { ...prefs, recent: [] }; await atomicWrite(file('settings.json'), JSON.stringify(next)); prefs = next; updateMenu(); return []; }));
-  ipcMain.handle('autosave', (_e, project, payload, events) => serial(async () => { const result = await persistDocument(project, payload, events); gitHistory.schedule(project); return result; }));
-  ipcMain.handle('chat:persist', (_e, projectId, chat) => serial(() => workspace.persistChat(projectId, chat)));
-  ipcMain.handle('history:load', (_e, projectId) => serial(() => editJournal.read(projectId)));
-  ipcMain.handle('history:append', (_e, projectId, events) => serial(() => editJournal.append(projectId, events)));
-  ipcMain.handle('history:restart', (_e, project, initial, reason) => serial(async () => {
+  handle('workspace:close', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.close(id); syncWorkspace(); if (result.archivedPath) await rememberPath(result.archivedPath); return result; }));
+  handle('workspace:reorder', (_e, ids) => serial(() => workspace.reorder(ids)));
+  handle('drop:open', (_e, target) => serial(() => openPath(droppedPath(target))));
+  handle('drop:reference', (_e, target) => referenceLibrary.addFiles([droppedPath(target, true)]));
+  handle('link:open', (_e, href) => shell.openExternal(externalLink(href)));
+  handle('recent:list', () => [...(prefs.recent || [])]);
+  handle('recent:clear', () => serial(async () => { const next = { ...prefs, recent: [] }; await atomicWrite(file('settings.json'), JSON.stringify(next)); prefs = next; updateMenu(); return []; }));
+  handle('autosave', (_e, project, payload, events) => serial(async () => { const result = await persistDocument(project, payload, events); gitHistory.schedule(project); return result; }));
+  handle('chat:persist', (_e, projectId, chat) => serial(() => workspace.persistChat(projectId, chat)));
+  handle('history:load', (_e, projectId) => serial(() => editJournal.read(projectId)));
+  handle('history:append', (_e, projectId, events) => serial(() => editJournal.append(projectId, events)));
+  handle('history:restart', (_e, project, initial, reason) => serial(async () => {
     validateProject(project);
     if (store.project && store.project.id !== project.id) throw new Error('This history belongs to another document.');
     const result = await editJournal.restart(project, initial, String(reason || '').slice(0, 2000));
@@ -256,8 +271,8 @@ app.whenReady().then(async () => {
     await documentFiles.saveSidecar(store.project);
     return result;
   }));
-  ipcMain.handle('native:bind', (_e, project, source) => serial(async () => { const result = await workspace.bind(project, source); syncWorkspace(); if (result.preservedPath) await rememberPath(result.preservedPath); await rememberPath(result.path); return result; }));
-  ipcMain.handle('save:choose', async (_e, { title, format = documentFiles.binding?.format || 'wraiter', copy = true } = {}) => {
+  handle('native:bind', (_e, project, source) => serial(async () => { const result = await workspace.bind(project, source); syncWorkspace(); if (result.preservedPath) await rememberPath(result.preservedPath); await rememberPath(result.path); return result; }));
+  handle('save:choose', async (_e, { title, format = documentFiles.binding?.format || 'wraiter', copy = true } = {}) => {
     if (typeof title !== 'string' || title.length > 2000 || !FORMATS.includes(format)) throw new Error('Invalid save format.');
     const filters = [format, ...FORMATS.filter(item => item !== format)].map(item => ({ name: ({ wraiter: 'WRAITER manuscript', odt: 'OpenDocument Text', docx: 'Word document', txt: 'Plain text', md: 'Markdown', html: 'HTML document' })[item], extensions: [item] }));
     const chosen = await dialog.showSaveDialog(win, { title: copy ? 'Save as' : 'Save document', defaultPath: `${safeFilename(title)}.${format}`, filters });
@@ -266,7 +281,7 @@ app.whenReady().then(async () => {
     workspace.assertSaveTarget(target);
     return documentFiles.authorizeTarget(target);
   });
-  ipcMain.handle('save:encoded', (_e, project, payload, options = {}, events = []) => serial(async () => {
+  handle('save:encoded', (_e, project, payload, options = {}, events = []) => serial(async () => {
     const warnings = documentFiles.reviewWarnings(project, payload, options);
     if (warnings.length) {
       const details = warnings.join('\n');
@@ -279,14 +294,14 @@ app.whenReady().then(async () => {
     if (result.path) await rememberPath(result.path);
     await gitHistory.record(project, 'Saved document'); return result;
   }));
-  ipcMain.handle('new-project', (_e, project) => serial(async () => {
+  handle('new-project', (_e, project) => serial(async () => {
     validateProject(project);
     const result = await workspace.create(project); syncWorkspace();
-    gitHistory.record(project, 'New manuscript').catch(error => console.error('Git history:', error.message));
+    gitHistory.record(project, 'New manuscript').catch(error => diagnostics.error('history.checkpoint-failed', error));
     if (result.recoveredPath) await rememberPath(result.recoveredPath);
     return result;
   }));
-  ipcMain.handle('save', (_e, project, copy = false) => serial(async () => {
+  handle('save', (_e, project, copy = false) => serial(async () => {
     validateProject(project);
     let target = store.currentPath;
     if (!target || copy) {
@@ -303,37 +318,37 @@ app.whenReady().then(async () => {
     try { await gitHistory.record(project, copy ? 'Saved a copy' : 'Saved manuscript'); } catch (error) { result.gitWarning = error.message; }
     return result;
   }));
-  ipcMain.handle('open', () => serial(async () => {
+  handle('open', () => serial(async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Open document', properties: ['openFile'], filters: [{ name: 'Writing documents', extensions: ['odt', 'docx', 'wraiter', 'txt', 'md', 'markdown', 'html', 'htm'] }] });
     if (result.canceled) return null;
     return openPath(result.filePaths[0]);
   }));
-  ipcMain.handle('open-recent', (_e, target) => { if (!(prefs.recent || []).includes(target)) throw new Error('This document is not in the recent list.'); return serial(() => openPath(target)); });
+  handle('open-recent', (_e, target) => { if (!(prefs.recent || []).includes(target)) throw new Error('This document is not in the recent list.'); return serial(() => openPath(target)); });
   // Keep shell requests queued until the renderer can save its current edits.
   // Only OS-supplied paths in this queue are authorized by this IPC endpoint.
-  ipcMain.handle('external-files:ready', () => { externalFilesReady = true; notifyExternalFiles(); return true; });
-  ipcMain.handle('external-files:next', () => pendingExternalFiles[0] || null);
-  ipcMain.handle('external-files:open', (_e, target) => serial(async () => {
+  handle('external-files:ready', () => { externalFilesReady = true; notifyExternalFiles(); return true; });
+  handle('external-files:next', () => pendingExternalFiles[0] || null);
+  handle('external-files:open', (_e, target) => serial(async () => {
     if (typeof target !== 'string' || target !== pendingExternalFiles[0]) throw new Error('This file was not requested by Windows.');
     return openPath(target);
   }));
-  ipcMain.handle('external-files:complete', (_e, target) => {
+  handle('external-files:complete', (_e, target) => {
     if (target !== pendingExternalFiles[0]) throw new Error('This file is no longer pending.');
     pendingExternalFiles.shift(); return true;
   });
-  ipcMain.handle('reference', async () => {
+  handle('reference', async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Add reference material', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Text references', extensions: ['txt', 'md'] }] });
     if (result.canceled) return [];
     return referenceLibrary.addFiles(result.filePaths);
   });
-  ipcMain.handle('image', async () => {
+  handle('image', async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Insert an image', properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] });
     if (result.canceled) return null;
     const target = result.filePaths[0];
     const mime = path.extname(target).slice(1).toLowerCase().replace(/^jpg$/, 'jpeg');
     return `data:image/${mime};base64,${(await readLimited(target, 10 * 1024 * 1024)).toString('base64')}`;
   });
-  ipcMain.handle('settings', async (_e, update) => serial(async () => {
+  handle('settings', async (_e, update) => serial(async () => {
     validateSettings(update);
     const { apiKey, clearKey } = update;
     const next = { ...mergeSettings(prefs, update), keys: { ...prefs.keys } };
@@ -344,12 +359,16 @@ app.whenReady().then(async () => {
       next.keys[keySlot(keySettings)] = safeStorage.encryptString(apiKey.trim()).toString('base64');
     }
     await atomicWrite(file('settings.json'), JSON.stringify(next));
+    diagnostics.settingsChanged(prefs, next);
+    const cleanupChanged = prefs.logCleanupEnabled !== next.logCleanupEnabled || prefs.logRetentionMonths !== next.logRetentionMonths;
     prefs = next;
+    if (cleanupChanged) await diagnostics.configure(prefs);
+    if (!prefs.enabled || !prefs.aiGrammar) await cancelRequests(active => active.kind === 'inline-grammar');
     if (['hotkeys', 'spellcheck', 'showRowNumbers', 'showPageNumbers', 'showParagraphNumbers'].some(key => key in update)) updateMenu();
     if ('language' in update) setDocumentLanguage(store.project?.language || prefs.language);
     return publicPrefs();
   }));
-  ipcMain.handle('generate', async (_e, request) => {
+  handle('generate', async (_e, request) => {
     if (!prefs.enabled) throw new Error('Enable writing assistance in Connections first.');
     request = validateRequest(request);
     const settings = resolveTask(prefs, request.mode);
@@ -365,12 +384,14 @@ app.whenReady().then(async () => {
       const warnings = refreshed.warnings.join(' ');
       if (warnings && warnings !== lastReferenceWarnings) win?.webContents.send('command', `reference-warning:${warnings}`);
       lastReferenceWarnings = warnings;
-      return await providers.generate(settings, await getKey(settings), { ...request, references: refreshed.references }, controller.signal);
+      return await providers.generate(settings, await getKey(settings), { ...request, references: refreshed.references }, controller.signal, undefined, message => {
+        if (!controller.signal.aborted && activeRequests.get(request.id) === controller) win?.webContents.send('command', `continuation-notice:${JSON.stringify({ requestId: request.id, message })}`);
+      });
     }
     catch (error) { throw new Error(controller.signal.aborted ? 'Request cancelled or timed out.' : error.message); }
     finally { clearTimeout(timeout); if (activeRequests.get(request.id) === controller) activeRequests.delete(request.id); finished(); }
   });
-  ipcMain.handle('proofread:run', async (_event, request) => {
+  handle('proofread:run', async (_event, request) => {
     if (!prefs.enabled) throw new Error('Enable an AI connection before proofreading.');
     request = validateProofreadRequest(request);
     if (store.project && store.project.id !== request.projectId) throw new Error('The requested document is no longer open.');
@@ -382,8 +403,30 @@ app.whenReady().then(async () => {
     catch (error) { throw new Error(controller.signal.aborted ? 'Proofreading stopped or timed out.' : error.message); }
     finally { clearTimeout(timeout); if (activeRequests.get(request.id) === controller) activeRequests.delete(request.id); finished(); }
   });
-  ipcMain.handle('cancel', cancelAll);
-  ipcMain.handle('agent:run', async (_event, request) => {
+  handle('proofread:inline', async (_event, incoming) => {
+    if (!prefs.enabled || !prefs.aiGrammar) return { skipped: true };
+    const request = validateInlineRequest(incoming);
+    if (store.project && store.project.id !== request.projectId) return { skipped: true };
+    // No await between the idle check and reservation: foreground requests set
+    // their pending flag before they yield, closing the check/reserve race.
+    if (!canReserveInline(activeRequests, foregroundPending)) return { skipped: true };
+    const settings = resolveTask(prefs, 'proofread'), controller = new AbortController();
+    controller.kind = 'inline-grammar';
+    let finished; controller.finished = new Promise(resolve => { finished = resolve; });
+    activeRequests.set(request.id, controller);
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 60000);
+    try {
+      return await runProofread(providers, settings, await getKey(settings), request, controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted && !timedOut) return { skipped: true };
+      if (timedOut) throw new Error('AI grammar check timed out. Try a faster proofreading model.');
+      throw new Error(error.message);
+    } finally { clearTimeout(timeout); if (activeRequests.get(request.id) === controller) activeRequests.delete(request.id); finished(); }
+  });
+  handle('proofread:cancel-inline', (_event, id) => cancelInline(activeRequests, id));
+  handle('cancel', cancelAll);
+  handle('agent:run', async (_event, request) => {
     if (!prefs.enabled) throw new Error('Enable AI writing assistance first.');
     if (!request || typeof request.instruction !== 'string' || !request.instruction.trim() || request.instruction.length > 16000) throw new Error('Enter a writing request.');
     validateProject(request.project);
@@ -400,24 +443,24 @@ app.whenReady().then(async () => {
     } catch (error) { throw new Error(controller.signal.aborted ? 'Assistant stopped. No pending edits were applied.' : error.message); }
     finally { clearTimeout(timeout); if (activeRequests.get(id) === controller) activeRequests.delete(id); finished(); }
   });
-  ipcMain.handle('probe', (_e, draft) => providerProbe(draft));
-  ipcMain.handle('provider:models', (_e, draft) => providerProbe(draft));
-  ipcMain.handle('provider:connect', async (_e, task = 'continue') => {
+  handle('probe', (_e, draft) => providerProbe(draft));
+  handle('provider:models', (_e, draft) => providerProbe(draft));
+  handle('provider:connect', async (_e, task = 'continue') => {
     const settings = draftConnection(task);
     const key = typeof task === 'object' && task.apiKey?.trim() || (task.clearKey ? '' : await getKey(settings));
     return providers.connect(settings, key);
   });
-  ipcMain.handle('provider:status', async (_e, task = 'continue') => {
+  handle('provider:status', async (_e, task = 'continue') => {
     const settings = draftConnection(task);
     return settings.provider === 'codex' ? providers.connectionStatus(settings) : providerProbe(task);
   });
-  ipcMain.handle('provider:reconnect', async (_e, task = 'continue') => {
+  handle('provider:reconnect', async (_e, task = 'continue') => {
     if (activeRequests.size) throw new Error('Finish or cancel the current AI request before reconnecting.');
     const settings = draftConnection(task);
     if (settings.provider === 'codex') await providers.disconnect?.();
     return providers.connect(settings, typeof task === 'object' && task.apiKey?.trim() || (task.clearKey ? '' : await getKey(settings)));
   });
-  ipcMain.handle('provider:login', async (_e, task = 'continue') => {
+  handle('provider:login', async (_e, task = 'continue') => {
     const settings = draftConnection(task);
     if (settings.provider !== 'codex') throw new Error('This connection uses an API key or a local server.');
     const result = await providers.login(settings);
@@ -428,12 +471,12 @@ app.whenReady().then(async () => {
     }
     return result;
   });
-  ipcMain.handle('fonts:list', () => fontList ||= listFonts());
+  handle('fonts:list', () => fontList ||= listFonts());
   const localIdle = () => { if (activeRequests.size) throw new Error('Finish or cancel the current AI request before changing local models.'); };
   const ggufFiles = new Map();
-  ipcMain.handle('local:status', () => localModels.status());
-  ipcMain.handle('local:configure', (_event, update) => { localIdle(); if (update?.modelDirectory !== undefined) throw new Error('Use the model folder chooser.'); return localModels.configure(update); });
-  ipcMain.handle('local:folder', async (_event, location) => {
+  handle('local:status', () => localModels.status());
+  handle('local:configure', (_event, update) => { localIdle(); if (update?.modelDirectory !== undefined) throw new Error('Use the model folder chooser.'); return localModels.configure(update); });
+  handle('local:folder', async (_event, location) => {
     localIdle(); await localModels.init(); let directory;
     if (location === 'detected') directory = '';
     else if (location === 'wraiter') directory = path.join(localModels.root, 'models');
@@ -441,32 +484,32 @@ app.whenReady().then(async () => {
     else throw new Error('Choose a model folder source.');
     return localModels.configure({ modelDirectory: directory });
   });
-  ipcMain.handle('local:start', async () => { localIdle(); await localModels.start(); return localModels.status(); });
-  ipcMain.handle('local:stop', async () => { localIdle(); if (localModels.job) throw new Error('Cancel the local-model operation first.'); await localModels.stop(); return localModels.status(); });
-  ipcMain.handle('local:unload', (_event, name) => { localIdle(); return localModels.unload(name); });
-  ipcMain.handle('local:release', (_event, flavor) => localModels.runtimeRelease(flavor));
-  ipcMain.handle('local:install', (_event, flavor) => { localIdle(); return localModels.install(flavor); });
-  ipcMain.handle('local:cancel', () => localModels.cancel());
-  ipcMain.handle('local:catalog-info', (_event, name) => localModels.catalogInfo(name));
-  ipcMain.handle('local:pull', (_event, name) => { localIdle(); return localModels.pull(name); });
-  ipcMain.handle('local:choose-gguf', async () => {
+  handle('local:start', async () => { localIdle(); await localModels.start(); return localModels.status(); });
+  handle('local:stop', async () => { localIdle(); if (localModels.job) throw new Error('Cancel the local-model operation first.'); await localModels.stop(); return localModels.status(); });
+  handle('local:unload', (_event, name) => { localIdle(); return localModels.unload(name); });
+  handle('local:release', (_event, flavor) => localModels.runtimeRelease(flavor));
+  handle('local:install', (_event, flavor) => { localIdle(); return localModels.install(flavor); });
+  handle('local:cancel', () => localModels.cancel());
+  handle('local:catalog-info', (_event, name) => localModels.catalogInfo(name));
+  handle('local:pull', (_event, name) => { localIdle(); return localModels.pull(name); });
+  handle('local:choose-gguf', async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Add a GGUF model', properties: ['openFile'], filters: [{ name: 'GGUF model', extensions: ['gguf'] }] });
     if (result.canceled) return null;
     const source = await localModels.inspectGGUF(result.filePaths[0]), token = require('node:crypto').randomUUID();
     ggufFiles.clear(); ggufFiles.set(token, source.path); return { token, name: source.name, bytes: source.bytes };
   });
-  ipcMain.handle('local:import', (_event, token, name) => { localIdle(); const file = ggufFiles.get(token); if (!file) throw new Error('Choose the GGUF file again.'); return localModels.importGGUF(file, name); });
-  ipcMain.handle('shortcuts:capture', (_event, capturing) => { win?.webContents.setIgnoreMenuShortcuts(capturing === true); return true; });
-  ipcMain.handle('document:language', (_e, language) => setDocumentLanguage(language));
-  ipcMain.handle('git:list', () => store.project ? gitHistory.list(store.project.id) : { available: true, entries: [] });
-  ipcMain.handle('git:revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.revision(store.project.id, revision); });
-  ipcMain.handle('git:activate-revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.activateRevision(store.project.id, revision); });
-  ipcMain.handle('git:label', (_e, revision, metadata) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.updateLabel(store.project.id, revision, metadata); });
-  ipcMain.handle('checkpoint:summarize', (_e, payload) => {
+  handle('local:import', (_event, token, name) => { localIdle(); const file = ggufFiles.get(token); if (!file) throw new Error('Choose the GGUF file again.'); return localModels.importGGUF(file, name); });
+  handle('shortcuts:capture', (_event, capturing) => { win?.webContents.setIgnoreMenuShortcuts(capturing === true); return true; });
+  handle('document:language', (_e, language) => setDocumentLanguage(language));
+  handle('git:list', () => store.project ? gitHistory.list(store.project.id) : { available: true, entries: [] });
+  handle('git:revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.revision(store.project.id, revision); });
+  handle('git:activate-revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.activateRevision(store.project.id, revision); });
+  handle('git:label', (_e, revision, metadata) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.updateLabel(store.project.id, revision, metadata); });
+  handle('checkpoint:summarize', (_e, payload) => {
     if (!store.project || payload?.after?.id !== store.project.id) throw new Error('The requested manuscript is no longer open.');
     return describeCheckpoint(payload);
   });
-  ipcMain.handle('git:snapshot', async (_e, project, label) => {
+  handle('git:snapshot', async (_e, project, label) => {
     const result = await serial(async () => {
       await persistDocument(project);
       return gitHistory.record(project, label || 'Manual checkpoint', true);
@@ -474,11 +517,11 @@ app.whenReady().then(async () => {
     if (result.committed) queueCheckpointLabel({ id: project.id, before: result.before, after: project, revision: result.revision, label: label || 'Manual checkpoint' });
     return result;
   });
-  ipcMain.handle('choose-codex', async () => {
+  handle('choose-codex', async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Choose codex.exe', properties: ['openFile'], filters: [{ name: 'Codex executable', extensions: ['exe'] }] });
     return result.canceled ? null : result.filePaths[0];
   });
-  ipcMain.handle('export:clipboard', (_e, payload) => {
+  handle('export:clipboard', (_e, payload) => {
     if (!payload || !['txt', 'md', 'html', 'bbcode', 'discord', 'telegram-md', 'telegram-html', 'rich-text'].includes(payload.format)) throw new Error('This format cannot be exported to clipboard.');
     const validText = value => typeof value === 'string' && Buffer.byteLength(value) <= 100 * 1024 * 1024;
     if (!validText(payload.data)) throw new Error('Invalid or oversized clipboard content.');
@@ -488,7 +531,38 @@ app.whenReady().then(async () => {
     } else clipboard.writeText(payload.data);
     return true;
   });
-  ipcMain.handle('export', async (_e, payload) => {
+  handle('export:preview-pdf', async (_e, payload) => {
+    if (!payload || payload.format !== 'pdf' || typeof payload.html !== 'string' || Buffer.byteLength(payload.html) > 100 * 1024 * 1024) throw new Error('Invalid or oversized preview content.');
+    const directory = await fs.mkdtemp(path.join(app.getPath('temp'), 'wraiter-preview-'));
+    const source = path.join(directory, 'document.html'), pdfPath = path.join(directory, 'preview.pdf');
+    const sourceURL = pathToFileURL(source).href;
+    let renderer, viewer, retained = false;
+    try {
+      await fs.writeFile(source, payload.html, 'utf8');
+      renderer = new BrowserWindow({ show: false, webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true, javascript: false, partition: path.basename(directory) } });
+      renderer.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+      renderer.webContents.session.webRequest.onBeforeRequest((details, callback) => callback({ cancel: !(details.url.startsWith('data:') || (details.resourceType === 'mainFrame' && details.url === sourceURL)) }));
+      await renderer.loadFile(source);
+      const pdf = await renderer.webContents.printToPDF({ printBackground: true, pageSize: 'A4', margins: { top: 0, bottom: 0, left: 0, right: 0 }, displayHeaderFooter: false, preferCSSPageSize: true });
+      await fs.writeFile(pdfPath, pdf);
+      await fs.rm(source, { force: true });
+      renderer.destroy(); renderer = null;
+      viewer = new BrowserWindow({ show: false, width: 1000, height: 800, title: 'Print preview', webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true, plugins: true } });
+      viewer.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+      await viewer.loadFile(pdfPath);
+      viewer.on('closed', () => { fs.rm(directory, { recursive: true, force: true }).catch(() => {}); });
+      retained = true;
+      viewer.show();
+      return true;
+    } finally {
+      if (renderer && !renderer.isDestroyed()) renderer.destroy();
+      if (!retained) {
+        if (viewer && !viewer.isDestroyed()) viewer.destroy();
+        await fs.rm(directory, { recursive: true, force: true });
+      }
+    }
+  });
+  handle('export', async (_e, payload) => {
     if (!payload || typeof payload !== 'object') throw new Error('Invalid export.');
     const { format, title, data, html } = payload;
     if (!['txt', 'md', 'html', 'pdf', 'docx', 'odt', 'epub', 'bbcode', 'discord', 'telegram-md', 'telegram-html', 'rich-text'].includes(format)) throw new Error('Unsupported export.');
@@ -521,8 +595,8 @@ app.whenReady().then(async () => {
     } else await atomicWrite(target, binary ? Buffer.from(data) : String(data));
     return target;
   });
-  ipcMain.handle('reveal', () => { if (store.currentPath) shell.showItemInFolder(store.currentPath); });
-  ipcMain.handle('finish-close', async (_e, project, payload, events) => {
+  handle('reveal', () => { if (store.currentPath) shell.showItemInFolder(store.currentPath); });
+  handle('finish-close', async (_e, project, payload, events) => {
     if (closing) return true;
     if (closeFinishing) return false;
     closeFinishing = true; clearTimeout(closeTimer);
@@ -537,6 +611,7 @@ app.whenReady().then(async () => {
     await providers.shutdown?.();
     closing = true; win?.close(); return true;
   });
+  ipcMain.on('review:state', (_event, state) => { if (typeof state?.tracking === 'boolean' && typeof state?.blocked === 'boolean' && (state.tracking !== reviewMenuState.tracking || state.blocked !== reviewMenuState.blocked)) { reviewMenuState = { tracking: state.tracking, blocked: state.blocked }; updateMenu(); } });
   ipcMain.on('window', (_e, action) => { if (action === 'minimize') win.minimize(); else if (action === 'maximize') win.isMaximized() ? win.unmaximize() : win.maximize(); else if (action === 'close') win.close(); });
 });
 app.on('window-all-closed', () => app.quit());

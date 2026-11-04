@@ -6,6 +6,7 @@ const fs = require('node:fs/promises');
 const { CodexBridge, serverArgs } = require('../electron/codex-bridge.cjs');
 const { generate, ollamaContextWindow, outputLimit } = require('../electron/providers.cjs');
 const { isLocalOllama } = require('../electron/ollama-service.cjs');
+const { estimateTokens } = require('../electron/continuation-context.cjs');
 
 async function bridge(t) {
   const client = await new CodexBridge(process.execPath, { args: [path.join(__dirname, 'codex-server.fixture.cjs')] }).start();
@@ -112,6 +113,147 @@ test('Ollama never retries missing models or invalid credentials through a diffe
   const api = await server(t, () => ({ status: 404, data: { error: 'model requested-model not found' } }));
   await assert.rejects(generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'missing', ollamaMode: 'auto' }, '', { mode: 'continue', before: 'synthetic', words: 5 }, new AbortController().signal), /not found/);
   assert.equal(api.seen.length, 1);
+});
+
+test('local continuation retries command echoes once with stricter instructions and keeps the word cap', async t => {
+  const api = await server(t, (_record, count) => ({ data: { message: { content: JSON.stringify({ completion: count === 1 ? 'complete' : 'She turned the key and waited.' }) } } }));
+  const settings = { provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-story', ollamaMode: 'auto', temperature: 0.8 };
+  assert.equal(await generate(settings, '', { mode: 'continue', before: 'A lock clicked.', words: 4, language: 'en-US' }), 'She turned the key');
+  assert.equal(api.seen.length, 2);
+  assert.deepEqual(api.seen.map(item => item.url), ['/api/chat', '/api/chat']);
+  assert.match(api.seen[1].body.messages[0].content, /Required output: new manuscript prose/);
+  assert.ok(api.seen[1].body.options.temperature <= 0.35);
+  assert.equal(api.seen[1].body.messages[1].content, api.seen[0].body.messages[1].content);
+});
+
+test('local continuation removes trailing technique commentary before preview without another generation', async t => {
+  const api = await server(t, () => ({ data: { message: { content: JSON.stringify({ completion: '“Come in,” Mara said. TECHNIQUE: This passage uses dialogue to build tension.' }) } } }));
+  assert.equal(await generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-story', ollamaMode: 'guided' }, '', { mode: 'continue', before: 'Someone knocked.', words: 35 }), '“Come in,” Mara said.');
+  assert.equal(api.seen.length, 1);
+});
+
+test('unusable local continuations fail after one retry without poisoning Auto structured support', async t => {
+  const api = await server(t, (_record, count) => ({ data: { message: { content: count <= 2 ? '{broken' : JSON.stringify({ completion: 'A light flickered behind the glass.' }) } } }));
+  const settings = { provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-story', ollamaMode: 'auto' };
+  await assert.rejects(generate(settings, '', { mode: 'continue', before: 'Mara waited.', words: 10 }), /usable story continuation after two attempts/);
+  assert.equal(api.seen.length, 2);
+  assert.equal(await generate(settings, '', { mode: 'continue', before: 'Mara waited.', words: 10 }), 'A light flickered behind the glass.');
+  assert.ok(api.seen.every(item => item.url === '/api/chat'));
+});
+
+test('reasoning-only, empty, and repeated context responses never become a local suggestion', async t => {
+  for (const completion of ['complete', '<think>private planning</think>', '', 'The brass door remained shut.']) {
+    const api = await server(t, () => ({ data: { message: { content: JSON.stringify({ completion }) } } }));
+    await assert.rejects(generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-story', ollamaMode: 'guided' }, '', { mode: 'continue', before: 'The brass door remained shut.', words: 20 }), /usable story continuation after two attempts/);
+    assert.equal(api.seen.length, 2);
+  }
+});
+
+test('cancellation during a retry stops the local continuation without a third call', async t => {
+  const controller = new AbortController();
+  const api = await server(t, (_record, count) => {
+    if (count === 2) controller.abort();
+    return { data: { message: { content: JSON.stringify({ completion: 'complete' }) } } };
+  });
+  await assert.rejects(generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-story', ollamaMode: 'auto' }, '', { mode: 'continue', before: 'Mara waited.' }, controller.signal), /abort|cancel/i);
+  assert.equal(api.seen.length, 2);
+});
+
+test('Raw continuation uses bounded manuscript prose despite document language, without unsafe phrase stops', async t => {
+  const api = await server(t, () => ({ data: { response: '“I need to find the user,” she said.' } }));
+  const before = 'old '.repeat(200) + 'Mara opened the door.';
+  const request = { mode: 'continue', before, after: 'FORBIDDEN_SUFFIX', words: 20, contextWords: 50, language: 'en-US' };
+  assert.equal(await generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-raw', ollamaMode: 'raw' }, '', request), '“I need to find the user,” she said.');
+  const body = api.seen[0].body;
+  assert.ok(body.prompt.length < before.length);
+  assert.ok(body.prompt.endsWith('Mara opened the door.'));
+  assert.doesNotMatch(body.prompt, /Continuation:|FORBIDDEN_SUFFIX|You are/);
+  assert.ok(body.options.stop.every(stop => !/I need to|The user|Hmm|Okay/.test(stop)));
+});
+
+test('Raw continuation with references, voice, and rejected history ends on the live scene', async t => {
+  const api = await server(t, () => ({ data: { response: 'The lantern guttered.' } }));
+  await generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-raw', ollamaMode: 'raw' }, '', { mode: 'continue', before: 'Mara waited at the door.', style: 'Use spare prose.', references: [{ name: 'Canon', text: 'The key is brass.' }], history: ['She ran away.'], words: 20 });
+  const prompt = api.seen[0].body.prompt;
+  assert.match(prompt, /Use spare prose/); assert.match(prompt, /The key is brass/); assert.match(prompt, /She ran away/);
+  assert.ok(prompt.endsWith('TEXT BEFORE CURSOR:\nMara waited at the door.'));
+});
+
+test('continuation validation also protects compatible providers without automatically spending extra requests', async t => {
+  const api = await server(t, () => ({ data: { choices: [{ message: { content: 'complete' } }] } }));
+  await assert.rejects(generate({ provider: 'compatible', baseUrl: api.baseUrl, model: 'synthetic' }, '', { mode: 'continue', before: 'Mara waited.' }), /continuation/i);
+  assert.equal(api.seen.length, 1);
+});
+
+test('local context fitting respects the advertised model window and warns without changing source data', async t => {
+  const api = await server(t, record => record.url === '/api/show' ? { data: { model_info: { 'general.architecture': 'synthetic', 'synthetic.context_length': 4096 } } } : { data: { message: { content: JSON.stringify({ completion: 'A bell sounded across the water.' }) } } });
+  const request = { mode: 'continue', before: 'Earlier chapters describe the long road home. '.repeat(450) + 'Mara paused beside the river.', words: 20, contextWords: 16000, style: 'Use quiet, concrete prose.', references: [{ name: 'World', text: 'The northern river freezes in winter. '.repeat(1000) }], history: [] };
+  const snapshot = structuredClone(request), notices = [];
+  const settings = { provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-context', ollamaMode: 'guided', localContextLength: 32768, tokenCap: 256 };
+  assert.equal(await generate(settings, '', request, undefined, undefined, notice => notices.push(notice)), 'A bell sounded across the water.');
+  const chat = api.seen.find(record => record.url === '/api/chat').body;
+  assert.equal(chat.options.num_ctx, 4096);
+  assert.ok(estimateTokens(chat.messages.map(item => item.content).join('\n\n')) + 32 + 256 + 512 <= 4096);
+  assert.ok(chat.messages[1].content.endsWith('Mara paused beside the river.'));
+  assert.match(chat.messages[0].content, /Use quiet, concrete prose/);
+  assert.ok(notices.some(notice => /Reference material/.test(notice)));
+  assert.ok(notices.some(notice => /Older story text/.test(notice)));
+  assert.deepEqual(request, snapshot);
+  assert.equal(settings.localContextLength, 32768);
+  await generate(settings, '', request);
+  assert.equal(api.seen.filter(record => record.url === '/api/show').length, 1, 'Model metadata is reused without caching a smaller author preference.');
+});
+
+test('an echoed passage retries with less of the context actually sent, preserving the current scene', async t => {
+  let generations = 0;
+  const tail = 'Mara held the brass key toward Rowan and waited for him to speak.';
+  const api = await server(t, record => record.url === '/api/show' ? { data: { model_info: { 'general.architecture': 'synthetic', 'synthetic.context_length': 4096 } } } : { data: { message: { content: JSON.stringify({ completion: ++generations === 1 ? tail.toUpperCase().replace('.', '!') : 'He took it carefully and opened the gate.' }) } } });
+  const request = { mode: 'continue', before: 'Earlier, the travelers had followed a long winding road. '.repeat(500) + tail, contextWords: 16000, words: 20, references: [{ name: 'World', text: 'Background about the river and the road. '.repeat(700) }] };
+  const notices = [];
+  assert.equal(await generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-echo', ollamaMode: 'auto', tokenCap: 256 }, '', request, undefined, undefined, notice => notices.push(notice)), 'He took it carefully and opened the gate.');
+  const attempts = api.seen.filter(record => record.url === '/api/chat').map(record => record.body);
+  assert.equal(attempts.length, 2);
+  assert.ok(attempts[1].messages[1].content.length < attempts[0].messages[1].content.length * 0.8, 'Retry must reduce an already-fitted prompt rather than refitting the same oversized original.');
+  assert.ok(attempts.every(body => body.messages[1].content.endsWith(tail)));
+  assert.match(attempts[1].messages[0].content, /Do not copy, paraphrase, or restart/);
+  assert.ok(notices.some(notice => /repeated text/.test(notice)));
+});
+
+test('a local context-window error receives one reduced retry without a false unsupported-schema fallback', async t => {
+  let generations = 0;
+  const api = await server(t, record => {
+    if (record.url === '/api/show') return { data: {} };
+    return ++generations === 1 ? { status: 400, data: { error: 'input length exceeds the context window' } } : { data: { message: { content: JSON.stringify({ completion: 'The lantern cast a warm circle on the ground.' }) } } };
+  });
+  const request = { mode: 'continue', before: 'The road wound past many quiet farms. '.repeat(100) + 'Mara stopped at the gate.', words: 20, contextWords: 1000, references: [{ name: 'Facts', text: 'The farm has a lantern. '.repeat(70) }] };
+  const notices = [];
+  await generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-window-error', ollamaMode: 'auto' }, '', request, undefined, undefined, notice => notices.push(notice));
+  const attempts = api.seen.filter(record => record.url !== '/api/show');
+  assert.equal(attempts.length, 2);
+  assert.ok(attempts.every(record => record.url === '/api/chat'));
+  assert.ok(attempts[1].body.messages[1].content.length < attempts[0].body.messages[1].content.length);
+  assert.ok(notices.some(notice => /reported.*context window/.test(notice)));
+});
+
+test('missing model metadata still permits budgeted generation and an irreducible prompt stops before generation', async t => {
+  const api = await server(t, record => record.url === '/api/show' ? { status: 404, data: { error: 'Endpoint unavailable' } } : { data: { message: { content: JSON.stringify({ completion: 'The latch finally gave way.' }) } } });
+  const settings = { provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-old-server', localContextLength: 4096, ollamaMode: 'guided' };
+  assert.equal(await generate(settings, '', { mode: 'continue', before: 'Mara waited beside the gate.', references: [{ name: 'World', text: 'Background facts. '.repeat(900) }] }), 'The latch finally gave way.');
+  const previous = api.seen.length;
+  await assert.rejects(generate({ ...settings, localContextLength: 1024 }, '', { mode: 'continue', before: 'Mara waited beside the gate.', style: 'Preserve these voice instructions. '.repeat(400) }), /context window is too small/);
+  assert.equal(api.seen.length, previous);
+});
+
+test('cancelling metadata lookup cannot start generation or emit a late context notice', async t => {
+  const controller = new AbortController(), notices = [];
+  const api = await server(t, record => {
+    assert.equal(record.url, '/api/show');
+    controller.abort();
+    return { data: {} };
+  });
+  await assert.rejects(generate({ provider: 'ollama', baseUrl: api.baseUrl, model: 'synthetic-cancel', ollamaMode: 'guided' }, '', { mode: 'continue', before: 'Mara waited.', references: [{ name: 'World', text: 'Background facts. '.repeat(900) }] }, controller.signal, undefined, notice => notices.push(notice)), /abort|cancel/i);
+  assert.equal(api.seen.length, 1);
+  assert.deepEqual(notices, []);
 });
 
 test('per-task API model and output caps are sent to the selected endpoint, Astra avoids unsupported sampling', async t => {

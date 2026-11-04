@@ -143,6 +143,9 @@ test('prompt boundaries keep continuation forward-only and correction structure 
   const prompt = buildPrompt(validateRequest(request));
   assert.match(prompt.user, /Before sentinel/); assert.match(prompt.user, /Author supplied context/);
   assert.doesNotMatch(prompt.user, /After sentinel|Selection sentinel|Private notes sentinel/);
+  assert.match(prompt.system, /inserted verbatim at the cursor/);
+  assert.match(prompt.system, /Preserve dialogue quotation marks/);
+  assert.ok(buildPrompt({ ...request, history: ['Rejected sentinel'] }).user.endsWith('TEXT BEFORE CURSOR:\nBefore sentinel'));
   assert.match(buildPrompt({ ...request, mode: 'correct' }).user, /paragraph and line boundaries/);
   assert.match(buildPrompt({ ...request, mode: 'chat', conversation: [{ role: 'user', text: 'Prior question' }, { role: 'assistant', text: 'Prior answer' }] }).user, /Prior question[\s\S]*Prior answer/);
   assert.equal(validateRequest({ ...request, words: 10000 }).words, 500);

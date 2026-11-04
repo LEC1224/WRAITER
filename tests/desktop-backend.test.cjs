@@ -34,6 +34,17 @@ test('task model profiles, credentials, and hotkeys persist independently', () =
   assert.equal(key, keySlot({ ...resolveTask(second, 'correct'), baseUrl: ' https://one.example/v1/ ' }));
   assert.throws(() => resolveTask(second, 'unknown'), /Unknown/);
 });
+test('native Tools groups recording, note and paragraph actions with current recording state', () => {
+  const sent = [], menu = menuTemplate(command => sent.push(command), () => {}, {}, [], {}, { tracking: true, blocked: false });
+  const tools = menu.find(item => item.label === '&Tools').submenu;
+  const tracking = tools.find(item => item.label === 'Track changes').submenu;
+  assert.equal(tracking[0].type, 'checkbox'); assert.equal(tracking[0].checked, true);
+  tracking[0].click(); tracking[1].click();
+  const notes = tools.find(item => item.label === 'Footnotes and endnotes').submenu;
+  notes[0].click(); notes[1].click(); notes[3].click();
+  tools.find(item => item.label === 'Paragraph layout…').click(); tools.find(item => item.label === 'Insert tab character').click();
+  assert.deepEqual(sent, ['toggle-tracking', 'review-changes', 'insert-footnote', 'insert-endnote', 'document-notes', 'paragraph-layout', 'insert-tab']);
+});
 test('settings reject malformed task profiles, languages, and out-of-range AI knobs', () => {
   for (const settings of [{ taskProfiles: [] }, { taskProfiles: { __bad: {} } }, { taskProfiles: { correct: { provider: 'other' } } }, { hotkeys: { badAction: 'Q' } }, { fontSize: Infinity }, { nativeLanguage: '<script>' }, { contextWords: 0 }, { tokenCap: 100000 }, { allowReasoning: 'yes' }]) assert.throws(() => validateSettings(settings), /invalid|unknown/i);
   assert.equal(validateSettings({ nativeLanguage: '', predictionWords: 500, ollamaMode: 'guided' }).predictionWords, 500);
@@ -77,8 +88,10 @@ test('native menu owns document hotkeys and leaves editor AI shortcuts to render
   assert.equal(save.accelerator, 'Ctrl+Alt+W'); save.click(); assert.deepEqual(sent, ['save']);
   assert.equal(items.find(item => item.label === 'Suggest / rephrase selection').accelerator, undefined);
   const tools = menu.find(item => item.label === '&Tools').submenu;
-  tools.find(item => item.label === '&Proofread…').click(); assert.deepEqual(sent, ['save', 'proofread']);
-  const spelling = tools.find(item => item.label === 'Spelling').submenu[0]; assert.equal(spelling.checked, true); spelling.click(); assert.equal(sent.at(-1), 'toggle-spellcheck');
+  const grammar = tools.find(item => item.label === 'Spelling and grammar').submenu;
+  grammar.find(item => item.label === '&Proofread…').click(); assert.deepEqual(sent, ['save', 'proofread']);
+  const spelling = grammar.find(item => item.label === 'Highlight spelling mistakes'); assert.equal(spelling.checked, true); spelling.click(); assert.equal(sent.at(-1), 'toggle-spellcheck');
+  grammar.find(item => item.label === 'Spelling and grammar settings…').click(); assert.equal(sent.at(-1), 'settings-grammar');
   items.find(item => item.label === 'E&xit').click(); assert.equal(closed, true);
 });
 test('spell dictionaries use exact regional matches and safe base fallback', () => {

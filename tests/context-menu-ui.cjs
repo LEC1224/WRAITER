@@ -36,7 +36,7 @@ const words = node => all(node).filter(node => node.type === 'text').map(node =>
     app = await _electron.launch(process.env.WRAITER_EXECUTABLE ? { executablePath: process.env.WRAITER_EXECUTABLE, args: [file], env, timeout: 60000 } : { args: [root, file], env, timeout: 60000 });
     page = await app.firstWindow(); page.on('pageerror', error => errors.push(error.message));
     editor = page.getByRole('textbox', { name: 'Manuscript editor', exact: true }); await editor.waitFor({ timeout: 30000 });
-    await waitFor(async () => (await page.evaluate(() => window.wraiter.boot())).path === file && !await page.locator('.workspace').evaluate(element => element.inert) && (await editor.innerText()).includes('Target'), 'fixture ready');
+    await waitFor(async () => (await page.evaluate(() => window.wraiter.boot())).path === file && !await page.locator('.workspace').evaluate(element => element.inert) && /Target|Moved opening/.test(await editor.innerText()), 'fixture ready');
     await app.evaluate(({ Menu }) => {
       global.contextMenus = []; const popup = Menu.prototype.popup;
       Menu.prototype.popup = function(options) {
@@ -139,6 +139,51 @@ const words = node => all(node).filter(node => node.type === 'text').map(node =>
     assert.equal((await menuInfo()).find(item => item.id === 'copy-format').enabled, true); assert.equal(await page.evaluate(() => window.getSelection().toString()), 'Untouched final words.');
     await page.screenshot({ path: path.join(output, 'context-menu-editor.png') });
     checks.push('Stale native menu callbacks reject changed passages; Shift+F10 opens the same editor menu with the keyboard selection intact.');
+
+    await command('toggle-ai'); await page.getByRole('button', { name: 'AI off', exact: true }).waitFor();
+    await editor.evaluate(element => element.editor.commands.insertContentAt(element.editor.state.doc.content.size, [
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'The Taste Test' }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Moved opening with formatting.', marks: [{ type: 'italic' }] }] },
+      { type: 'paragraph', content: [{ type: 'text', text: 'Last moved paragraph.' }] }
+    ]));
+    await editor.locator('h2').scrollIntoViewIfNeeded();
+    await openText('Moved opening with formatting.'); await click('add-comment');
+    await note.fill('A comment that must move with its chapter.');
+    await page.locator('.comments-panel').getByRole('button', { name: 'Add comment', exact: true }).click();
+    await waitFor(async () => (await saved()).comments.length === 3, 'split comment saved');
+    const movedComment = (await saved()).comments.at(-1).id;
+    await editor.locator('h2').scrollIntoViewIfNeeded();
+    await openText('The Taste Test'); assert.equal((await menuInfo()).find(item => item.id === 'split-chapter').enabled, false);
+    await editor.focus(); await page.keyboard.press('ArrowRight');
+    const splitMenus = await menuCount(); await page.keyboard.press('Shift+F10');
+    await waitFor(async () => await menuCount() > splitMenus, 'chapter split caret menu');
+    assert.equal((await menuInfo()).find(item => item.id === 'split-chapter').enabled, true);
+    const beforeSplit = (await saved()).chapters, requestsBeforeSplit = requests.length;
+    await click('split-chapter');
+    await waitFor(async () => (await saved()).chapters.length === 2, 'chapter split saved');
+    await waitFor(async () => await page.locator('.chapter-title').inputValue() === 'The Taste Test', 'new chapter active');
+    const afterSplit = await saved(), nextChapter = afterSplit.chapters[1];
+    assert.equal(nextChapter.title, 'The Taste Test');
+    assert.equal(nextChapter.content.content.some(node => node.type === 'heading'), false);
+    assert.equal(words(nextChapter.content), 'Moved opening with formatting.Last moved paragraph.');
+    assert.ok(all(nextChapter.content).some(node => node.marks?.some(mark => mark.type === 'italic')));
+    assert.equal(afterSplit.comments.find(comment => comment.id === movedComment).chapterId, nextChapter.id);
+    assert.ok(words(afterSplit.chapters[0].content).endsWith(' Edited.'));
+    assert.equal(requests.length, requestsBeforeSplit, 'Splitting must not request AI.');
+    await command('undo'); await waitFor(async () => (await saved()).chapters.length === 1, 'undo chapter split');
+    assert.deepEqual((await saved()).chapters, beforeSplit);
+    await command('redo'); await waitFor(async () => (await saved()).chapters.length === 2, 'redo chapter split');
+    await waitFor(async () => await page.locator('.chapter-title').inputValue() === 'The Taste Test', 'redo activates new chapter');
+    assert.deepEqual((await saved()).chapters, afterSplit.chapters);
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(960, 650));
+    await page.screenshot({ path: path.join(output, 'chapter-split-minimum.png') });
+    await close(); await launch();
+    assert.deepEqual((await saved()).chapters, afterSplit.chapters);
+    await command('undo'); await waitFor(async () => (await saved()).chapters.length === 1, 'persistent split undo');
+    assert.deepEqual((await saved()).chapters, beforeSplit);
+    await command('redo'); await waitFor(async () => (await saved()).chapters.length === 2, 'persistent split redo');
+    await waitFor(async () => await page.locator('.chapter-title').inputValue() === 'The Taste Test', 'persistent redo activates split chapter');
+    checks.push('Divide to new chapter here works with AI off, promotes a heading at its end, moves rich text and comments, opens the new chapter, and has one exact undo/redo step even after restart.');
     assert.deepEqual(errors, []);
     const report = { passed: true, packaged: !!process.env.WRAITER_EXECUTABLE, checks, menus: await app.evaluate(() => global.contextMenus.map(menu => menu.items.map(item => ({ id: item.id, label: item.label, role: item.role, enabled: item.enabled })))), providerRequests: requests.map(request => request.model), userData };
     await fs.writeFile(path.join(output, process.env.WRAITER_EXECUTABLE ? 'context-menu-packaged-results.json' : 'context-menu-results.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify({ ...report, menus: undefined }, null, 2));

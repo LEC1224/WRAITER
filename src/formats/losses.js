@@ -10,11 +10,12 @@ export function formatLosses(project, format) {
     if (format === 'html') {
       if (node.type === 'image' && !/^data:image\/(png|jpe?g|gif|webp);base64,/i.test(attrs.src || '')) warnings.add('An external or unsupported image is replaced with a labelled placeholder.');
     } else {
-      if (plain && marks.some(mark => ['bold', 'italic', 'underline', 'strike', 'code', 'highlight'].includes(mark.type))) warnings.add('Plain text removes emphasis, highlighting, and other inline formatting.');
-      if (markdown && marks.some(mark => ['underline', 'highlight'].includes(mark.type))) warnings.add('Markdown does not retain underlining or highlighting.');
+      if (node.type === 'note') warnings.add(`${name} turns notes into inline text and cannot retain editable note anchors.`);
+      if (plain && marks.some(mark => ['bold', 'italic', 'underline', 'strike', 'code', 'highlight', 'superscript', 'subscript'].includes(mark.type))) warnings.add('Plain text removes emphasis, highlighting, and other inline formatting.');
+      if (markdown && marks.some(mark => ['underline', 'highlight', 'superscript', 'subscript'].includes(mark.type))) warnings.add('Markdown does not retain underlining, highlighting, superscript, or subscript.');
       if (marks.some(mark => mark.type === 'textStyle' && Object.values(mark.attrs || {}).some(value => value != null && value !== ''))) warnings.add(`${name} does not retain individual fonts, sizes, colours, or text spacing.`);
       if (plain && marks.some(mark => mark.type === 'link')) warnings.add('Plain text keeps link wording but removes the link destination.');
-      if ((attrs.textAlign && attrs.textAlign !== 'left') || attrs.lineHeight != null || attrs.spaceAfter != null || attrs.firstLineIndent != null) warnings.add(`${name} does not retain paragraph alignment, line spacing, or indentation.`);
+      if ((attrs.textAlign && attrs.textAlign !== 'left') || attrs.lineHeight != null || attrs.spaceBefore != null || attrs.spaceAfter != null || attrs.leftIndent != null || attrs.rightIndent != null || attrs.firstLineIndent != null) warnings.add(`${name} does not retain paragraph alignment, line spacing, or indentation.`);
       if (plain && ['heading', 'orderedList', 'bulletList', 'blockquote', 'codeBlock'].includes(node.type)) warnings.add('Plain text flattens headings, lists, quotations, and code blocks into ordinary text.');
       if (plain && node.type === 'image') warnings.add('Plain text replaces images with labelled placeholders.');
       if (plain && node.type === 'table') warnings.add('Plain text turns tables into tab-separated rows.');

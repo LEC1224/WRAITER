@@ -15,12 +15,181 @@ export async function runIOTests() {
   const canvas = document.createElement('canvas'); canvas.width = 80; canvas.height = 160; canvas.getContext('2d').fillRect(0, 0, 80, 160);
   const picture = canvas.toDataURL('image/png');
   const project = newProject(); project.title = 'Synthetic <test> & manuscript'; project.notes = 'PRIVATE NOTES'; project.references = [{ id: 'ref', title: 'PRIVATE REFERENCE', text: 'Not publication content.' }];
+  await test('Named styles remain linked and editable through Office round trips', async () => {
+    const input = newProject();
+    input.namedStyles = [{ id: 'my-paragraph', name: 'Novel text', kind: 'paragraph', attrs: { fontFamily: 'Georgia', fontSize: 14, bold: true, lineHeight: 2, spaceBefore: 7 } }, { id: 'my-character', name: 'Thoughts', kind: 'character', attrs: { color: '#112233', italic: true } }];
+    input.chapters[0].content = { type: 'doc', content: [{ type: 'paragraph', attrs: { namedStyle: 'my-paragraph' }, content: [{ type: 'text', text: 'Linked ', marks: [] }, { type: 'text', text: 'words', marks: [{ type: 'namedStyle', attrs: { id: 'my-character' } }] }, { type: 'text', text: ' override', marks: [{ type: 'textStyle', attrs: { fontFamily: 'Arial' } }] }] }, { type: 'heading', attrs: { level: 2, namedStyle: 'my-paragraph' }, content: [{ type: 'text', text: 'Styled heading' }] }] };
+    for (const format of ['odt','docx','html']) {
+      const payload = await exportPayload(input, format, extensions, { nativeSave: true });
+      const bytes = typeof payload.data === 'string' ? new TextEncoder().encode(payload.data) : payload.data;
+      const result = await importDocument({ name: 'Styles', extension: '.' + format, bytes }, extensions);
+      const restored = result.project;
+      const p = restored.chapters[0].content.content.find(node => node.type === 'paragraph');
+      assert(restored.namedStyles?.find(s => s.id === 'my-paragraph')?.attrs.fontSize === 14, `${format} paragraph style definition lost`);
+      assert(restored.namedStyles?.find(s => s.id === 'my-character')?.attrs.italic === true, `${format} character style definition lost`);
+      assert(p?.attrs?.namedStyle === 'my-paragraph', `${format} paragraph style link lost: ${JSON.stringify(p)}`);
+      assert(p.content.some(node => node.text === 'words' && node.marks?.some(mark => mark.type === 'namedStyle' && mark.attrs.id === 'my-character')), `${format} character style link lost: ${JSON.stringify(p)}`);
+      assert(!p.content.some(node => node.text === 'words' && node.marks?.some(mark => mark.type === 'italic')), `${format} flattened inherited italics over the named character style: ${JSON.stringify(p)}`);
+      assert(!p.content.some(node => node.marks?.some(mark => mark.type === 'bold')), `${format} flattened inherited bold over the named paragraph style: ${JSON.stringify(p)}`);
+      assert(p.content.some(node => node.text.includes('override') && node.marks?.some(mark => mark.type === 'textStyle' && mark.attrs.fontFamily === 'Arial')), `${format} direct font override lost: ${JSON.stringify(p)}`);
+      assert(restored.chapters[0].content.content.some(node => node.type === 'heading' && node.attrs.level === 2 && node.attrs.namedStyle === 'my-paragraph'), `${format} styled heading semantics lost`);
+      assert(!p.attrs?.lineHeight, `${format} flattened inherited line spacing over the named style`);
+    }
+    for (const format of ['odt', 'docx']) {
+      const payload = await exportPayload(input, format, extensions, { nativeSave: true }), zip = await JSZip.loadAsync(payload.data);
+      const files = format === 'docx' ? ['word/document.xml','word/styles.xml'] : ['content.xml','styles.xml'];
+      for (const file of files) {
+        let xml = await zip.file(file).async('string');
+        xml = xml.replaceAll('WS_my-paragraph', 'ExternalParagraph').replaceAll('WS_my-character', 'ExternalCharacter');
+        if (format === 'docx' && file === 'word/styles.xml') xml = xml.replace(/<w:style\b(?=[^>]*w:styleId="External(?:Paragraph|Character)")/g, '<w:style w:customStyle="1"');
+        zip.file(file, xml);
+      }
+      const result = await importDocument({ name: 'External styles', extension: '.' + format, bytes: await zip.generateAsync({ type: 'uint8array' }) }, extensions);
+      const p = result.project.chapters[0].content.content.find(node => node.type === 'paragraph');
+      assert(result.project.namedStyles?.some(s => s.name === 'Novel text' && s.attrs.fontSize === 14), `${format} external paragraph style lost`);
+      assert(result.project.namedStyles?.some(s => s.name === 'Thoughts' && s.attrs.italic === true), `${format} external character style lost`);
+      assert(p.attrs?.namedStyle, `${format} external paragraph link lost`);
+      assert(p.content.some(n => n.text === 'words' && n.marks?.some(m => m.type === 'namedStyle')), `${format} external character link lost`);
+    }
+  });
+  await test('Custom tab stops and tab characters survive Office and HTML round trips', async () => {
+    const input = newProject(); input.chapters[0].content = { type: 'doc', content: [{ type: 'paragraph', attrs: { tabStops: [36,90,144] }, content: [{ type: 'text', text: 'one\ttwo\tthree' }] }] };
+    for (const format of ['odt','docx','html']) {
+      const payload = await exportPayload(input, format, extensions, { nativeSave: true });
+      const bytes = typeof payload.data === 'string' ? new TextEncoder().encode(payload.data) : payload.data;
+      const result = await importDocument({ name: 'Tabs', extension: '.' + format, bytes }, extensions);
+      const p = result.project.chapters[0].content.content.find(node => node.type === 'paragraph');
+      assert(JSON.stringify(p?.attrs?.tabStops) === JSON.stringify([36,90,144]), `${format} tab stops lost: ${JSON.stringify(p)}`);
+      assert(nodeText(p) === 'one\ttwo\tthree', `${format} tab characters lost: ${JSON.stringify(p)}`);
+    }
+  });
+  await test('Untrusted HTML named style metadata is bounded and invalid references are discarded', async () => {
+    const metadata = JSON.stringify({ version: 1, namedStyles: [{ id: 'safe', name: 'bad', kind: 'paragraph', attrs: { fontFamily: '</style><script>' } }] });
+    const doc = document.implementation.createHTMLDocument('Test'), meta = doc.createElement('meta'); meta.name = 'wraiter:document'; meta.content = metadata; doc.head.append(meta);
+    doc.body.innerHTML = '<p data-paragraph-style="bad space"><span data-character-style="bad space">Visible text</span></p>';
+    const imported = await importDocument({ name: 'Untrusted', extension: '.html', bytes: new TextEncoder().encode('<!doctype html>' + doc.documentElement.outerHTML) }, extensions);
+    assert(imported.warning.includes('Invalid embedded named styles'), 'Invalid embedded style definitions were not reported');
+    assert(!imported.project.namedStyles, 'Invalid style definitions survived');
+    assert(!JSON.stringify(imported.project.chapters).includes('bad space'), 'Invalid style references survived');
+    importedProjects.push(imported.project);
+  });
+  await test('Manuscript page setup and page fields survive Office round trips', async () => {
+    const input = newProject(); input.printLayout = { size: 'A5', orientation: 'landscape', top: 18, right: 19, bottom: 20, left: 21, header: 'Draft {page}', footer: 'Page {page} of {pages}' };
+    for (const format of ['docx', 'odt']) {
+      const payload = await exportPayload(input, format, extensions, { nativeSave: true });
+      const reopened = await importDocument({ name: 'Page setup', extension: '.' + format, bytes: payload.data }, extensions);
+      const page = reopened.project.printLayout;
+      assert(page?.size === 'A5' && page.orientation === 'landscape', `${format} paper size/orientation lost: ${JSON.stringify(page)}`);
+      assert(Math.abs(page.left - 21) < 0.1 && Math.abs(page.bottom - 20) < 0.1, `${format} page margins lost`);
+      assert(page.header === 'Draft {page}' && page.footer === 'Page {page} of {pages}', `${format} page fields lost: ${JSON.stringify(page)}`);
+    }
+    const pdf = await exportPayload(input, 'pdf', extensions);
+    assert(pdf.html.includes('size:A5 landscape') && pdf.html.includes('counter(pages)'), 'PDF did not use saved page setup');
+    const mobile = await exportPayload(input, 'pdf', extensions, { pdfPreset: 'mobile' });
+    assert(!mobile.html.includes('size:A5 landscape'), 'Manuscript page setup overrode the mobile reading preset');
+    const zip = await JSZip.loadAsync((await exportPayload(input, 'docx', extensions, { nativeSave: true })).data);
+    const headerPath = Object.keys(zip.files).find(name => /^word\/header\d+\.xml$/.test(name));
+    assert(headerPath, 'Running header file missing');
+    zip.file(headerPath, '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Simple </w:t></w:r><w:fldSimple w:instr=" PAGE "><w:r><w:t>9</w:t></w:r></w:fldSimple></w:p><w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>NUM</w:instrText></w:r><w:r><w:instrText>PAGES</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>99</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:hdr>');
+    const imported = await importDocument({ name: 'Fields', extension: '.docx', bytes: await zip.generateAsync({ type: 'uint8array' }) }, extensions);
+    assert(imported.project.printLayout.header === 'Simple {page}\n{pages}', 'Simple/split page fields or header paragraphs were lost');
+  });
   project.documentStyle = { fontFamily: 'Palatino Linotype', fontSize: 14, lineHeight: 1.6 }; project.language = 'sv-SE';
   project.chapters[0].content = { type: 'doc', content: [
     { type: 'paragraph', attrs: { textAlign: 'center', lineHeight: 1.75, spaceAfter: 6, firstLineIndent: 18 }, content: [{ type: 'text', text: 'Formatted link', marks: [{ type: 'bold' }, { type: 'italic' }, { type: 'underline' }, { type: 'textStyle', attrs: { fontFamily: 'Arial', fontSize: '24px', color: '#aa1122' } }, { type: 'link', attrs: { href: 'https://example.com/page?one=1&two=2' } }] }] },
     { type: 'paragraph', attrs: { lineHeight: '18pt', spaceAfter: 0, firstLineIndent: -9 }, content: [{ type: 'text', text: 'Precise paragraph formatting.', marks: [{ type: 'textStyle', attrs: { fontSize: '11pt' } }] }] },
     list, table, { type: 'image', attrs: { src: picture, alt: 'Tall rectangle' } }, { type: 'blockquote', content: [paragraph('Quoted words')] },
   ] };
+  await test('DOCX comments are explicitly shared and remain private by default', async () => {
+    const input = newProject(), chapter = input.chapters[0], now = new Date().toISOString();
+    input.comments = [{ id: 'comment-1', chapterId: chapter.id, text: 'PRIVATE reviewer note', quote: 'marked', createdAt: now, updatedAt: now, resolved: false }];
+    chapter.content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'marked', marks: [{ type: 'commentAnchor', attrs: { id: 'comment-1' } }] }, { type: 'text', text: ' private bookmark', marks: [{ type: 'commentAnchor', attrs: { id: 'bookmark-1' } }] }] }] };
+    const plain = await JSZip.loadAsync((await exportPayload(input, 'docx', extensions)).data);
+    const shared = await JSZip.loadAsync((await exportPayload(input, 'docx', extensions, { includeComments: true })).data);
+    const plainXml = await plain.file('word/document.xml').async('string');
+    const defaultComments = plain.file('word/comments.xml') ? await plain.file('word/comments.xml').async('string') : '';
+    assert(!plainXml.includes('commentRangeStart') && !defaultComments.includes('PRIVATE reviewer note'), 'Default export shared private comments');
+    const sharedXml = await shared.file('word/document.xml').async('string');
+    const commentsXml = await shared.file('word/comments.xml').async('string');
+    assert(sharedXml.includes('commentRangeStart') && sharedXml.includes('commentRangeEnd') && commentsXml.includes('PRIVATE reviewer note'), 'Explicit comments export lost its note or anchor');
+    assert(!commentsXml.includes('bookmark-1'), 'A private bookmark was exported as a comment');
+    const reopened = await importDocument({ name: 'Shared comments', extension: '.docx', bytes: await shared.generateAsync({ type: 'uint8array' }) }, extensions);
+    const imported = reopened.project.comments.find(comment => comment.text.includes('PRIVATE reviewer note'));
+    assert(imported?.author === 'WRAITER' && imported.origin === 'docx', 'Comment author or text was lost on import');
+    assert(all(reopened.project.chapters[0].content).some(node => node.marks?.some(mark => mark.type === 'commentAnchor' && mark.attrs.id === imported.id)), 'Imported comment lost its passage anchor');
+    reopened.project.comments.push({ id: 'private-comment', chapterId: reopened.project.chapters[0].id, text: 'PRIVATE local note', quote: 'marked', createdAt: now, updatedAt: now, resolved: false });
+    const marked = all(reopened.project.chapters[0].content).find(node => node.marks?.some(mark => mark.type === 'commentAnchor' && mark.attrs.id === imported.id));
+    marked.marks.push({ type: 'commentAnchor', attrs: { id: 'private-comment' } });
+    const native = await JSZip.loadAsync((await exportPayload(reopened.project, 'docx', extensions, { nativeSave: true })).data);
+    const nativeComments = await native.file('word/comments.xml').async('string');
+    assert(nativeComments.includes('PRIVATE reviewer note') && !nativeComments.includes('PRIVATE local note'), 'Native save failed to preserve shared comments or exposed private comments');
+    const odt = await exportPayload(input, 'odt', extensions, { includeComments: true });
+    const odtXml = await (await JSZip.loadAsync(odt.data)).file('content.xml').async('string');
+    assert(odtXml.includes('office:annotation') && odtXml.includes('reviewer'), 'Writer comment export lost the comment');
+    const odtOpened = await importDocument({ name: 'Shared ODT', extension: '.odt', bytes: odt.data }, extensions);
+    const odtComment = odtOpened.project.comments.find(comment => comment.text.includes('PRIVATE reviewer note'));
+    assert(odtComment?.origin === 'odt' && all(odtOpened.project.chapters[0].content).some(node => node.marks?.some(mark => mark.type === 'commentAnchor' && mark.attrs.id === odtComment.id)), 'Writer comment import lost its anchor');
+    const savedOdt = await JSZip.loadAsync((await exportPayload(odtOpened.project, 'odt', extensions, { nativeSave: true })).data);
+    assert((await savedOdt.file('content.xml').async('string')).includes('reviewer'), 'Native ODT save lost an imported comment');
+  });
+  await test('Tracked text exports an accepted reading by default or real Word revisions on request', async () => {
+    const input = newProject(), chapter = input.chapters[0], date = new Date().toISOString();
+    chapter.content = { type: 'doc', content: [{ type: 'paragraph', content: [
+      { type: 'text', text: 'old', marks: [{ type: 'trackedChange', attrs: { id: 'revision_old', kind: 'delete', author: 'Writer', date } }] },
+      { type: 'text', text: 'new', marks: [{ type: 'trackedChange', attrs: { id: 'revision_new', kind: 'insert', author: 'Writer', date } }] }
+    ] }] };
+    const plain = await exportPayload(input, 'txt', extensions), published = await exportPayload(input, 'docx', extensions), reviewed = await exportPayload(input, 'docx', extensions, { includeTrackedChanges: true });
+    assert(plain.data.includes('new') && !plain.data.includes('old'), 'Plain export did not use accepted wording');
+    const plainZip = await JSZip.loadAsync(published.data), reviewZip = await JSZip.loadAsync(reviewed.data);
+    const plainXml = await plainZip.file('word/document.xml').async('string'), reviewXml = await reviewZip.file('word/document.xml').async('string');
+    assert(plainXml.includes('new') && !plainXml.includes('old') && !plainXml.includes('<w:ins '), 'Default Word export included revisions');
+    assert(reviewXml.includes('<w:ins ') && reviewXml.includes('<w:del ') && reviewXml.includes('old') && reviewXml.includes('new'), 'Word revision export lost a change');
+    const reopened = await importDocument({ name: 'Tracked', extension: '.docx', bytes: reviewed.data }, extensions);
+    const reopenedRuns = all(reopened.project.chapters[0].content).filter(node => node.type === 'text' && node.marks?.some(mark => mark.type === 'trackedChange'));
+    assert(reopenedRuns.some(node => node.text === 'old' && node.marks.some(mark => mark.attrs?.kind === 'delete')) && reopenedRuns.some(node => node.text === 'new' && node.marks.some(mark => mark.attrs?.kind === 'insert')), 'Word tracked insertions/deletions failed to round-trip');
+    const native = await JSZip.loadAsync((await exportPayload(input, 'docx', extensions, { nativeSave: true })).data);
+    assert((await native.file('word/document.xml').async('string')).includes('<w:del '), 'Native Word save flattened revisions');
+    const odt = await exportPayload(input, 'odt', extensions, { nativeSave: true });
+    const odtZip = await JSZip.loadAsync(odt.data), odtXml = await odtZip.file('content.xml').async('string');
+    assert(odtXml.includes('tracked-changes') && odtXml.includes('change-start') && odtXml.includes('text:deletion'), 'Native Writer save flattened revisions');
+    const odtReopened = await importDocument({ name: 'Tracked ODT', extension: '.odt', bytes: odt.data }, extensions);
+    const odtRuns = all(odtReopened.project.chapters[0].content).filter(node => node.type === 'text' && node.marks?.some(mark => mark.type === 'trackedChange'));
+    assert(odtRuns.some(node => node.text === 'old' && node.marks.some(mark => mark.attrs?.kind === 'delete')) && odtRuns.some(node => node.text === 'new' && node.marks.some(mark => mark.attrs?.kind === 'insert')), 'Writer tracked insertions/deletions failed to round-trip');
+    let refused = false; try { await exportPayload(input, 'txt', extensions, { nativeSave: true }); } catch (error) { refused = error.message.includes('Pending tracked changes'); }
+    assert(refused, 'Native plain text save must not flatten pending revisions');
+  });
+  await test('A combined replacement retains both text versions through Word and Writer saveback', async () => {
+    const { editorialSchema: schema } = await import('../electron/editor-schema.mjs');
+    const { EditorState } = await import('@tiptap/pm/state');
+    const { suggestText } = await import('../src/tracked-editor.js');
+    const input = newProject(), state = EditorState.create({ schema, doc: schema.nodeFromJSON({ type: 'doc', content: [paragraph('old words')] }) });
+    input.chapters[0].content = state.apply(suggestText(state, 1, 4, 'new')).doc.toJSON();
+    for (const format of ['docx', 'odt']) {
+      const exported = await exportPayload(input, format, extensions, { nativeSave: true });
+      const reopened = await importDocument({ name: 'Replacement', extension: '.' + format, bytes: exported.data }, extensions);
+      importedProjects.push(reopened.project);
+      const runs = reopened.project.chapters.flatMap(chapter => all(chapter.content)).filter(node => node.type === 'text');
+      assert(runs.some(node => node.text === 'old' && node.marks?.some(mark => mark.type === 'trackedChange' && mark.attrs.kind === 'delete')), `${format} lost original wording`);
+      assert(runs.some(node => node.text === 'new' && node.marks?.some(mark => mark.type === 'trackedChange' && mark.attrs.kind === 'insert')), `${format} lost proposed wording`);
+    }
+  });
+  await test('Optional contents list is scoped, regenerated and private for PDF and Office exports', async () => {
+    const input = newProject(); input.title = 'Contents fixture'; input.notes = 'PRIVATE CONTENTS FIXTURE';
+    input.chapters[0].title = 'First chapter';
+    input.chapters[0].content = { type: 'doc', content: [{ type: 'heading', attrs: { level: 2 }, content: [text('Opening scene')] }, paragraph('The story begins.')] };
+    const other = newProject().chapters[0]; other.title = 'Second chapter'; other.content = { type: 'doc', content: [paragraph('Later scene.')] }; input.chapters.push(other);
+    const before = JSON.stringify(input);
+    for (const format of ['pdf', 'docx', 'odt']) {
+      const output = await exportPayload(input, format, extensions, { includeContents: true, scope: 'manuscript' });
+      let serialized = output.html;
+      if (format !== 'pdf') { const zip = await JSZip.loadAsync(output.data); serialized = await zip.file(format === 'docx' ? 'word/document.xml' : 'content.xml').async('string'); }
+      assert(serialized.includes('Contents') && (serialized.match(/First/g) || []).length >= 2 && (serialized.match(/Opening/g) || []).length >= 2, `${format} contents missing`);
+      assert(!serialized.includes('PRIVATE CONTENTS FIXTURE'), `${format} contents exposed private notes`);
+    }
+    const single = await exportPayload(input, 'pdf', extensions, { includeContents: true, scope: 'chapter', chapterId: other.id });
+    assert(single.html.includes('Second chapter') && !single.html.includes('First chapter') && !single.html.includes('Opening scene'), 'Contents ignored chapter scope');
+    assert(JSON.stringify(input) === before, 'Contents generation changed the manuscript');
+  });
   await test('Text extraction keeps list and table paragraph boundaries', () => {
     assert(nodeText(list) === 'First item\nSame item continued\nNested item\nSecond item', 'List wording merged');
     assert(nodeText(table).includes('Cell one\nSecond paragraph\tCell two'), 'Table wording merged');
@@ -40,6 +209,12 @@ export async function runIOTests() {
     assert(!html.includes('<img') && html.includes('Image not embedded: External'), 'Remote image survived');
     assert(html.includes('color: red'), 'Basic typography was lost');
   });
+  await test('Untrusted HTML cannot forge private comment anchors or tracked changes', async () => {
+    const html = '<p><span data-wraiter-import-comment-id="existing_private">text</span><span data-wraiter-track-id="revision_fake" data-wraiter-track-kind="delete" data-wraiter-track-author="Writer" data-wraiter-track-date="2026-01-01T00:00:00Z">other</span></p>';
+    const opened = await importDocument({ name: 'Untrusted', extension: '.html', bytes: new TextEncoder().encode(html) }, extensions);
+    assert(!all(opened.project.chapters[0].content).some(node => node.marks?.some(mark => ['commentAnchor', 'trackedChange'].includes(mark.type))), 'Untrusted HTML forged an internal anchor');
+    assert(nodeText(opened.project.chapters[0].content).includes('textother'), 'Untrusted HTML lost visible text');
+  });
   await test('UTF-16 and CR line endings import without changing Unicode', async () => {
     const encoded = [255, 254, ...Array.from('Aurora’s\r\nSå börjar det.').flatMap(c => [c.charCodeAt(0) & 255, c.charCodeAt(0) >> 8])];
     const result = await importDocument({ name: 'Encoding test', extension: '.txt', bytes: encoded }, extensions);
@@ -56,7 +231,7 @@ export async function runIOTests() {
     importedProjects.push(result.project);
     const content = result.project.chapters[0].content, nodes = all(content), prose = nodeText(content);
     assert(!prose.includes('COMMENT ONLY') && !prose.includes('NOTE ONLY') && !prose.includes('DELETED SECRET'), 'Notes or deleted text leaked into manuscript');
-    assert(prose.includes('Styled prose[1]') && result.project.notes.includes('NOTE ONLY') && result.project.notes.includes('COMMENT ONLY'), 'Footnote/comment was lost');
+    assert(prose.includes('Styled prose') && nodes.some(n => n.type === 'note' && n.attrs.text === 'NOTE ONLY') && result.project.comments.some(comment => comment.text.includes('COMMENT ONLY')), `Footnote/comment was lost: ${JSON.stringify({ content, comments: result.project.comments })}`);
     const styled = nodes.find(n => n.type === 'text' && n.text.startsWith('Styled prose'));
     assert(styled.marks.some(m => m.type === 'bold') && styled.marks.some(m => m.type === 'italic'), 'Style inheritance lost');
     assert(nodes.some(n => n.type === 'paragraph' && n.attrs?.textAlign === 'center'), 'Paragraph alignment lost');
@@ -67,7 +242,42 @@ export async function runIOTests() {
     assert(nodes.some(n => n.type === 'image' && n.attrs.src === picture), 'Embedded image lost');
     assert(nodes.some(n => n.type === 'tableCell' && n.attrs.colspan === 2), 'Merged cell lost');
   });
+  await test('Footnotes and endnotes survive Office round trips', async () => {
+    const copy = newProject();
+    copy.chapters[0].content = { type: 'doc', content: [{ type: 'paragraph', content: [text('First'), { type: 'note', attrs: { kind: 'footnote', text: 'Footnote body' } }, text(' second'), { type: 'note', attrs: { kind: 'endnote', text: 'Endnote body' } }] }] };
+    for (const format of ['odt', 'docx']) {
+      const payload = await exportPayload(copy, format, extensions);
+      const result = await importDocument({ name: 'notes', extension: '.' + format, bytes: payload.data }, extensions);
+      const notes = result.project.chapters.flatMap(chapter => all(chapter.content)).filter(node => node.type === 'note');
+      assert(notes.some(note => note.attrs.kind === 'footnote' && note.attrs.text === 'Footnote body'), `${format} lost footnote`);
+      assert(notes.some(note => note.attrs.kind === 'endnote' && note.attrs.text === 'Endnote body'), `${format} lost endnote`);
+      importedProjects.push(result.project);
+    }
+  });
   let docx;
+  await test('Paragraph spacing and left, right and hanging indents survive Office round-trips', async () => {
+    const copy = newProject();
+    copy.chapters[0].content = { type: 'doc', content: [{ type: 'paragraph', attrs: { spaceBefore: 7, spaceAfter: 5, leftIndent: 22, rightIndent: 13, firstLineIndent: -9 }, content: [text('A paragraph with custom indents.')] }] };
+    for (const format of ['odt', 'docx']) {
+      const payload = await exportPayload(copy, format, extensions);
+      const result = await importDocument({ name: 'paragraph settings', extension: '.' + format, bytes: payload.data }, extensions);
+      const restored = result.project.chapters.flatMap(chapter => all(chapter.content)).find(node => node.type === 'paragraph' && nodeText(node) === 'A paragraph with custom indents.');
+      for (const [key, expected] of Object.entries({ spaceBefore: 7, spaceAfter: 5, leftIndent: 22, rightIndent: 13, firstLineIndent: -9 })) assert(restored?.attrs?.[key] === expected, `${format} lost ${key}: ${restored?.attrs?.[key]}`);
+      importedProjects.push(result.project);
+    }
+  });
+  await test('Superscript and subscript survive Office export and import', async () => {
+    const copy = newProject();
+    copy.chapters[0].content = { type: 'doc', content: [{ type: 'paragraph', content: [text('H'), { type: 'text', text: '2', marks: [{ type: 'subscript' }] }, text('O and x'), { type: 'text', text: '3', marks: [{ type: 'superscript' }] }] }] };
+    for (const format of ['odt', 'docx']) {
+      const payload = await exportPayload(copy, format, extensions);
+      const result = await importDocument({ name: 'script formatting', extension: '.' + format, bytes: payload.data }, extensions);
+      const nodes = result.project.chapters.flatMap(chapter => all(chapter.content));
+      assert(nodes.some(node => node.type === 'text' && node.text === '2' && node.marks?.some(mark => mark.type === 'subscript')), `${format} lost subscript`);
+      assert(nodes.some(node => node.type === 'text' && node.text === '3' && node.marks?.some(mark => mark.type === 'superscript')), `${format} lost superscript`);
+      importedProjects.push(result.project);
+    }
+  });
   await test('Edited image dimensions and description round-trip through office documents', async () => {
     const copy = structuredClone(project), image = all(copy.chapters[0].content).find(node => node.type === 'image');
     image.attrs = { ...image.attrs, width: 300, height: 200, alt: 'A blue landscape beside a river', title: 'River illustration' };

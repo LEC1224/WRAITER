@@ -81,6 +81,9 @@ FunctionEnd
 !endif
 
 !macro customInstall
+  ; Launch the installed executable directly. Resolving the Start menu shortcut
+  ; through the Windows shell can fail even when installation has succeeded.
+  StrCpy $launchLink "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
   FileOpen $0 "$INSTDIR\setup-mode.txt" w
   FileWrite $0 "$WraiterMode"
   FileClose $0

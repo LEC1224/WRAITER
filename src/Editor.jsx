@@ -1,27 +1,32 @@
 import { documentExtensions } from '../electron/editor-schema.mjs';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
-import { Fragment, Slice } from '@tiptap/pm/model';
+import { Fragment, Slice, Mark } from '@tiptap/pm/model';
 
 import Placeholder from '@tiptap/extension-placeholder';
-import { GhostText, SearchHighlight, ghostKey } from './extensions.js';
+import { GhostText, SearchHighlight, FormattingMarks, formattingMarksKey, ghostKey } from './extensions.js';
+import { smartPunctuation, textSubstitution } from './typing.js';
+import { LocalGrammar, grammarKey } from './local-grammar.js';
+import { AIGrammar } from './ai-grammar.js';
 import { DEFAULT_HOTKEYS, shortcutFromEvent } from './hotkeys.js';
 import { associateHistoryContent, HISTORY_GROUP_BREAK_META, HISTORY_SELECTION_META } from './history.js';
 import { Pagination, paginationKey, removePageBreakAtCursor } from './pagination.js';
 import { WordCount, wordCountKey } from './word-count.js';
 import { imageImportExtension } from './image-import.js';
 import { imageControls } from './images.js';
+import { trackedEditor, trackModeKey, suggestText } from './tracked-editor.js';
 
-export const extensions = [...documentExtensions, Placeholder.configure({ placeholder: 'Start writing…' }), GhostText, SearchHighlight, WordCount, Pagination];
+export const extensions = [...documentExtensions, Placeholder.configure({ placeholder: 'Start writing…' }), GhostText, SearchHighlight, FormattingMarks, LocalGrammar, AIGrammar, WordCount, Pagination];
 // Ordinary text copying does not duplicate a note or expose its internal ID.
 function withoutCommentAnchors(slice) {
   const clean = node => {
-    const marks = node.marks.filter(mark => mark.type.name !== 'commentAnchor');
-    return (node.isLeaf ? node : node.copy(Fragment.fromArray(Array.from({ length: node.childCount }, (_, index) => clean(node.child(index)))))).mark(marks);
+    if (node.isText && node.marks.some(mark => mark.type.name === 'trackedChange' && mark.attrs.kind === 'delete')) return null;
+    const marks = node.marks.filter(mark => !['commentAnchor', 'trackedChange'].includes(mark.type.name));
+    return (node.isLeaf ? node : node.copy(Fragment.fromArray(Array.from({ length: node.childCount }, (_, index) => clean(node.child(index))).filter(Boolean)))).mark(marks);
   };
-  return new Slice(Fragment.fromArray(Array.from({ length: slice.content.childCount }, (_, index) => clean(slice.content.child(index)))), slice.openStart, slice.openEnd);
+  return new Slice(Fragment.fromArray(Array.from({ length: slice.content.childCount }, (_, index) => clean(slice.content.child(index))).filter(Boolean)), slice.openStart, slice.openEnd);
 }
-export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onReady, onChange, onSelection, onAction, onNotice, canImportImages }) {
+export default function ManuscriptEditor({ chapter, prefs, tracking, layoutSignature, onReady, onChange, onSelection, onAction, onNotice, canImportImages }) {
   const callbacks = useRef({ onReady, onChange, onSelection, onAction, onNotice, canImportImages, prefs });
   const toolbarFrame = useRef(0);
   const selectionBoundary = useRef(true);
@@ -31,20 +36,44 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
   // rebuilding options for each snapshot needlessly updates the entire view.
   // Chapter/project/history replacement remounts this component with a new key.
   const options = useMemo(() => ({
-    extensions: [...extensions.map(extension => extension.name === 'image' ? imageControls(extension, current => callbacks.current.canImportImages?.(current) !== false) : extension), imageImportExtension({ onNotice: message => callbacks.current.onNotice?.(message), canInsert: () => callbacks.current.canImportImages?.(editorInstance.current) !== false })], content: initialContent.current,
+    extensions: [...extensions.map(extension => extension.name === 'image' ? imageControls(extension, current => callbacks.current.canImportImages?.(current) !== false) : extension), imageImportExtension({ onNotice: message => callbacks.current.onNotice?.(message), canInsert: () => callbacks.current.canImportImages?.(editorInstance.current) !== false }), trackedEditor(() => callbacks.current.onAction('tracking-blocked'), !!tracking)], content: initialContent.current,
     editorProps: {
       attributes: { class: 'manuscript', 'aria-label': 'Manuscript editor', role: 'textbox', 'aria-multiline': 'true', spellcheck: String(prefs.spellcheck), lang: prefs.language },
       transformCopied: withoutCommentAnchors,
       transformPasted: withoutCommentAnchors,
       handleClick(_view, _position, event) {
         if (event.button !== 0) return false;
+        const note = event.target.closest?.('.note-marker');
+        if (note) { callbacks.current.onAction('edit-note:' + _view.posAtDOM(note, 0)); return true; }
+        const revision = event.target.closest?.('[data-tracked-id]');
+        if (revision) { callbacks.current.onAction('review-change:' + revision.getAttribute('data-tracked-id')); return true; }
+        const grammar = event.target.closest?.('[data-ai-grammar-id]');
+        if (grammar && !event.ctrlKey && !event.metaKey) { callbacks.current.onAction('ai-grammar:' + grammar.getAttribute('data-ai-grammar-id')); return true; }
         const link = event.target.closest?.('a[href]');
         if (link && (event.ctrlKey || event.metaKey)) { event.preventDefault(); callbacks.current.onAction('open-link:' + link.getAttribute('href')); return true; }
         const anchor = event.target.closest?.('[data-comment-id]');
         if (anchor) callbacks.current.onAction('comment:' + anchor.getAttribute('data-comment-id'));
         return false;
       },
+      // ProseMirror classifies repeated clicks by editor coordinates/time,
+      // even when a separate popover was opened and closed between clicks.
+      // Keep a second click on a grammar hint as actionable as the first.
+      handleDoubleClick(_view, _position, event) {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey) return false;
+        const grammar = event.target.closest?.('[data-ai-grammar-id]');
+        if (!grammar) return false;
+        callbacks.current.onAction('ai-grammar:' + grammar.getAttribute('data-ai-grammar-id'));
+        return true;
+      },
+      handleTripleClick(_view, _position, event) {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey) return false;
+        const grammar = event.target.closest?.('[data-ai-grammar-id]');
+        if (!grammar) return false;
+        callbacks.current.onAction('ai-grammar:' + grammar.getAttribute('data-ai-grammar-id'));
+        return true;
+      },
       handleKeyDown(view, event) {
+        if (event.key === 'Enter' && view.state.selection.node?.type.name === 'note') { event.preventDefault(); callbacks.current.onAction('edit-note:' + view.state.selection.from); return true; }
         const ghost = ghostKey.getState(view.state);
         const keys = { ...DEFAULT_HOTKEYS, ...callbacks.current.prefs.hotkeys }, pressed = shortcutFromEvent(event);
         if (!pressed) return false;
@@ -74,10 +103,28 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
         }
       },
       handleTextInput(view, from, to, text) {
+        if (trackModeKey.getState(view.state)) { const tr = view.composing ? null : suggestText(view.state, from, to, text); if (tr) view.dispatch(tr); else callbacks.current.onAction('tracking-blocked'); return true; }
         const item = ghostKey.getState(view.state);
         // A revision is only a preview. Typing resumes after the untouched selection.
-        if (item?.kind !== 'revision') return false;
-        view.dispatch(view.state.tr.insertText(text, item.to, item.to).setMeta(ghostKey, null));
+        if (item?.kind === 'revision') {
+          view.dispatch(view.state.tr.insertText(text, item.to, item.to).setMeta(ghostKey, null));
+          return true;
+        }
+        if (view.composing || from !== to || text.length !== 1) return false;
+        const position = view.state.doc.resolve(from);
+        if (!position.parent.isTextblock || position.parent.type.spec.code) return false;
+        const before = position.parent.textBetween(Math.max(0, position.parentOffset - 81), position.parentOffset, '', '\ufffc');
+        const change = textSubstitution(before, text, callbacks.current.prefs.substitutions) || (callbacks.current.prefs.smartPunctuation ? smartPunctuation(before, text) : null);
+        if (!change) return false;
+        // A replacement must not erase mixed formatting or comment anchors.
+        let firstMarks = null, uniform = true;
+        if (change.remove) view.state.doc.nodesBetween(from - change.remove, from, node => {
+          if (!node.isText) return;
+          if (firstMarks === null) firstMarks = node.marks;
+          else if (!Mark.sameSet(firstMarks, node.marks)) uniform = false;
+        });
+        if (!uniform) return false;
+        view.dispatch(view.state.tr.insertText(change.text, from - change.remove, to));
         return true;
       }
     },
@@ -100,6 +147,7 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
   }), [prefs.spellcheck, prefs.language]);
   const editor = useEditor(options);
   editorInstance.current = editor;
+  useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(trackModeKey, !!tracking)); }, [editor, tracking]);
   useEffect(() => {
     if (!editor) return;
     const captureSelection = ({ transaction }) => transaction.setMeta(HISTORY_SELECTION_META, editor.state.selection.toJSON());
@@ -109,5 +157,7 @@ export default function ManuscriptEditor({ chapter, prefs, layoutSignature, onRe
   }, [editor]);
   useEffect(() => () => cancelAnimationFrame(toolbarFrame.current), []);
   useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(paginationKey, { enabled: prefs.pageMode === 'pages', numbering: { row: prefs.showRowNumbers, page: prefs.showPageNumbers, paragraph: prefs.showParagraphNumbers }, revision: JSON.stringify([prefs.zoom, prefs.measure, prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers, layoutSignature]) }).setMeta('addToHistory', false)); }, [editor, prefs.pageMode, prefs.zoom, prefs.measure, prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers, layoutSignature]);
+  useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(formattingMarksKey, !!prefs.showFormattingMarks).setMeta('addToHistory', false)); }, [editor, prefs.showFormattingMarks]);
+  useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(grammarKey, { enabled: !!prefs.localGrammar, language: prefs.language }).setMeta('addToHistory', false)); }, [editor, prefs.localGrammar, prefs.language]);
   return <EditorContent editor={editor} />;
 }

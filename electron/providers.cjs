@@ -1,7 +1,9 @@
 const claude = require('./claude-bridge.cjs');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
-const { buildPrompt, cleanResult, getSuggestionLimit } = require('./core.cjs');
+const { buildPrompt, cleanResult, contextBefore, getSuggestionLimit } = require('./core.cjs');
+const { cleanContinuation, ContinuationError } = require('./continuation.cjs');
+const { prepareContinuationContext } = require('./continuation-context.cjs');
 const { parseRephraseOptions } = require('./rephrase-options.cjs');
 const { getBridge, disconnect, resolveCodex, codexEnvironment, COMPLETION_SCHEMA } = require('./codex-bridge.cjs');
 const { isLocalOllama, startOllama, stopOwnedOllama } = require('./ollama-service.cjs');
@@ -83,6 +85,7 @@ function spawnAndWait(executable, args, options, input, signal) {
   });
 }
 const guidedUnavailable = new Map();
+const modelContextLengths = new Map();
 const bounded = (value, fallback, min, max) => Number.isFinite(Number(value)) && value !== '' && value != null ? Math.min(max, Math.max(min, Number(value))) : fallback;
 function outputLimit(settings, request) {
   // Agent replies contain a small action envelope, not a prose prediction. A
@@ -102,9 +105,28 @@ function ollamaThink(settings) {
   return /gpt-oss/i.test(settings.model) ? (settings.allowReasoning ? 'medium' : 'low') : Boolean(settings.allowReasoning);
 }
 class GuidedError extends Error {}
-async function runOllama(settings, prompt, request, signal) {
+async function modelContextLength(settings, signal) {
+  const cacheKey = JSON.stringify([settings.baseUrl, settings.model]);
+  const cached = modelContextLengths.get(cacheKey);
+  if (cached && cached.expires > Date.now()) return cached.value;
+  let value = null;
+  try {
+    const lookupSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(2500)]);
+    const data = await requestJSON(endpoint(settings.baseUrl, 'api/show'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: settings.model.trim(), verbose: false }) }, lookupSignal);
+    const info = data.model_info || {}, architecture = info['general.architecture'];
+    const advertised = architecture ? info[`${architecture}.context_length`] : Object.entries(info).find(([key]) => /^[^.]+\.context_length$/.test(key))?.[1];
+    if (Number.isSafeInteger(advertised) && advertised >= 512 && advertised <= 4 * 1024 * 1024) value = advertised;
+  } catch { signal?.throwIfAborted(); } // Older compatible servers may not expose model metadata.
+  if (modelContextLengths.size >= 200) modelContextLengths.clear();
+  modelContextLengths.set(cacheKey, { value, expires: Date.now() + (value ? 300000 : 30000) });
+  return value;
+}
+function contextWindowError(error) {
+  return [400, 413, 422, 500].includes(error.status) && /(?:context(?: window| length)?.{0,60}(?:exceed|too (?:long|large|small)|overflow|full)|(?:exceed|too (?:long|large)).{0,60}context|(?:prompt|input).{0,50}(?:too (?:long|large)|exceeds?.{0,30}(?:length|limit)))/i.test(error.message);
+}
+async function runOllamaOnce(settings, prompt, request, signal, retry = false) {
   const model = settings.model.trim(); const tokens = outputLimit(settings, request);
-  const temperature = Math.min(2, bounded(settings.temperature, 0.65, 0, 2) + Math.min(request.history?.length || 0, 4) * 0.08);
+  const temperature = retry ? Math.min(0.35, bounded(settings.temperature, 0.65, 0, 2)) : Math.min(2, bounded(settings.temperature, 0.65, 0, 2) + Math.min(request.history?.length || 0, 4) * 0.08);
   const messages = [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }];
   if (!settings.allowReasoning && /qwen3/i.test(model)) messages[1].content += '\n/no_think';
   const common = { model, stream: false, think: ollamaThink(settings), keep_alive: settings.ollamaKeepAlive || '30m' };
@@ -112,10 +134,12 @@ async function runOllama(settings, prompt, request, signal) {
   const headers = { 'Content-Type': 'application/json' };
   const mode = settings.ollamaMode || 'chat'; // legacy callers; current preferences default to auto.
   const raw = async () => {
-    const plainContinuation = request.mode === 'continue' && !request.references?.length && !request.style && !request.history?.length && !request.language;
-    const rawPrompt = plainContinuation ? String(request.before || '') : `${prompt.system}\n\n${prompt.user}\n\n${request.mode === 'continue' ? 'Continuation' : request.mode === 'chat' ? 'Answer' : request.mode === 'checkpoint' ? 'JSON label' : 'Replacement'}:\n`;
+    const plainContinuation = request.mode === 'continue' && request.before && !request.references?.length && !request.style && !request.history?.length && !retry;
+    const rawPrompt = plainContinuation ? contextBefore(String(request.before), request.contextWords || 2000) : request.mode === 'continue' ? `${prompt.system}\n\n${prompt.user}` : `${prompt.system}\n\n${prompt.user}\n\n${request.mode === 'chat' ? 'Answer' : request.mode === 'checkpoint' ? 'JSON label' : 'Replacement'}:\n`;
     const rawOptions = { ...options, num_ctx: settings.localContextLength || ollamaContextWindow(rawPrompt, tokens) };
-    if (!settings.allowReasoning) rawOptions.stop = ['<think>', '</think>', 'Okay, let me', 'Hmm,', 'The user', 'I need to', 'Possible continuation:'];
+    // Stop protocol turns, not ordinary phrases that can also occur in fiction.
+    if (request.mode === 'continue') rawOptions.stop = ['<|im_start|>', '<|im_end|>', '<|eot_id|>', '<|endoftext|>', '[INST]', '[/INST]'];
+    else if (!settings.allowReasoning) rawOptions.stop = ['<think>', '</think>', 'Okay, let me', 'Hmm,', 'The user', 'I need to', 'Possible continuation:'];
     const data = await requestJSON(endpoint(settings.baseUrl, 'api/generate'), { method: 'POST', headers, body: JSON.stringify({ ...common, raw: true, prompt: rawPrompt, options: rawOptions }) }, signal);
     if (data.done_reason === 'length' && request.mode !== 'continue') throw new Error('The model reached the output limit. Increase the token limit before accepting a partial revision.');
     return data.response;
@@ -134,15 +158,57 @@ async function runOllama(settings, prompt, request, signal) {
   } catch (error) {
     signal?.throwIfAborted();
     const unsupported = [400, 404, 422].includes(error.status) && !/model.*not found/i.test(error.message) && /format|schema|structured|api\/chat|not supported|unsupported|404/i.test(error.message);
-    if (mode !== 'auto' || (!(error instanceof GuidedError) && !unsupported)) throw error;
+    // A malformed answer is a generation failure, not evidence that this model
+    // lacks structured output. Do not poison future requests' route selection.
+    if (error instanceof GuidedError) {
+      if (mode === 'auto' && request.mode !== 'continue') return raw();
+      throw error;
+    }
+    if (mode !== 'auto' || !unsupported) throw error;
     if (guidedUnavailable.size >= 200) guidedUnavailable.clear();
     guidedUnavailable.set(guidedKey, true); return raw();
   }
 }
-async function generate(settings, key, request, signal, suppliedPrompt) {
+async function runOllama(settings, prompt, request, signal, onNotice) {
+  if (request.mode !== 'continue') return runOllamaOnce(settings, prompt, request, signal);
+  const tokens = outputLimit(settings, request), guided = (settings.ollamaMode || 'chat') !== 'raw';
+  let contextSettings = settings;
+  let plan = prepareContinuationContext(contextSettings, request, { outputTokens: tokens, guided });
+  // Tiny prompts already fit the minimum window used by this backend. Read
+  // metadata for larger ones so a large user setting cannot exceed the model.
+  if (plan.estimatedTotalTokens > 2048) {
+    const advertised = await modelContextLength(settings, signal);
+    if (advertised && advertised < (Number(settings.localContextLength) || 32768)) {
+      contextSettings = { ...settings, localContextLength: advertised };
+      plan = prepareContinuationContext(contextSettings, request, { outputTokens: tokens, guided });
+    }
+  }
+  const seenNotices = new Set();
+  const notice = message => { if (!signal?.aborted && !seenNotices.has(message)) { seenNotices.add(message); onNotice?.(message); } };
+  let reduceContext = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    signal?.throwIfAborted();
+    if (attempt) plan = prepareContinuationContext(contextSettings, reduceContext ? plan.request : request, { outputTokens: tokens, guided, forceReduced: reduceContext, extraSystem: 'Required output: new manuscript prose that follows the final words of TEXT BEFORE CURSOR. Write what happens NEXT. Do not copy, paraphrase, or restart any supplied sentence or paragraph. Do not return a command, acknowledgement, critique, explanation, or task status.' });
+    for (const message of plan.notices) notice(message);
+    const runtimeSettings = { ...contextSettings, localContextLength: Number(contextSettings.localContextLength) || Math.min(plan.contextLength, Math.max(2048, 2 ** Math.ceil(Math.log2(plan.estimatedTotalTokens)))) };
+    try {
+      const result = await runOllamaOnce(runtimeSettings, plan.prompt, plan.request, signal, Boolean(attempt));
+      return cleanContinuation(typeof result === 'string' ? result : '', request);
+    } catch (error) {
+      signal?.throwIfAborted();
+      const overflow = contextWindowError(error);
+      if (!(error instanceof ContinuationError || error instanceof GuidedError || overflow)) throw error;
+      if (attempt) throw new ContinuationError('retry-exhausted', 'The local model did not produce a usable story continuation after two attempts. Request a new suggestion or choose a different model.');
+      reduceContext = overflow || ['echo', 'repetition', 'oversized'].includes(error.reason);
+      if (overflow) notice('The local model reported that the prompt exceeded its context window. Retrying once with less reference material and earlier story text.');
+      else if (reduceContext) notice('The model repeated text instead of continuing the story. Retrying once with a smaller context where possible.');
+    }
+  }
+}
+async function generate(settings, key, request, signal, suppliedPrompt, onNotice) {
   if (settings.provider === 'local') {
     if (!localModels) throw new Error('Local models are unavailable in this application session.');
-    return localModels.withModel(settings, signal, mapped => generate(mapped, '', request, signal, suppliedPrompt));
+    return localModels.withModel(settings, signal, mapped => generate(mapped, '', request, signal, suppliedPrompt, onNotice));
   }
   const prompt = suppliedPrompt || buildPrompt(settings.provider === 'codex' ? { ...request, references: [] } : request);
   if (settings.provider === 'codex' && request.references?.length) prompt.user = prompt.user.replace('REFERENCE MATERIAL:\n(none)', 'REFERENCE MATERIAL:\nUse the reference material already supplied in this writing session.');
@@ -154,7 +220,7 @@ async function generate(settings, key, request, signal, suppliedPrompt) {
   const temperature = bounded(settings.temperature, 0.65, 0, 2);
   if (settings.provider === 'codex') result = await (await getBridge(settings)).complete(settings, prompt, request.references || [], signal);
   else if (settings.provider === 'claude') result = await claude.complete(settings, prompt, signal);
-  else if (settings.provider === 'ollama') result = await runOllama(settings, prompt, request, signal);
+  else if (settings.provider === 'ollama') result = await runOllama(settings, prompt, request, signal, onNotice);
   else if (settings.provider === 'anthropic') {
     if (!key) throw new Error('Add an Anthropic API key in Connections.');
     const data = await requestJSON(endpoint(settings.baseUrl, 'messages'), { method: 'POST', headers: { ...headers, 'x-api-key': key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify({ model, system: prompt.system, messages: [{ role: 'user', content: prompt.user }], max_tokens: maxTokens, temperature: Math.min(1, temperature) }) }, signal);
@@ -197,7 +263,7 @@ async function probe(settings, key) {
   if (settings.provider === 'codex') {
     const bridge = await getBridge(settings); const status = await bridge.accountStatus();
     if (!status.signedIn) return { ...status, models: [], modelDetails: [] };
-    const details = (await bridge.listModels()).filter(item => !item.hidden || item.model === settings.model || item.id === settings.model);
+    const details = await bridge.listModels();
     return { ...status, models: [...new Set(details.map(item => item.model || item.id))], modelDetails: details.map(item => ({ id: item.id, model: item.model, displayName: item.displayName, isDefault: item.isDefault, supportedReasoningEfforts: item.supportedReasoningEfforts, defaultReasoningEffort: item.defaultReasoningEffort })) };
   }
   const headers = {};
@@ -207,7 +273,7 @@ async function probe(settings, key) {
   const items = data.models || data.data || [];
   if (!Array.isArray(items)) throw new Error('The provider returned an invalid model list.');
   const models = items.map(x => x?.name || x?.id).filter(x => typeof x === 'string').slice(0, 2000).sort();
-  if (settings.provider === 'ollama') guidedUnavailable.clear();
+  if (settings.provider === 'ollama') { guidedUnavailable.clear(); modelContextLengths.clear(); }
   return { connected: true, provider: settings.provider, message: `Connected. ${models.length} model${models.length === 1 ? '' : 's'} available.`, models };
 }
 async function connectionStatus(settings, key) { return settings.provider === 'codex' ? (await getBridge(settings)).accountStatus() : probe(settings, key); }

@@ -1,3 +1,4 @@
 * text=auto eol=lf
 # Preserve whitespace in the collected upstream license texts.
 THIRD-PARTY-NOTICES.md -whitespace
+assets/thesaurus/WordNet_license.txt -whitespace

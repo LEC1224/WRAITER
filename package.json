@@ -1,6 +1,6 @@
 {
   "name": "wraiter",
-  "version": "0.17.0",
+  "version": "0.20.2",
   "private": true,
   "description": "Desktop writing with integrated AI assistance.",
   "author": "WRAITER",
@@ -10,7 +10,14 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "start": "electron .",
-    "package": "npm run notices && npm run build && electron-builder --win nsis portable --x64",
+    "package": "node tools/package-windows.cjs",
+    "package:preview": "node tools/package-windows.cjs --unsigned-preview",
+    "package:store": "node tools/store-package.cjs",
+    "package:store:preview": "node tools/store-package.cjs --preview",
+    "verify:store": "node tools/verify-store-package.cjs",
+    "store:assets": "node tools/store-assets.cjs",
+    "store:screenshots": "node tools/store-screenshots.cjs",
+    "verify:windows-release": "node tools/verify-windows-release.cjs",
     "test": "node --test tests/*.test.cjs tests/*.test.mjs",
     "test:app": "node tests/app.cjs",
     "test:formatting": "node tests/formatting-ui.cjs",
@@ -22,14 +29,17 @@
     "test:undo-scroll": "node tests/undo-scroll-ui.cjs",
     "test:file-open": "node tests/file-open-ui.cjs",
     "test:installer": "node tests/installer-associations.cjs",
+    "test:installer-package": "node tests/installer-package.cjs",
     "test:pdf": "node tests/pdf-layout.cjs",
     "test:pdf-export": "node tests/pdf-export.cjs",
     "test:office": "node tests/formats-interoperability.cjs",
     "test:io": "node tests/io-browser.cjs",
     "test:clipboard": "node tests/export-clipboard.cjs",
+    "test:export-settings": "node tests/export-settings-ui.cjs",
     "test:images": "node tests/image-import-ui.cjs",
     "test:ux": "node tests/document-ux-ui.cjs",
     "test:settings": "node tests/settings-ui.cjs",
+    "test:logging": "node tests/logging-ui.cjs",
     "test:rephrase-vibe": "node tests/rephrase-vibe-ui.cjs",
     "test:suggestion-counts": "node tests/suggestion-counts-ui.cjs",
     "test:desktop": "node tests/desktop-ipc.cjs",
@@ -51,8 +61,13 @@
     "test:reload-numbering": "node tests/reload-numbering-ui.cjs",
     "test:long-numbering": "node tests/long-numbering-ui.cjs",
     "test:proofreading": "node tests/proofreading-ui.cjs",
+    "test:ai-grammar": "node tests/ai-grammar-ui.cjs",
+    "test:ai-grammar-ipc": "node tests/inline-grammar-ipc.cjs",
+    "test:local-writing-tools": "node tests/local-writing-tools-ui.cjs",
     "test:onboarding": "node tests/onboarding-ui.cjs",
+    "test:store": "node tests/store-ui.cjs",
     "test:tutorial": "node tests/tutorial-ui.cjs",
+    "test:continuation": "node tests/continuation-ui.cjs",
     "test:tutorial:live": "node tests/tutorial-live.cjs",
     "notices": "node tools/third-party-notices.cjs",
     "test:editorial": "node tests/editorial-ui.cjs"
@@ -89,13 +104,18 @@
       "THIRD-PARTY-NOTICES.md"
     ],
     "asar": true,
+    "forceCodeSigning": true,
     "win": {
       "target": [
         "nsis",
         "portable"
       ],
       "icon": "assets/icon.ico",
-      "signExecutable": false
+      "signExecutable": true,
+      "signExts": [
+        ".exe",
+        ".dll"
+      ]
     },
     "portable": {
       "artifactName": "WRAITER-${version}-Windows.exe"
@@ -134,6 +154,7 @@
     "@tiptap/extension-text-style": "3.31.3",
     "@tiptap/pm": "3.31.3",
     "@tiptap/starter-kit": "3.31.3",
-    "diff": "9.0.0"
+    "diff": "9.0.0",
+    "re2js": "2.9.1"
   }
 }

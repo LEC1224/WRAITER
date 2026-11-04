@@ -11,8 +11,12 @@ export const CommentAnchor = Mark.create({
   inclusive: false,
   excludes: '',
   clearable: false,
+  addOptions() { return { allowImportedAnchors: false }; },
   addAttributes() { return { id: { default: null } }; },
-  parseHTML() { return []; },
+  parseHTML() { if (!this?.options?.allowImportedAnchors) return []; return [{ tag: 'span[data-wraiter-import-comment-id]', getAttrs: element => {
+    const id = element.getAttribute('data-wraiter-import-comment-id');
+    return COMMENT_ID_PATTERN.test(id || '') ? { id } : false;
+  } }]; },
   renderHTML({ HTMLAttributes }) {
     return ['span', { class: 'comment-anchor', 'data-comment-id': HTMLAttributes.id }, 0];
   }

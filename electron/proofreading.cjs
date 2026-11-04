@@ -49,6 +49,7 @@ Return ONLY valid JSON with this exact top-level shape:
 {"findings":[{"passageId":"the supplied id","start":0,"end":5,"original":"exact source substring","replacement":"suggested replacement","severity":"definite","category":"spelling","reason":"brief explanation"}]}
 
 Offsets are zero-based UTF-16 string offsets into that passage, with end exclusive. Copy original exactly. Never report text outside one passage and never overlap findings. replacement must contain only the proposed replacement for original, not commentary.
+In reason, give one short sentence explaining why this change fits the passage. Name the words or rule involved; a label like "grammar" alone does not explain the change.
 
 Severity must be exactly one of:
 - definite: objectively incorrect spelling, grammar, punctuation, or an unmistakable typo.

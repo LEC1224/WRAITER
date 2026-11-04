@@ -1,0 +1,21 @@
+import React, { useState } from 'react';
+
+export default function TableTools({ Modal, editor, onClose }) {
+  const [rows, setRows] = useState(3), [columns, setColumns] = useState(3), [header, setHeader] = useState(true);
+  const [background, setBackground] = useState('#ffffcc'), [border, setBorder] = useState('#888888');
+  const inside = !!editor?.isActive('table');
+  const actions = [
+    ['Add row above', c => c.addRowBefore(), "Insert a row above the current row."], ['Add row below', c => c.addRowAfter(), "Insert a row below the current row."],
+    ['Add column before', c => c.addColumnBefore(), "Insert a column to the left of the current column."], ['Add column after', c => c.addColumnAfter(), "Insert a column to the right of the current column."],
+    ['Merge selected cells', c => c.mergeCells(), "Combine the selected adjacent cells into one cell."], ['Split cell', c => c.splitCell(), "Split a merged cell back into separate cells."],
+    ['Toggle header row', c => c.toggleHeaderRow(), "Turn header formatting on or off for the first row."], ['Toggle header column', c => c.toggleHeaderColumn(), "Turn header formatting on or off for the first column."],
+    ['Delete row', c => c.deleteRow(), "Delete the current row, including its contents."], ['Delete column', c => c.deleteColumn(), "Delete the current column, including its contents."], ['Remove table', c => c.deleteTable(), "Delete this table, including all of its contents."]
+  ];
+  function execute(command) { if (editor && !editor.isDestroyed) command(editor.chain().focus()).run(); onClose(); }
+  return <Modal title="Table tools" onClose={onClose}><form onSubmit={event => {
+    event.preventDefault();
+    const r = Number(rows), c = Number(columns);
+    if (!Number.isInteger(r) || !Number.isInteger(c) || r < 1 || r > 50 || c < 1 || c > 20) return;
+    execute(chain => chain.insertTable({ rows: r, cols: c, withHeaderRow: header }));
+  }}><div className="form-grid"><label>Rows<input className="field-input" type="number" min="1" max="50" required value={rows} onChange={event => setRows(event.target.value)} /></label><label>Columns<input className="field-input" type="number" min="1" max="20" required value={columns} onChange={event => setColumns(event.target.value)} /></label></div><label className="check-label"><input type="checkbox" checked={header} onChange={event => setHeader(event.target.checked)} />Header row</label><button className="secondary-button" type="submit" title="Insert a table at the cursor using the chosen row, column and header settings.">Insert table</button></form><div className="button-grid">{actions.map(([label, command, hint]) => <button type="button" className="secondary-button" key={label} disabled={!inside} onClick={() => execute(command)} title={inside ? hint : "Place the cursor in a table to use this tool."}>{label}</button>)}</div><div className="form-grid"><label>Cell background<input aria-label="Cell background" type="color" value={background} onChange={event => setBackground(event.target.value)} /></label><button type="button" disabled={!inside} onClick={() => execute(c => c.setCellAttribute('cellBackground', background))} title={inside ? "Apply this background colour to the current or selected cells." : "Place the cursor in a table to use this tool."}>Apply background</button><button type="button" disabled={!inside} onClick={() => execute(c => c.setCellAttribute('cellBackground', null))} title={inside ? "Remove the background colour from the current or selected cells." : "Place the cursor in a table to use this tool."}>Clear background</button><label>Cell border<input aria-label="Cell border colour" type="color" value={border} onChange={event => setBorder(event.target.value)} /></label><button type="button" disabled={!inside} onClick={() => execute(c => c.setCellAttribute('cellBorder', border))} title={inside ? "Apply this border colour to the current or selected cells." : "Place the cursor in a table to use this tool."}>Apply border colour</button><button type="button" disabled={!inside} onClick={() => execute(c => c.setCellAttribute('cellBorder', null))} title={inside ? "Restore the default border colour for the current or selected cells." : "Place the cursor in a table to use this tool."}>Reset border</button></div></Modal>;
+}

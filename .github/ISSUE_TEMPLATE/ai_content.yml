@@ -1,0 +1,27 @@
+name: AI content concern
+description: Report inappropriate or harmful AI output using a non-private example.
+title: "AI content concern: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This form is public. For a private report, email carl.1224@outlook.com.
+        Do not include manuscripts, personal information, passwords or API keys.
+  - type: input
+    id: version
+    attributes:
+      label: WRAITER version
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: AI provider and model
+      description: Please name the provider/model, without credentials or account details.
+  - type: textarea
+    id: concern
+    attributes:
+      label: What happened?
+      description: Describe the concern. Use a short made-up reproduction if possible.
+    validations:
+      required: true

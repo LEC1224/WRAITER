@@ -48,5 +48,6 @@ for (const [dir, manifest] of [...visited].sort((a, b) => `${a[1].name}@${a[1].v
   for (const [name, content] of notices) output.push(`### ${name}`, '', '````text', content.replace(/\r\n/g, '\n').trim(), '````', '');
 }
 if (missing.length) throw new Error(`Review packages missing license files: ${missing.join(', ')}`);
+output.push('## English WordNet thesaurus', '', 'The compressed English thesaurus in assets/thesaurus is the WordNet 2.1 dictionary distributed with LibreOffice. The full notice is included with the asset.', '', '````text', fs.readFileSync(path.join(root, 'assets', 'thesaurus', 'WordNet_license.txt'), 'utf8').trim(), '````', '');
 fs.writeFileSync(path.join(root, 'THIRD-PARTY-NOTICES.md'), output.join('\n'));
 console.log(`Collected notices for ${visited.size} installed application dependencies.`);

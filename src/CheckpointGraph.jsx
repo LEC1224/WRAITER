@@ -22,7 +22,7 @@ export default function CheckpointGraph({ history, onPreview, onRestore }) {
   return <div className="checkpoint-graph-view">
     <div className="checkpoint-graph-toolbar">
       <p className="small-muted">Each line leads from a saved version to the next. The blue path is your current draft.</p>
-      <div className="checkpoint-graph-tools"><label className="history-search"><Search size={14} /><input className="field-input" type="search" aria-label="Find a version in the tree" placeholder="Find a version" value={query} onChange={event => { const value = event.target.value; setQuery(value); const term = value.trim().toLocaleLowerCase(); if (term) center(rows.find(row => [row.item.title, row.item.message, row.item.summary, row.item.location].some(text => String(text || '').toLocaleLowerCase().includes(term)))); }} /></label><button className="secondary-button" onClick={() => center(rows.find(row => row.current))}>Current version</button></div>
+      <div className="checkpoint-graph-tools"><label className="history-search"><Search size={14} /><input className="field-input" type="search" aria-label="Find a version in the tree" placeholder="Find a version" value={query} onChange={event => { const value = event.target.value; setQuery(value); const term = value.trim().toLocaleLowerCase(); if (term) center(rows.find(row => [row.item.title, row.item.message, row.item.summary, row.item.location].some(text => String(text || '').toLocaleLowerCase().includes(term)))); }} /></label><button className="secondary-button" onClick={() => center(rows.find(row => row.current))} title="Centre the tree on the version your current draft continues from.">Current version</button></div>
     </div>
     <div className="checkpoint-graph-scroll" ref={scroller} aria-label="Complete version tree">
       <div className="checkpoint-graph-canvas" style={{ width, height }}>
@@ -39,10 +39,10 @@ export default function CheckpointGraph({ history, onPreview, onRestore }) {
         {rows.map(row => {
           const item = row.item, dimmed = needle && !matches(row);
           return <article key={item.revision} className={`checkpoint-graph-card${row.current ? ' current' : ''}${row.onCurrentPath ? ' current-path' : ''}${dimmed ? ' dimmed' : ''}`} style={{ left: LEFT + row.lane * COLUMN, top: TOP + row.row * ROW }}>
-            <div className="checkpoint-graph-card-heading"><GitBranch size={13} /><button onClick={() => onPreview?.(item)}><strong>{item.title || item.message}</strong></button></div>
+            <div className="checkpoint-graph-card-heading"><GitBranch size={13} /><button onClick={() => onPreview?.(item)} title="Read this saved version without changing your current draft."><strong>{item.title || item.message}</strong></button></div>
             <div className="checkpoint-meta"><Clock3 size={12} /><time dateTime={item.date}>{new Date(item.date).toLocaleString()}</time></div>
             <p className="checkpoint-graph-card-summary">{item.summary || item.location || 'Saved manuscript version'}</p>
-            <div className="checkpoint-graph-card-footer"><span>{row.current ? 'Current version' : row.onCurrentPath ? 'Current path' : 'Other path'}</span><button className="text-button" onClick={() => onPreview?.(item)}><Eye size={13} />Preview</button>{!row.current && <button className="text-button" onClick={() => onRestore?.(item)}>Continue here</button>}</div>
+            <div className="checkpoint-graph-card-footer"><span>{row.current ? 'Current version' : row.onCurrentPath ? 'Current path' : 'Other path'}</span><button className="text-button" onClick={() => onPreview?.(item)} title="Read this saved version without changing your current draft."><Eye size={13} />Preview</button>{!row.current && <button className="text-button" onClick={() => onRestore?.(item)} title="Review restoring this checkpoint. Your current draft will be saved as a version first.">Continue here</button>}</div>
           </article>;
         })}
       </div>

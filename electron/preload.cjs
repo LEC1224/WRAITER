@@ -1,17 +1,21 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const invoke = channel => (...args) => ipcRenderer.invoke(channel, ...args);
 contextBridge.exposeInMainWorld('wraiter', {
+  reviewMenuState: state => ipcRenderer.send('review:state', state),
+  diagnosticsStatus: invoke('diagnostics:status'), openLogFolder: invoke('diagnostics:open-folder'),
+  logSurface: (kind, name, opened) => ipcRenderer.send('diagnostics:surface', kind, name, opened),
+  reportError: (source, error) => ipcRenderer.send('diagnostics:error', source, error),
   externalFilesReady: invoke('external-files:ready'), nextExternalFile: invoke('external-files:next'), openExternalFile: invoke('external-files:open'), completeExternalFile: invoke('external-files:complete'),
   setupInstall: invoke('setup:install'), setupCancel: invoke('setup:cancel'), setupHelp: invoke('setup:help'), setupChoose: invoke('setup:choose'), setupClaudeLogin: invoke('setup:claude-login'), setupTest: invoke('setup:test'),
   boot: invoke('boot'), getRecents: invoke('recent:list'), clearRecents: invoke('recent:clear'), open: invoke('open'), openRecent: invoke('open-recent'), save: invoke('save'),
   activateProject: invoke('workspace:activate'), closeProject: invoke('workspace:close'), rememberProjectView: invoke('workspace:view'), reloadProject: invoke('workspace:reload'),
-  autosave: invoke('autosave'), persistChat: invoke('chat:persist'), newProject: invoke('new-project'), exportFile: invoke('export'), exportClipboard: invoke('export:clipboard'),
+  autosave: invoke('autosave'), persistChat: invoke('chat:persist'), newProject: invoke('new-project'), exportFile: invoke('export'), exportClipboard: invoke('export:clipboard'), previewPDF: invoke('export:preview-pdf'),
   bindNative: invoke('native:bind'), chooseSaveTarget: invoke('save:choose'), saveEncoded: invoke('save:encoded'), loadEditHistory: invoke('history:load'), appendEditHistory: invoke('history:append'), restartEditHistory: invoke('history:restart'), runAgent: invoke('agent:run'),
   reference: invoke('reference'), image: invoke('image'), settings: invoke('settings'),
   reorderProjects: invoke('workspace:reorder'), openLink: invoke('link:open'),
   openDroppedDocument: file => ipcRenderer.invoke('drop:open', webUtils.getPathForFile(file)),
   addDroppedReference: file => ipcRenderer.invoke('drop:reference', webUtils.getPathForFile(file)),
-  generate: invoke('generate'), proofread: invoke('proofread:run'), cancel: invoke('cancel'), probe: invoke('probe'),
+  generate: invoke('generate'), proofread: invoke('proofread:run'), inlineGrammar: invoke('proofread:inline'), cancelInlineGrammar: invoke('proofread:cancel-inline'), thesaurus: invoke('thesaurus:lookup'), cancel: invoke('cancel'), probe: invoke('probe'),
   connectionStatus: invoke('provider:status'), connectProvider: invoke('provider:connect'), reconnectProvider: invoke('provider:reconnect'), loginProvider: invoke('provider:login'), listModels: invoke('provider:models'),
   listFonts: invoke('fonts:list'), setDocumentLanguage: invoke('document:language'), setShortcutCapture: invoke('shortcuts:capture'),
   localStatus: invoke('local:status'), configureLocal: invoke('local:configure'), localFolder: invoke('local:folder'), startLocal: invoke('local:start'), stopLocal: invoke('local:stop'), unloadLocal: invoke('local:unload'), localRelease: invoke('local:release'), installLocal: invoke('local:install'), cancelLocal: invoke('local:cancel'), localCatalogInfo: invoke('local:catalog-info'), pullLocal: invoke('local:pull'), chooseGGUF: invoke('local:choose-gguf'), importGGUF: invoke('local:import'),

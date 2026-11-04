@@ -27,6 +27,7 @@ export function imageControls(extension, canEdit) {
         dom.className = 'image-node'; dom.dataset.imageNode = ''; dom.draggable = true;
         picture.draggable = false; dom.append(picture);
         function paint() {
+          if (['left', 'right'].includes(node.attrs.wrap)) dom.dataset.imageWrap = node.attrs.wrap; else delete dom.dataset.imageWrap;
           if (picture.getAttribute('src') !== node.attrs.src) picture.src = node.attrs.src;
           picture.alt = node.attrs.alt || ''; picture.title = node.attrs.title || '';
           picture.style.width = node.attrs.width ? `${node.attrs.width}px` : '';

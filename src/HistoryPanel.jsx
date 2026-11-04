@@ -61,8 +61,8 @@ export default function HistoryPanel({ journal, gitHistory = { entries: [] }, on
   }, [entries, query]);
   return <div className="inspector-body history-panel">
     <div className="history-tabs" role="tablist" aria-label="Revision history views">
-      <button role="tab" aria-selected={tab === 'edits'} onClick={() => setTab('edits')}>Every edit <span>{status.totalEdits}</span></button>
-      <button role="tab" aria-selected={tab === 'checkpoints'} onClick={() => setTab('checkpoints')}>Checkpoints <span>{gitHistory.entries?.length || 0}</span></button>
+      <button role="tab" aria-selected={tab === 'edits'} onClick={() => setTab('edits')} title="Inspect the editing history and move through undo and redo steps.">Every edit <span>{status.totalEdits}</span></button>
+      <button role="tab" aria-selected={tab === 'checkpoints'} onClick={() => setTab('checkpoints')} title="Browse saved manuscript versions along the current version path.">Checkpoints <span>{gitHistory.entries?.length || 0}</span></button>
     </div>
     {tab === 'edits' ? <>
       <div className="history-actions"><button className="secondary-button" disabled={!status.canUndo} title={status.undoLabel ? `Undo: ${status.undoLabel}` : 'Nothing to undo'} onClick={onUndo}><Undo2 size={14} />Undo</button><button className="secondary-button" disabled={!status.canRedo} title={status.redoLabel ? `Redo: ${status.redoLabel}` : 'Nothing to redo'} onClick={onRedo}><Redo2 size={14} />Redo</button></div>
@@ -71,7 +71,7 @@ export default function HistoryPanel({ journal, gitHistory = { entries: [] }, on
       {!entries.length && <p className="small-muted history-empty">Your editing history begins when you change this document.</p>}
       {Boolean(entries.length) && !filtered.length && <p className="small-muted history-empty">No edits match this search.</p>}
       <div className="history-timeline">{filtered.slice(0, shown).map(entry => <article key={entry.id} className={`history-edit ${entry.status}${entry.current ? ' current' : ''}`}>
-        <button className="history-edit-heading" aria-expanded={expanded === entry.id} onClick={() => { setExpanded(expanded === entry.id ? null : entry.id); onInspectEntry?.(entry); }}>
+        <button className="history-edit-heading" aria-expanded={expanded === entry.id} onClick={() => { setExpanded(expanded === entry.id ? null : entry.id); onInspectEntry?.(entry); }} title="Expand this edit to inspect what changed.">
           {expanded === entry.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           <span><strong>{entry.label}</strong><small>{entry.chapterTitle || 'Manuscript'} · {new Date(entry.timestamp).toLocaleString()}</small></span>
         </button>
@@ -81,18 +81,18 @@ export default function HistoryPanel({ journal, gitHistory = { entries: [] }, on
       {filtered.length > shown && <button className="secondary-button full" onClick={() => setShown(value => value + 100)}>Show 100 more edits ({filtered.length - shown} remaining)</button>}
     </> : <>
       <p className="small-muted">Your current path is shown newest first. Open the complete tree to explore other branches. AI can name and summarize checkpoints using the model chosen in settings.</p>
-      <div className="history-checkpoint-actions"><button className="primary-button" onClick={() => onCheckpoint?.()}><Plus size={15} />Save version</button><button className="secondary-button" aria-label="Checkpoint AI settings" title="Choose the checkpoint model" onClick={onCheckpointSettings}><Settings2 size={15} /></button></div>
-      {!!gitHistory.entries?.length && <button className="secondary-button full checkpoint-open-tree" onClick={onOpenTree}><GitBranch size={14} />Open complete tree <span>{gitHistory.entries.length} versions</span></button>}
+      <div className="history-checkpoint-actions"><button className="primary-button" onClick={() => onCheckpoint?.()} title="Name and save a checkpoint of the manuscript to revisit later."><Plus size={15} />Save version</button><button className="secondary-button" aria-label="Checkpoint AI settings" title="Choose the checkpoint model" onClick={onCheckpointSettings}><Settings2 size={15} /></button></div>
+      {!!gitHistory.entries?.length && <button className="secondary-button full checkpoint-open-tree" onClick={onOpenTree} title="Explore all saved versions, including alternative paths from earlier drafts."><GitBranch size={14} />Open complete tree <span>{gitHistory.entries.length} versions</span></button>}
       {gitHistory.error && <p className="ai-error">{gitHistory.error}</p>}
       {!gitHistory.entries?.length && <p className="small-muted history-empty">Save a version to mark an important point in your draft.</p>}
       {!!checkpoints.length && <label className="history-search"><Search size={14} /><input className="field-input" type="search" aria-label="Search checkpoints" placeholder="Search changes or chapters" value={checkpointQuery} onChange={event => setCheckpointQuery(event.target.value)} /></label>}
       {!!checkpoints.length && !visibleCheckpoints.length && <p className="small-muted history-empty">No checkpoints match this search.</p>}
       <div className="checkpoint-tree" aria-label="Current version path">{visibleCheckpoints.map(({ item, current }) => <article key={item.revision} className={`checkpoint-node current-path${current ? ' current' : ''}`} style={{ '--branch-depth': 0 }}>
-        <div className="checkpoint-node-header"><span className="checkpoint-dot" aria-hidden="true" /><button className="checkpoint-title" onClick={() => onPreviewGit?.(item)}><strong>{item.title || item.message}</strong></button></div>
+        <div className="checkpoint-node-header"><span className="checkpoint-dot" aria-hidden="true" /><button className="checkpoint-title" onClick={() => onPreviewGit?.(item)} title="Read this saved version without changing your current draft."><strong>{item.title || item.message}</strong></button></div>
         <div className="checkpoint-meta"><Clock3 size={12} /><time dateTime={item.date}>{new Date(item.date).toLocaleString()}</time></div>
         {item.summary && <p className="checkpoint-summary">{item.summary}</p>}
         {item.location && <p className="checkpoint-location">Changed in {item.location}</p>}
-        <div className="checkpoint-footer"><span>{current ? 'Current version' : 'Earlier on this path'}</span><button className="text-button" onClick={() => onPreviewGit?.(item)}><Eye size={13} />Preview</button>{!current && <button className="text-button" onClick={() => onRestoreGit?.(item)}>Continue here</button>}</div>
+        <div className="checkpoint-footer"><span>{current ? 'Current version' : 'Earlier on this path'}</span><button className="text-button" onClick={() => onPreviewGit?.(item)} title="Read this saved version without changing your current draft."><Eye size={13} />Preview</button>{!current && <button className="text-button" onClick={() => onRestoreGit?.(item)} title="Review restoring this checkpoint. Your current draft will be saved as a version first.">Continue here</button>}</div>
       </article>)}</div>
     </>}
   </div>;

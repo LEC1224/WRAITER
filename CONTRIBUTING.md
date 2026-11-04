@@ -41,8 +41,10 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | Area changed | Relevant command |
 | --- | --- |
 | Installer guide or AI setup | `npm run test:onboarding` |
-| Interactive tutorial or inline AI | `npm run test:tutorial` |
+| Store packaging, privacy or AI reporting | `npm test`, `npm run package:store`, `npm run verify:store -- <MSIX path>` and `npm run test:store` with the Store `WRAITER_EXECUTABLE` |
+| Interactive tutorial or inline AI | `npm run test:tutorial` and `npm run test:continuation` |
 | Settings, themes or hotkeys | `npm run test:settings` |
+| Diagnostic logs and retention | `npm run test:logging` |
 | Selection descriptions, vibe guidance or phrase ratings | `npm run test:rephrase-vibe` |
 | Translation, correction or rephrasing suggestion targets | `npm run test:suggestion-counts` |
 | Native menus, IPC or provider routing | `npm run test:desktop` |
@@ -53,7 +55,7 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | Assistant document tools, change reports or reverting edits | `npm run test:editorial` |
 | Project tabs and startup | `npm run test:v06` |
 | Explorer file opening and single-instance handling | `npm run test:file-open` |
-| Windows installer file associations | `npm run test:installer` |
+| Windows installer file associations and installation/launch/uninstall | `npm run test:installer` and `npm run test:installer-package` |
 | Pagination and rephrasing alternatives | `npm run test:v05` |
 | Long-document scrolling and responsiveness | `npm run test:scrolling`, `npm run test:large` and `npm run test:undo-scroll` |
 | Paragraph navigation and dialog keyboard focus | `npm run test:navigation` |
@@ -78,6 +80,8 @@ Use synthetic manuscripts in tests. Do not weaken validation, replace production
 
 `npm run test:installer` uses the cached electron-builder NSIS compiler (or `WRAITER_MAKENSIS`) and exercises the real wizard and registry macros in a private test registry subtree. It does not change your Windows file associations.
 
+`npm run test:installer-package` builds and runs a complete NSIS installer with a synthetic launch probe and private installation/association registry keys. Run it from an ordinary user session on a Windows desktop. It checks installation and reinstallation into a path with spaces and Swedish characters, the real post-install launch without administrator rights, and the generated uninstaller. It leaves the installed WRAITER app and its profiles alone. Its unsigned test payload does not validate acceptance by Smart App Control or third-party antivirus.
+
 The following tests are deliberately outside the default suite and CI:
 
 - `npm run test:tutorial:live` uses the saved Codex account for two real AI requests. Only run it when you intend to use that account's allowance. It uses a synthetic tutorial and isolated WRAITER profile.
@@ -97,10 +101,15 @@ Contributions are made under the project's [MIT license](LICENSE). Retain existi
 
 ```powershell
 npm run package
-$env:WRAITER_EXECUTABLE = Join-Path $PWD 'release/win-unpacked/WRAITER.exe'
+$projectVersion = (Get-Content .\package.json -Raw | ConvertFrom-Json).version
+$env:WRAITER_EXECUTABLE = Join-Path $PWD "release/signed/v$projectVersion/win-unpacked/WRAITER.exe"
 npm run test:onboarding
 npm run test:tutorial
 Remove-Item Env:WRAITER_EXECUTABLE
 ```
 
-`npm run package` builds an assisted NSIS installer and a portable executable for Windows x64. Release builds are currently unsigned. Verify the packaged app, update release notes and validation results, and calculate SHA-256 hashes for the exact files to be uploaded. Publishing GitHub releases is a maintainer action; opening a pull request does not publish an installer.
+`npm run package` builds a signed assisted NSIS installer and portable executable for Windows x64 only after a signing identity is configured. It requires signing, verifies valid timestamped signatures on the distribution executables and runtime PE files, and writes checksums after successful verification. It never publishes. `npm run package:preview` explicitly creates unsigned local builds in a separate directory. See [Windows distribution and signing](docs/WINDOWS-DISTRIBUTION.md) for configuration and the remaining signing-provider enrollment step. Verify the exact packaged app on a clean Windows machine, update release notes and validation results, and publish the verified files with their checksums. Publishing GitHub releases is a maintainer action; opening a pull request does not publish an installer.
+
+`npm run package:store` is the separate Microsoft Store route: an unsigned MSIX with exact public Partner Center identifiers, packed and validated by the installed Windows SDK. It does not use personal Authenticode credentials or change Windows certificate/security settings. `npm run test:store` needs `WRAITER_EXECUTABLE` set to its `win-unpacked/WRAITER.exe`; it uses an isolated profile with Git unavailable, synthetic writing and captured external links. It does not register/install the MSIX, send reports or call a live provider. See [Microsoft Store preparation](docs/MICROSOFT-STORE.md) for remaining registered-package, WACK, reviewer and owner steps.
+
+Regenerate logos with `npm run store:assets` and screenshots with `npm run store:screenshots`. These use installed Microsoft Edge and the actual Store runtime respectively. Source screenshots contain only the app's synthetic sample and no fake AI results.

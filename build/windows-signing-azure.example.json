@@ -1,0 +1,13 @@
+{
+  "win": {
+    "azureSignOptions": {
+      "publisherName": "YOUR VERIFIED PUBLISHER NAME",
+      "endpoint": "https://weu.codesigning.azure.net",
+      "codeSigningAccountName": "YOUR SIGNING ACCOUNT",
+      "certificateProfileName": "YOUR PUBLIC TRUST CERTIFICATE PROFILE",
+      "fileDigest": "SHA256",
+      "timestampDigest": "SHA256",
+      "timestampRfc3161": "http://timestamp.acs.microsoft.com"
+    }
+  }
+}

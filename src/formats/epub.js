@@ -1,3 +1,4 @@
+import { namedStyleCSS } from '../named-styles.js';
 import JSZip from 'jszip';
 import { XML_HEADER, xmlEscape as esc } from './package.js';
 import { titleOptions } from './scope.js';
@@ -8,11 +9,17 @@ export async function toEPUB(project, chapterHTML, options = {}) {
   zip.file('META-INF/container.xml', `${XML_HEADER}<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="EPUB/package.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`);
   const language = project.language || 'en-US', titles = titleOptions(options);
   const style = { fontFamily: 'Cambria', fontSize: 12, lineHeight: 1.5, ...project.documentStyle };
-  zip.file('EPUB/styles.css', `body{font-family:serif;line-height:${style.lineHeight};margin:5%;overflow-wrap:break-word}h1,h2,h3{line-height:1.25;page-break-after:avoid}p{white-space:pre-wrap;margin:0 0 .8em;widows:2;orphans:2}img{max-width:100%;height:auto}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #888;padding:.35em}blockquote{margin-left:1em;padding-left:1em;border-left:2px solid #888}pre{white-space:pre-wrap}a{color:inherit}`);
+  zip.file('EPUB/styles.css', `body{font-family:serif;line-height:${style.lineHeight};margin:5%;overflow-wrap:break-word}h1,h2,h3{line-height:1.25;page-break-after:avoid}p{white-space:pre-wrap;margin:0 0 .8em;widows:2;orphans:2}img{max-width:100%;height:auto}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #888;padding:.35em}blockquote{margin-left:1em;padding-left:1em;border-left:2px solid #888}pre{white-space:pre-wrap}a{color:inherit}${namedStyleCSS(project.namedStyles)}`);
   entries.push('<item id="style" href="styles.css" media-type="text/css"/>');
   const xhtml = (title, body) => `${XML_HEADER}<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="${esc(language)}" xml:lang="${esc(language)}"><head><title>${esc(title)}</title><link rel="stylesheet" type="text/css" href="styles.css"/></head><body>${body}</body></html>`;
   async function bodyHTML(html) {
     const root = document.createElement('div'); root.innerHTML = html;
+    const notes = [...root.querySelectorAll('[data-wraiter-note]')];
+    if (notes.length) {
+      const list = document.createElement('ol');
+      for (const [index, note] of notes.entries()) { const item = document.createElement('li'); item.textContent = note.getAttribute('data-note-text') || ''; list.append(item); note.textContent = `[${index + 1}]`; }
+      const heading = document.createElement('h2'); heading.textContent = 'Notes'; root.append(heading, list);
+    }
     for (const image of root.querySelectorAll('img')) {
       const data = image.getAttribute('src') || '';
       if (!images.has(data)) {

@@ -4,7 +4,38 @@ const crypto = require('node:crypto');
 const { hash, atomicWrite, readLimited, writeSnapshot, validateProject, samePath } = require('./core.cjs');
 const FORMATS = ['wraiter', 'odt', 'docx', 'txt', 'md', 'html'];
 const formatOf = target => ({ htm: 'html', markdown: 'md' }[path.extname(target).slice(1).toLowerCase()] || path.extname(target).slice(1).toLowerCase());
-const contentHash = project => hash(JSON.stringify({ title: project.title, chapters: project.chapters, documentStyle: project.documentStyle, language: project.language, layout: project.layout }, (key, value) => key === 'pageBreakBefore' && value == null ? undefined : value));
+const hashFields = project => ({ title: project.title, chapters: project.chapters, documentStyle: project.documentStyle, language: project.language, layout: project.layout, ...(project.namedStyles?.length ? { namedStyles: project.namedStyles } : {}), ...(project.printLayout ? { printLayout: project.printLayout } : {}) });
+const oldHashFields = project => ({ title: project.title, chapters: project.chapters, documentStyle: project.documentStyle, language: project.language, layout: project.layout });
+const legacyContentHash = project => hash(JSON.stringify(oldHashFields(project), (key, value) => key === 'pageBreakBefore' && value == null ? undefined : value));
+const optionalDefaults = new Set(['pageBreakBefore', 'spaceBefore', 'leftIndent', 'rightIndent', 'wrap', 'cellBackground', 'cellBorder', 'namedStyle', 'tabStops']);
+function publicNode(node, sharedIds = new Set()) {
+  const result = { ...node };
+  if (node.marks) { const marks = node.marks.filter(mark => mark?.type !== 'commentAnchor' || sharedIds.has(mark.attrs?.id)); if (marks.length) result.marks = marks; else delete result.marks; }
+  if (node.content) {
+    result.content = [];
+    for (const child of node.content.map(child => publicNode(child, sharedIds))) {
+      const previous = result.content.at(-1);
+      if (previous?.type === 'text' && child.type === 'text' && JSON.stringify({ ...previous, text: '' }) === JSON.stringify({ ...child, text: '' })) previous.text += child.text;
+      else result.content.push(child);
+    }
+  }
+  return result;
+}
+const publicFields = project => {
+  const sharedComments = (project.comments || []).filter(comment => ['docx', 'odt'].includes(comment.origin));
+  const sharedIds = new Set(sharedComments.map(comment => comment.id));
+  return { ...hashFields(project), chapters: project.chapters.map(chapter => ({ ...chapter, content: publicNode(chapter.content, sharedIds) })), ...(sharedComments.length ? { sharedComments } : {}) };
+};
+const interimContentHash = project => hash(JSON.stringify({ ...oldHashFields(project), chapters: project.chapters.map(chapter => ({ ...chapter, content: publicNode(chapter.content) })) }, (key, value) => key === 'pageBreakBefore' && value == null ? undefined : value));
+const contentHash = project => hash(JSON.stringify(publicFields(project), (key, value) => optionalDefaults.has(key) && value == null ? undefined : value));
+// Older sidecars included private marks in the hash. Only upgrade a hash when
+// it matches the exact saved project; a pending document edit must remain dirty.
+function migrateBinding(binding, project) {
+  if (!binding || !project || !binding.contentHash) return binding;
+  // Earlier hashes did not include style definitions. Only migrate that shape
+  // for projects that have no definitions; otherwise a style edit is dirty.
+  return !project.namedStyles?.length && !project.printLayout && [legacyContentHash(project), interimContentHash(project)].includes(binding.contentHash) ? { ...binding, contentHash: contentHash(project) } : binding;
+}
 class DocumentFiles {
   constructor(store, directory) { this.store = store; this.directory = directory; this.binding = null; this.openings = new Map(); this.targets = new Map(); this.lastSidecarSnapshot = null; }
   sidecar(target) { return path.join(this.directory, 'Format state', `${hash(process.platform === 'win32' ? path.resolve(target).toLowerCase() : path.resolve(target))}.json`); }
@@ -13,7 +44,8 @@ class DocumentFiles {
     const target = this.store.currentPath;
     if (!target || formatOf(target) === 'wraiter') { this.binding = null; return; }
     const saved = await this.readSidecar(target);
-    this.binding = { ...saved?.binding, path: target, format: formatOf(target), contentHash: saved?.binding?.contentHash || '', fidelity: saved?.binding?.fidelity || {}, reviewed: saved?.binding?.reviewed || false };
+    const binding = migrateBinding(saved?.binding, saved?.project);
+    this.binding = { ...binding, path: target, format: formatOf(target), contentHash: binding?.contentHash || '', fidelity: binding?.fidelity || {}, reviewed: binding?.reviewed || false };
   }
   async open(target) {
     const format = formatOf(target);
@@ -24,7 +56,7 @@ class DocumentFiles {
       try {
         validateProject(saved.project);
         const result = await this.store.replace(saved.project, path.resolve(target), fingerprint);
-        this.binding = { ...saved.binding, path: path.resolve(target), format };
+        this.binding = { ...migrateBinding(saved.binding, saved.project), path: path.resolve(target), format };
         return { ...result, binding: this.binding };
       } catch (error) { if (error.code && error.code !== 'ENOENT') throw error; }
     }

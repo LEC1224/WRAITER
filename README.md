@@ -8,20 +8,20 @@ You do not need to know how to code. A guided setup helps you connect **Codex** 
 
 ## Download WRAITER
 
-**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.17.0/WRAITER-0.17.0-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
+**[Download the Windows installer](https://github.com/LEC1224/WRAITER/releases/download/v0.20.2/WRAITER-0.20.2-Setup.exe)** · [All downloads and release notes](https://github.com/LEC1224/WRAITER/releases/latest)
 
-Version **0.17.0** is the current public preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
+Version **0.20.2** is the current public preview for **Windows 10/11 on a 64-bit Intel or AMD computer**. macOS, Linux and Windows on ARM are not yet supported release targets.
 
-This release fixes uneven scrolling and paragraph-number alignment, reduces repeated work in large manuscripts, and adds image imports, paragraph navigation and more familiar keyboard interactions. It also includes the wording descriptions, vibe guidance, phrase ratings and revision tools shown below. See the [0.17.0 release notes](docs/releases/v0.17.0.md) for what changed since 0.16.0.
+This release adds tracked text review, footnotes and endnotes, named styles, page setup, templates, bookmarks and more writing tools. Optional AI grammar hints explain and apply corrections from the right-click menu. Export settings are remembered between exports and app restarts, with **Reset to defaults** in the popup. See the [complete 0.20.2 changelist](docs/releases/v0.20.2.md) for everything added since the previous public release, 0.17.0.
 
 | Choose a download | Who it is for |
 | --- | --- |
-| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.17.0/WRAITER-0.17.0-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
-| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.17.0/WRAITER-0.17.0-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
+| **[Installer — recommended](https://github.com/LEC1224/WRAITER/releases/download/v0.20.2/WRAITER-0.20.2-Setup.exe)** | Guides you through installation, lets you choose a folder, and adds shortcuts. |
+| [Portable app](https://github.com/LEC1224/WRAITER/releases/download/v0.20.2/WRAITER-0.20.2-Windows.exe) | Runs without installing WRAITER. Settings and recovery files still stay in your Windows user profile. |
 
 Download one of these `.exe` files. GitHub's **Source code** downloads are for developers; they are not the installer.
 
-The preview is **not digitally signed**, so Windows may display an unknown-publisher or reputation warning. Release files are published only under [LEC1224/WRAITER](https://github.com/LEC1224/WRAITER/releases); checksums are included for people who want to verify their download.
+The preview is **not digitally signed**, so Windows may display an unknown-publisher or reputation warning. Some Windows security configurations may block it completely; see [installation troubleshooting](docs/TROUBLESHOOTING.md#windows-cannot-access-the-specified-device-path-or-file). Release files are published only under [LEC1224/WRAITER](https://github.com/LEC1224/WRAITER/releases); checksums are included for people who want to verify their download.
 
 WRAITER is free under the MIT license. An eligible Codex or Claude Code account is separate, and AI requests use that provider's allowance or billing. Internet access is needed to connect those services. You can also write with AI turned off, or use a local AI model through the advanced settings.
 
@@ -119,13 +119,15 @@ Shortcuts can be changed in **Settings → Keyboard shortcuts**. The tutorial fo
 
 ### Your writing and privacy
 
-Manuscripts, assistant chats and recovery files are stored on your computer. When you request cloud AI help, WRAITER sends the text needed for that task, any vibe guidance you enter, recent messages from the selected conversation, enabled references and writing-voice instructions to your selected provider. The writing assistant can read relevant manuscript passages to answer an editing request. **Private notes and passage comments are excluded from AI requests and exports.** Chats are also excluded from manuscript exports.
+Manuscripts, assistant chats and recovery files are stored on your computer. When you request cloud AI help, WRAITER sends the text needed for that task, any vibe guidance you enter, recent messages from the selected conversation, enabled references and writing-voice instructions to your selected provider. The writing assistant can read relevant manuscript passages to answer an editing request. **Private notes and passage comments are excluded from AI requests.** Private notes and chats are excluded from manuscript exports. Passage comments are excluded from publication exports by default; you can explicitly include them in DOCX/ODT exports.
 
 API keys, when used, are encrypted in your Windows user profile and are not saved in manuscripts. Your provider's own terms and data handling still apply. Local inference can work offline after its engine and model have been downloaded. Local recovery is not a cloud backup: keep a separate backup of important writing.
 
+Read the [privacy policy](docs/PRIVACY.md), also available from **Help → Privacy and AI data**. **Help → Report an AI concern** opens private email or a public issue form, with no writing attached automatically.
+
 ### A few preview limitations
 
-Complex Word or LibreOffice features, such as tracked changes, footnotes, headers and advanced page layouts, may be simplified or omitted. Review the compatibility notice when opening those documents, and keep your originals. The editing page view is not an exact preview of every export layout.
+The current source includes local review tools, footnotes/endnotes, named styles and saved page setup. Complex Word or LibreOffice layouts can still be simplified; review the compatibility notice when opening those documents and keep your originals. The editing page view is not an exact print preview. See the user guide for the supported review and export workflows.
 
 Codex has been tested with real writing requests. Claude Code integration has automated coverage, but a live Claude Code response and installation/sign-in on a completely fresh PC still need wider testing. AI availability and output depend on your account and chosen model.
 
@@ -187,11 +189,13 @@ npm run test:settings
 npm run package
 ```
 
-Unit tests and these desktop suites use synthetic data and local test services. Run desktop suites sequentially. Packaging produces the Windows x64 installer and portable executable under `release/`. Desktop tests accept `WRAITER_EXECUTABLE` to exercise a packaged build.
+Unit tests and these desktop suites use synthetic data and local test services. Run desktop suites sequentially. `npm run package` requires a configured Windows signing identity and verifies the installer, portable executable and runtime signatures. Signed builds go to `release/signed/v<version>/`; use `npm run package:preview` explicitly for local unsigned builds under `release/unsigned-preview/v<version>/`. See [Windows distribution and signing](docs/WINDOWS-DISTRIBUTION.md). Desktop tests accept `WRAITER_EXECUTABLE` to exercise a packaged build.
+
+`npm run package:store` creates a separate MSIX using the reserved Partner Center identity and the installed Microsoft Windows SDK. Microsoft signs it for Store distribution. The build never submits or publishes. See the [Microsoft Store preparation and owner checklist](docs/MICROSOFT-STORE.md) for the local upload package, listing assets, privacy URL, pricing and remaining Store installation/certification checks. `npm run test:store` exercises the packaged Store runtime; `npm run package:store:preview` uses a deliberately synthetic identity.
 
 **Live tests are opt-in:** `npm run test:tutorial:live` sends two requests through your saved Codex account and uses its allowance. It is not part of CI. See the contributor guide for local-model, PDF and office-format test prerequisites.
 
-The [validation report](TEST-REPORT.md) records checks and remaining limitations. [0.17.0 release notes](docs/releases/v0.17.0.md) describe the current version; [0.16.0 release notes](docs/releases/v0.16.0.md) cover the previous public release. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts.
+The [validation report](TEST-REPORT.md) records checks and remaining limitations. The [complete 0.20.2 changelist](docs/releases/v0.20.2.md) covers the current version; [0.17.0 release notes](docs/releases/v0.17.0.md) cover the previous public release. CI runs unit tests and the frontend build on Windows; it does not sign executables or validate paid-provider accounts. The release also includes an unsigned MSIX for Partner Center upload; see the [Store packaging guide](docs/MICROSOFT-STORE.md) for its separate installation and signing requirements.
 
 ## License and acknowledgements
 

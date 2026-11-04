@@ -57,6 +57,6 @@ export default function AssistantChanges({ entry, project, state, onRevert }) {
     {(entry?.patches || []).map((patch, index) => <details className="assistant-change-detail" key={index} open={(entry.patches || []).length <= 4}><summary>{summary[index]}</summary>
       {patch.key === 'content' ? <ContentDiff before={patch.before} after={patch.after} /> : patch.scope === 'chapter' ? <ContentDiff before={patch.before?.content} after={patch.after?.content} /> : <div className="assistant-change-comparison"><div><strong>Before</strong><pre>{display(patch, 'before')}</pre></div><div><strong>After</strong><pre>{display(patch, 'after')}</pre></div></div>}
     </details>)}
-    <div className="assistant-change-footer"><span>{state === 'applied' ? 'Applied' : state === 'reverted' ? 'Reverted' : 'Undone or on an earlier history branch'}</span><button className="secondary-button" disabled={state !== 'applied'} onClick={onRevert}>Revert this assistant edit</button></div>
+    <div className="assistant-change-footer"><span>{state === 'applied' ? 'Applied' : state === 'reverted' ? 'Reverted' : 'Undone or on an earlier history branch'}</span><button className="secondary-button" disabled={state !== 'applied'} onClick={onRevert} title="Revert this assistant edit. If the affected content has changed since, the revert is blocked.">Revert this assistant edit</button></div>
   </div>;
 }

@@ -1,0 +1,48 @@
+const { _electron } = require('playwright');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const root = path.resolve(__dirname, '..');
+(async () => {
+  const output = path.join(root, 'test-output'); await fs.mkdir(output, { recursive: true });
+  const userData = await fs.mkdtemp(path.join(output, 'page-setup-ui-'));
+  const project = { format: 'wraiter', version: 1, id: 'page-setup-ui', title: 'Page setup', language: 'en-US', chapters: [{ id: 'one', title: 'One', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Keep these words.' }] }] } }] };
+  await fs.writeFile(path.join(userData, 'settings.json'), JSON.stringify({ setupComplete: true, tutorialComplete: true, enabled: false, startup: 'restore' }));
+  await fs.writeFile(path.join(userData, 'recovery.json'), JSON.stringify({ project, path: null, expectedHash: null }));
+  const env = { ...process.env, WRAITER_USER_DATA: userData }; delete env.ELECTRON_RUN_AS_NODE;
+  let app;
+  try {
+    app = await _electron.launch({ args: [root], env, timeout: 60000 });
+    const page = await app.firstWindow(), errors = []; page.setDefaultTimeout(10000);
+    page.on('pageerror', error => errors.push(error.message));
+    const editor = page.getByRole('textbox', { name: 'Manuscript editor', exact: true }); await editor.waitFor();
+    const openSetup = async () => { await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.flatMap(item => item.submenu?.items || []).find(item => item.label === 'Page setup…').click()); return page.getByRole('dialog', { name: 'Page setup', exact: true }); };
+    let dialog = await openSetup();
+    await dialog.getByLabel('Paper size', { exact: true }).selectOption('A5');
+    await dialog.getByLabel('Orientation', { exact: true }).selectOption('landscape');
+    await dialog.getByLabel('Top margin (mm)', { exact: true }).fill('15.5');
+    await dialog.getByLabel('Header', { exact: true }).fill('Draft {page} / {pages}');
+    await dialog.getByRole('button', { name: 'Apply page setup', exact: true }).click();
+    await dialog.waitFor({ state: 'hidden' });
+    dialog = await openSetup();
+    assert.equal(await dialog.getByLabel('Paper size', { exact: true }).inputValue(), 'A5');
+    assert.equal(await dialog.getByLabel('Header', { exact: true }).inputValue(), 'Draft {page} / {pages}');
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await editor.press('Control+z');
+    dialog = await openSetup();
+    assert.equal(await dialog.getByLabel('Paper size', { exact: true }).inputValue(), 'A4');
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await editor.press('Control+y');
+    dialog = await openSetup();
+    assert.equal(await dialog.getByLabel('Top margin (mm)', { exact: true }).inputValue(), '15.5');
+    assert.equal(await dialog.getByLabel('Orientation', { exact: true }).inputValue(), 'landscape');
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    assert.equal(await editor.evaluate(el => el.editor.state.doc.textContent), 'Keep these words.');
+    await page.waitForTimeout(1500);
+    const recovery = JSON.parse(await fs.readFile(path.join(userData, 'recovery.json'), 'utf8'));
+    assert.equal(recovery.project.printLayout.size, 'A5');
+    assert.equal(recovery.project.printLayout.header, 'Draft {page} / {pages}');
+    assert.deepEqual(errors, []);
+    console.log('Page setup desktop dialog preserves settings, undo/redo and recovery without changing prose.');
+  } finally { await app?.close().catch(() => {}); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

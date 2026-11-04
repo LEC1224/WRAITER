@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sun, Moon, Contrast, Keyboard, Globe2, SlidersHorizontal, Plug, Check, RotateCcw, X, LoaderCircle, CheckCircle2, Info, ExternalLink, Download } from 'lucide-react';
+import { ChevronDown, Sun, Moon, Contrast, Keyboard, Globe2, SlidersHorizontal, Plug, Check, RotateCcw, X, LoaderCircle, CheckCircle2, Info, ExternalLink, Download, FileText, FolderOpen } from 'lucide-react';
+import { useLoggedSurface, reportError } from './diagnostics.js';
 import { DEFAULT_HOTKEYS, HOTKEY_LABELS, shortcutFromEvent, shortcutConflicts, formatShortcut } from './hotkeys.js';
 import { LANGUAGES } from './languages.js';
 import LocalModels from './LocalModels.jsx';
@@ -8,17 +9,26 @@ const api = window.wraiter;
 const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['proofread', 'Proofreading review'], ['chat', 'Project assistant'], ['checkpoint', 'Version summaries']];
 const PROVIDERS = { local: 'Local models (managed)', codex: 'Codex account', claude: 'Claude Code account', ollama: 'Ollama (local)', openai: 'OpenAI API', anthropic: 'Claude API', compatible: 'Compatible API / xAI' };
 const PRESETS = { claude: { baseUrl: '', model: '', claudePath: '' }, local: { baseUrl: '', model: '' }, codex: { baseUrl: '', model: '', codexPath: '' }, ollama: { baseUrl: 'http://localhost:11434', model: '' }, openai: { baseUrl: 'https://api.openai.com/v1', model: '' }, anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: '' }, compatible: { baseUrl: 'https://api.x.ai/v1', model: '' } };
-const errorText = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+const errorText = error => { reportError('settings.operation', error); return String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''); };
 const profileFor = (settings, task) => ({ provider: settings.provider || 'codex', baseUrl: settings.baseUrl || '', model: settings.model || '', codexPath: settings.codexPath || '', claudePath: settings.claudePath || '', ...(settings.taskProfiles?.[task] || {}) });
-const connectionKey = profile => [profile.provider, profile.baseUrl.replace(/\/+$/, ''), profile.codexPath || '', profile.claudePath || ''].join('|');
+const connectionKey = profile => [profile.provider, profile.baseUrl.trim().replace(/\/+$/, ''), profile.provider === 'codex' ? profile.codexPath || '' : '', profile.provider === 'claude' ? profile.claudePath || '' : ''].join('|');
+const modelIds = models => [...new Set((models || []).map(model => typeof model === 'string' ? model : model.id || model.model).filter(Boolean))];
 
-function NumberField({ label, value, min, max, step = 1, onChange, help }) {
-  return <label>{label}<input className="field-input" type="number" aria-label={label} min={min} max={max} step={step} value={value ?? ''} onChange={event => onChange(event.target.value === '' ? '' : Number(event.target.value))} />{help && <small className="field-help">{help}</small>}</label>;
+function NumberField({ label, value, min, max, step = 1, onChange, help, disabled = false }) {
+  return <label>{label}<input className="field-input" type="number" aria-label={label} min={min} max={max} step={step} disabled={disabled} value={value ?? ''} onChange={event => onChange(event.target.value === '' ? '' : Number(event.target.value))} />{help && <small className="field-help">{help}</small>}</label>;
 }
 
 export default function Settings({ initialTab, initialTask, prefs, updatePrefs, onClose, notify, fonts = [], Modal }) {
-  const [tab, setTab] = useState(['general', 'appearance', 'language', 'connections', 'local', 'ai', 'hotkeys'].includes(initialTab) ? initialTab : 'appearance');
-  const [draft, setDraft] = useState(() => ({ translationSuggestions: 3, correctionSuggestions: 1, rephraseSuggestions: 3, ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
+  const [tab, setTab] = useState(['general', 'appearance', 'grammar', 'language', 'connections', 'local', 'ai', 'hotkeys', 'logging'].includes(initialTab) ? initialTab : 'appearance');
+  const [draft, setDraft] = useState(() => ({ logCleanupEnabled: true, logRetentionMonths: 1, translationSuggestions: 3, correctionSuggestions: 1, rephraseSuggestions: 3, ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
+  const [logStatus, setLogStatus] = useState(null);
+  useLoggedSurface('settings', tab);
+  useEffect(() => {
+    if (tab !== 'logging') return;
+    let active = true;
+    api?.diagnosticsStatus?.().then(value => { if (active) setLogStatus(value); }).catch(error => { if (active) setSaveError(errorText(error)); });
+    return () => { active = false; };
+  }, [tab, prefs.logCleanupEnabled, prefs.logRetentionMonths]);
   const [task, setTask] = useState(TASKS.some(([which]) => which === initialTask) ? initialTask : 'continue');
   const [keyEdits, setKeyEdits] = useState({});
   const [connections, setConnections] = useState({});
@@ -69,15 +79,16 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
       // Read the existing account/model list; browser sign-in is always an explicit action.
       check('models');
     }
-  }, [tab, task, profile.provider, pending]);
+  }, [tab, task, identity, pending]);
 
   async function save(close) {
     if (conflicts.length) { setSaveError('Resolve the shortcut conflicts before saving.'); setTab('hotkeys'); return; }
-    const ranges = { zoom: [50, 200], measure: [400, 1600], goal: [0, 1000000], predictionWords: [1, 500], translationSuggestions: [1, 8], correctionSuggestions: [1, 8], rephraseSuggestions: [1, 8], contextWords: [50, 16000], tokenCap: [64, 32768], temperature: [0, 2] };
+    const ranges = { logRetentionMonths: [1, 24], zoom: [50, 200], measure: [400, 1600], goal: [0, 1000000], predictionWords: [1, 500], translationSuggestions: [1, 8], correctionSuggestions: [1, 8], rephraseSuggestions: [1, 8], contextWords: [50, 16000], tokenCap: [64, 32768], temperature: [0, 2] };
     for (const [name, [min, max]] of Object.entries(ranges)) {
       if (!Number.isFinite(draft[name]) || draft[name] < min || draft[name] > max) { setSaveError('Check the number fields. Every value must be within its displayed range.'); return; }
     }
     if (['translationSuggestions', 'correctionSuggestions', 'rephraseSuggestions'].some(name => !Number.isInteger(draft[name]))) { setSaveError('Suggestion counts must be whole numbers from 1 to 8.'); return; }
+    if (!Number.isInteger(draft.logRetentionMonths)) { setSaveError('Log retention must be a whole number of months from 1 to 24.'); return; }
     setSaving(true); setSaveError('');
     try {
       const continuation = profileFor(draft, 'continue');
@@ -98,13 +109,36 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
     finally { if (mounted.current) setSaving(false); }
   }
 
-  const tabs = [['general', 'General', SlidersHorizontal], ['appearance', 'Appearance', Sun], ['language', 'Languages', Globe2], ['connections', 'Connections', Plug], ['local', 'Local models', Download], ['ai', 'Writing AI', SlidersHorizontal], ['hotkeys', 'Shortcuts', Keyboard]];
+  const tabs = [['general', 'General', SlidersHorizontal], ['appearance', 'Appearance', Sun], ['grammar', 'Spelling and grammar', Check], ['language', 'Languages', Globe2], ['connections', 'Connections', Plug], ['local', 'Local models', Download], ['ai', 'Writing AI', SlidersHorizontal], ['hotkeys', 'Shortcuts', Keyboard], ['logging', 'Logging', FileText]];
   return <Modal title="Settings" onClose={saving ? () => {} : onClose} wide>
     <div className="settings-tabs" role="tablist" aria-label="Settings categories">{tabs.map(([id, label, Icon]) => <button type="button" key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'selected' : ''} onClick={() => { setCapturing(''); setTab(id); }}><Icon size={15} />{label}</button>)}</div>
     <div className="settings-content" role="tabpanel" aria-label={tabs.find(([id]) => id === tab)?.[1]}>
+      {tab === 'logging' && <>
+        <h3>Local activity and error logs</h3>
+        <p className="notice-copy">Logs help diagnose problems and understand how WRAITER is used. They record settings changes, panels and windows opening or closing, document operations, and errors.</p>
+        <p className="small-muted">Logs stay on this computer. Typing, manuscript text, chats, document names and paths, credentials, and free-text setting values are excluded.</p>
+        <label className="check-label"><input type="checkbox" checked={draft.logCleanupEnabled} onChange={event => set('logCleanupEnabled', event.target.checked)} />Automatically delete old logs</label>
+        <div className="form-grid"><NumberField label="Keep logs for (months)" value={draft.logRetentionMonths} min={1} max={24} disabled={!draft.logCleanupEnabled} onChange={value => set('logRetentionMonths', value)} help="1–24 calendar months. The default is one month." /></div>
+        <p className="small-muted">Cleanup runs when WRAITER starts, every hour while it is open, and when you apply a cleanup change. With cleanup turned off, logs are kept until you turn it on again. Use Apply or Save settings to confirm changes.</p>
+        <button type="button" className="secondary-button" onClick={async () => { try { await api.openLogFolder(); } catch (error) { setSaveError(errorText(error)); } }} title="Open WRAITER’s diagnostic log folder in File Explorer."><FolderOpen size={15} />Open log folder</button>
+        {logStatus && <p className="small-muted" style={{ overflowWrap: 'anywhere' }}>{logStatus.directory}</p>}
+        {!!logStatus?.failures && <p className="connection-status error" role="status">Some log files could not be written or cleaned up ({logStatus.lastFailure}). Check the folder’s permissions and available disk space.</p>}
+      </>}
       {tab === 'general' && <><h3>Projects and startup</h3><label className="field-label" htmlFor="startup-projects">When WRAITER starts</label><select id="startup-projects" className="field-input" aria-label="When WRAITER starts" value={draft.startup || 'restore'} onChange={event => set('startup', event.target.value)}><option value="restore">Restore all open project tabs</option><option value="new">Open a clean new project</option></select><p className="small-muted">Restoring includes unnamed drafts and the last active tab. Each project keeps its own editing history. Starting clean preserves unnamed drafts in File → Open recent.</p><p className="small-muted">New and Open add a project tab. Closing a tab keeps its saved file; unnamed drafts remain available in Open recent. This setting takes effect the next time you launch WRAITER.</p></>}
       {tab === 'local' && <LocalModels notify={notify} onAssign={(which, model) => setProfile(which, { provider: 'local', baseUrl: '', model })} />}
+      {tab === 'grammar' && <><h3>Spelling and grammar</h3>
+        <label className="check-label"><input type="checkbox" checked={!!draft.spellcheck} onChange={event => set('spellcheck', event.target.checked)} />Underline spelling mistakes with the local dictionary</label>
+        <label className="check-label"><input type="checkbox" checked={!!draft.localGrammar} onChange={event => set('localGrammar', event.target.checked)} />Local grammar hints while typing (English)</label><p className="small-muted">Checks repeated words, a/an and common “could of” expressions on this computer. Hover an underline to read the suggestion; intentional wording can stay.</p>
+        <label className="check-label"><input type="checkbox" checked={!!draft.aiGrammar} onChange={event => set('aiGrammar', event.target.checked)} />AI grammar hints while typing</label><p className="small-muted">After a three-second pause, sends the current paragraph to your selected proofreading connection. Cloud providers may charge or use your allowance. Suggestions never change the manuscript automatically.</p>
+        <p className="small-muted">Hover a purple underline to see why it was flagged and what the AI suggests. Click it to apply or ignore. AI hints require AI to be enabled; choose their model under Connections → Proofreading review.</p>
+      </>}
       {tab === 'appearance' && <>
+        <label className="check-label"><input type="checkbox" checked={!!draft.showFormattingMarks} onChange={event => set('showFormattingMarks', event.target.checked)} />Show spaces, tabs and paragraph marks</label>
+        <label className="check-label"><input type="checkbox" checked={!!draft.smartPunctuation} onChange={event => set('smartPunctuation', event.target.checked)} />Use smart quotes, em dashes and ellipses while typing</label>
+        <p className="small-muted">Smart punctuation changes only newly typed characters and is off by default.</p>
+        <h3>Text substitutions</h3><p className="small-muted">Type a trigger followed by a space to replace it. Rules are case-sensitive and stay on this computer. Text with mixed formatting is left unchanged.</p>
+        {(draft.substitutions || []).map((rule, index) => <div className="form-grid" key={index}><label>Trigger<input className="field-input" aria-label={`Substitution ${index + 1} trigger`} maxLength="80" value={rule.from} onChange={event => set('substitutions', draft.substitutions.map((item, i) => i === index ? { ...item, from: event.target.value } : item))} /></label><label>Replacement<input className="field-input" aria-label={`Substitution ${index + 1} replacement`} maxLength="500" value={rule.to} onChange={event => set('substitutions', draft.substitutions.map((item, i) => i === index ? { ...item, to: event.target.value } : item))} /></label><button type="button" className="secondary-button" onClick={() => set('substitutions', draft.substitutions.filter((_, i) => i !== index))}>Remove</button></div>)}
+        <button type="button" className="secondary-button" disabled={(draft.substitutions || []).length >= 100} onClick={() => set('substitutions', [...(draft.substitutions || []), { from: '', to: '' }])} title="Add a shortcut that expands into your chosen text while typing.">Add text substitution</button>
         <label className="field-label" htmlFor="document-page-view">Document view</label><select id="document-page-view" className="field-input" aria-label="Document view" value={draft.pageMode || 'continuous'} onChange={event => set('pageMode', event.target.value)}><option value="continuous">Continuous — infinite page (default)</option><option value="pages">Divided pages</option></select><p className="small-muted">Both views let you scroll almost one screen below the document. Divided pages flow with your font and column width. Insert a manual page break from Edit → Insert page break{draft.hotkeys.pageBreak ? ` or ${formatShortcut(draft.hotkeys.pageBreak)}` : ''}; Backspace at the start of that paragraph removes it.</p>
         <label className="field-label">Interface theme</label>
         <div className="theme-options">{[['paper', 'Light', Sun], ['dark', 'Dark', Moon], ['contrast', 'High contrast', Contrast]].map(([value, label, Icon]) => <button key={value} type="button" className={'theme-option ' + value + (draft.theme === value ? ' selected' : '')} aria-pressed={draft.theme === value} onClick={() => set('theme', value)}><div aria-hidden="true"><span /><span /><span /></div><label><Icon size={14} />{label}{draft.theme === value && <Check size={14} />}</label></button>)}</div>
@@ -120,7 +154,6 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
           <label>Default document language<select className="field-input" aria-label="Default document language" value={draft.language} onChange={event => set('language', event.target.value)}>{LANGUAGES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select><small className="field-help">Used for new documents. Change the current document's language in its toolbar.</small></label>
           <label>My native language<select className="field-input" aria-label="Native language" value={draft.nativeLanguage || ''} onChange={event => set('nativeLanguage', event.target.value)}><option value="">Not set</option>{LANGUAGES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select><small className="field-help">Optional. Enables translation of native-language selections.</small></label>
         </div>
-        <label className="check-label"><input type="checkbox" checked={!!draft.spellcheck} onChange={event => set('spellcheck', event.target.checked)} />Underline spelling mistakes with the local dictionary</label>
         <div className="settings-section"><h3>Selection behaviour</h3><p className="notice-copy">Select text and press {formatShortcut(draft.hotkeys.complete)}. Text in the document's language receives a rephrasing suggestion. A word or phrase in your native language receives a translation into the document's language. Review and accept the suggested replacement before it changes the manuscript.</p><p className="small-muted">LLM correction uses the current document's language, including the selected English spelling variant. The local dictionary is independent of the AI correction model.</p></div>
       </div>}
       {tab === 'connections' && <>
@@ -128,20 +161,26 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
         <div className="task-profiles">
           <div className="task-profile-row header" aria-hidden="true"><span>Task</span><span>Connection</span><span>Model</span><span /></div>
           {TASKS.map(([which, label]) => {
-            const item = profileFor(draft, which), known = connections[connectionKey(item)], modelNames = known?.models || [];
+            const item = profileFor(draft, which), known = connections[connectionKey(item)], modelNames = modelIds(known?.models).filter(model => !(draft.hiddenModels?.[connectionKey(item)] || []).includes(model));
             return <div key={which} className={'task-profile-row' + (task === which ? ' selected' : '')}>
               <strong>{label}</strong>
               <select className="field-input" aria-label={label + ' provider'} value={item.provider} onChange={event => { setProfile(which, { provider: event.target.value, ...PRESETS[event.target.value] }); setTask(which); }}>{Object.entries(PROVIDERS).map(([value, name]) => <option value={value} key={value}>{name}</option>)}</select>
-              <div><input className="field-input" aria-label={label + ' model'} list={'models-' + which} value={item.model} placeholder={item.provider === 'codex' ? 'Codex default model' : 'Choose or type model'} onChange={event => setProfile(which, { model: event.target.value })} /><datalist id={'models-' + which}>{modelNames.map(model => <option value={typeof model === 'string' ? model : model.id || model.model} key={typeof model === 'string' ? model : model.id || model.model} />)}</datalist></div>
-              <button className="secondary-button" type="button" onClick={() => setTask(which)} aria-pressed={task === which}>Configure</button>
+              <div className="model-picker" onFocus={() => setTask(which)}>
+                <input className="field-input" role="combobox" aria-expanded="false" aria-label={label + ' model'} value={item.model} placeholder={item.provider === 'codex' ? 'Codex default model' : 'Choose or type model'} onChange={event => setProfile(which, { model: event.target.value })} />
+                <select className="field-input model-dropdown" aria-label={'Available models for ' + label} title="Show all available models" value="" onChange={event => { if (event.target.value) setProfile(which, { model: event.target.value }); }}>
+                  <option value="" disabled>{!known ? 'Loading models…' : known.error ? 'Could not load models — use Refresh models' : modelNames.length ? 'Choose a model' : 'No visible models — check Advanced or refresh'}</option>
+                  {modelNames.map(model => <option key={model} value={model}>{model}</option>)}
+                </select><ChevronDown className="model-dropdown-arrow" size={14} aria-hidden="true" />
+              </div>
+              <button className="secondary-button" type="button" onClick={() => setTask(which)} aria-pressed={task === which} title={`Edit the connection details for ${label.toLowerCase()}.`}>Configure</button>
             </div>;
           })}
         </div>
         <div className="connection-editor">
           <h3>{TASKS.find(([which]) => which === task)?.[1]} — {PROVIDERS[profile.provider]}</h3>
-          {profile.provider === 'local' ? <><p className="small-muted">WRAITER manages this engine and starts the selected model automatically. Processing stays on this computer.</p><button className="secondary-button" type="button" onClick={() => setTab('local')}>Manage local models</button></> : ['codex', 'claude'].includes(profile.provider) ? <>
+          {profile.provider === 'local' ? <><p className="small-muted">WRAITER manages this engine and starts the selected model automatically. Processing stays on this computer.</p><button className="secondary-button" type="button" onClick={() => setTab('local')} title="Download or import local models, choose storage, and manage memory use.">Manage local models</button></> : ['codex', 'claude'].includes(profile.provider) ? <>
             <p className="small-muted">WRAITER connects to the account saved by the selected helper. You do not need to open a terminal or keep a CLI window running.</p>
-            {connection?.needsLogin && !connection.error && <button type="button" className="primary-button spaced-button" disabled={pending === identity} onClick={() => check('login')}><ExternalLink size={14} />Sign in{profile.provider === 'codex' ? ' with ChatGPT' : ' to Claude Code'}</button>}
+            {connection?.needsLogin && !connection.error && <button type="button" className="primary-button spaced-button" disabled={pending === identity} onClick={() => check('login')} title="Open the provider’s sign-in flow to connect your account."><ExternalLink size={14} />Sign in{profile.provider === 'codex' ? ' with ChatGPT' : ' to Claude Code'}</button>}
           </> : <>
             <label className="field-label">{profile.provider === 'ollama' ? 'Ollama address' : 'API base address'}</label>
             <input className="field-input" aria-label="Provider base address" value={profile.baseUrl} onChange={event => setProfile(task, { baseUrl: event.target.value })} />
@@ -152,11 +191,17 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
             </>}
             {profile.provider === 'ollama' && <p className="small-muted">Connect starts an installed local Ollama service if needed. Choose one of your installed models, or enter the name of a model available on your server.</p>}
           </>}
-          <div className="connection-check"><button className="secondary-button" type="button" disabled={!!pending} onClick={() => check('connect')}>{pending === identity ? <LoaderCircle size={14} className="spin" /> : <Plug size={14} />}Connect</button><button className="secondary-button" type="button" disabled={!!pending} onClick={() => check('models')}>Refresh models</button>{profile.provider === 'codex' && <button className="text-button" type="button" disabled={!!pending} onClick={() => check('reconnect')}>Reconnect</button>}</div>
+          <div className="connection-check"><button className="secondary-button" type="button" disabled={!!pending} onClick={() => check('connect')} title={profile.provider === "ollama" ? "Check this connection and start the installed local Ollama service if needed." : "Check the selected provider connection and retrieve its available models."}>{pending === identity ? <LoaderCircle size={14} className="spin" /> : <Plug size={14} />}Connect</button><button className="secondary-button" type="button" disabled={!!pending} onClick={() => check('models')} title="Reload the models available from the selected connection.">Refresh models</button>{profile.provider === 'codex' && <button className="text-button" type="button" disabled={!!pending} onClick={() => check('reconnect')} title="Restart the connection to the saved Codex account and refresh its models.">Reconnect</button>}</div>
           {pending === identity && <div className="connection-status" role="status"><LoaderCircle size={14} className="spin" />Checking connection…</div>}
           {connection && pending !== identity && <div className={'connection-status ' + (connection.error ? 'error' : connection.needsLogin ? '' : 'success')} role="status">{connection.error ? <Info size={15} /> : <CheckCircle2 size={15} />}<span>{connection.message || (connection.connected ? 'Connected.' : 'Connection checked.')}{connection.models?.length && !/models? available/i.test(connection.message || '') ? ' ' + connection.models.length + ' models available.' : ''}</span></div>}
           {profile.provider === 'claude' && <label>Claude Code executable (optional)<input className="field-input" aria-label="Claude Code executable path" value={profile.claudePath || ''} onChange={e => setProfile(task, { claudePath: e.target.value })} placeholder="Automatic detection" /></label>}
-          {profile.provider === 'codex' && <details><summary>Advanced: executable location</summary><p className="small-muted">Detected automatically from your Codex installation. Override only if you use a custom installation.</p><div className="input-with-button"><input className="field-input" aria-label="Codex executable path" value={profile.codexPath || ''} placeholder="Automatic detection" onChange={event => setProfile(task, { codexPath: event.target.value })} /><button className="secondary-button" type="button" onClick={async () => { try { const chosen = await api.chooseCodex(); if (chosen) setProfile(task, { codexPath: chosen }); } catch (error) { setSaveError(errorText(error)); } }}>Browse</button></div></details>}
+          {profile.provider === 'codex' && <details><summary>Advanced: executable location</summary><p className="small-muted">Detected automatically from your Codex installation. Override only if you use a custom installation.</p><div className="input-with-button"><input className="field-input" aria-label="Codex executable path" value={profile.codexPath || ''} placeholder="Automatic detection" onChange={event => setProfile(task, { codexPath: event.target.value })} /><button className="secondary-button" type="button" onClick={async () => { try { const chosen = await api.chooseCodex(); if (chosen) setProfile(task, { codexPath: chosen }); } catch (error) { setSaveError(errorText(error)); } }} title="Choose the installed Codex helper executable.">Browse</button></div></details>}
+          <details className="model-visibility"><summary>Advanced: model visibility</summary>
+            <p className="small-muted">Uncheck models to hide them from the dropdowns for this connection. Existing task assignments and manually typed model names still work. Save settings to keep these choices.</p>
+            <div className="model-visibility-list">{modelIds([...(connection?.models || []), ...(draft.hiddenModels?.[identity] || [])]).map(model => <label className="check-label" key={model}><input type="checkbox" checked={!(draft.hiddenModels?.[identity] || []).includes(model)} onChange={event => set('hiddenModels', { ...draft.hiddenModels, [identity]: event.target.checked ? (draft.hiddenModels?.[identity] || []).filter(id => id !== model) : [...(draft.hiddenModels?.[identity] || []), model] })} />{model}</label>)}</div>
+            {!connection?.models?.length && <p className="small-muted">Connect or refresh models to discover the available choices.</p>}
+            {!!draft.hiddenModels?.[identity]?.length && <button type="button" className="secondary-button" onClick={() => set('hiddenModels', { ...draft.hiddenModels, [identity]: [] })}>Show all models</button>}
+          </details>
           <p className="small-muted">{task === 'checkpoint' ? 'Version summaries use short excerpts of changed text, chapter titles, and the manuscript title. References are not sent.' : profile.provider === 'local' ? 'Local processing uses the selected model folder and memory controls.' : profile.provider === 'ollama' ? 'Text is sent to this Ollama address. A localhost address keeps model processing on this computer.' : 'Selected text, surrounding context, and enabled references are sent to the chosen provider when assistance runs.'}</p>
         </div>
       </>}
@@ -192,14 +237,14 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
             const value = shortcutFromEvent(event);
             if (!value) return;
             set('hotkeys', { ...draft.hotkeys, [command]: value }); setCapturing('');
-          }}>{capturing === command ? 'Press shortcut…' : formatShortcut(draft.hotkeys[command])}</button>
+          }} title={capturing === command ? "Press the key combination you want to assign." : "Click, then press a key combination to assign this shortcut."}>{capturing === command ? 'Press shortcut…' : formatShortcut(draft.hotkeys[command])}</button>
           <span className="hotkey-actions"><button type="button" className="icon-button" aria-label={'Reset ' + HOTKEY_LABELS[command]} title={'Reset to ' + formatShortcut(defaultKey)} onClick={() => set('hotkeys', { ...draft.hotkeys, [command]: defaultKey })}><RotateCcw size={14} /></button><button type="button" className="icon-button" aria-label={'Unassign ' + HOTKEY_LABELS[command]} title="Unassign shortcut" onClick={() => set('hotkeys', { ...draft.hotkeys, [command]: '' })}><X size={14} /></button></span>
         </div>)}</div>
         {!!conflicts.length && <div className="connection-status error" role="alert"><span>{conflicts.join('\n')}</span></div>}
-        <button type="button" className="secondary-button" onClick={() => { set('hotkeys', { ...DEFAULT_HOTKEYS }); setCapturing(''); }}><RotateCcw size={14} />Restore all default shortcuts</button>
+        <button type="button" className="secondary-button" onClick={() => { set('hotkeys', { ...DEFAULT_HOTKEYS }); setCapturing(''); }} title="Reset every keyboard shortcut to WRAITER’s defaults in this settings draft."><RotateCcw size={14} />Restore all default shortcuts</button>
       </>}
     </div>
     {saveError && <div className="connection-status error" role="alert"><Info size={15} /><span>{saveError}</span></div>}
-    <div className="modal-footer"><button type="button" className="secondary-button" disabled={saving} onClick={onClose}>Cancel</button><button type="button" className="secondary-button" disabled={saving || !!conflicts.length} onClick={() => save(false)}>Apply</button><button type="button" className="primary-button" disabled={saving || !!conflicts.length} onClick={() => save(true)}>{saving ? <LoaderCircle size={14} className="spin" /> : <Check size={14} />}Save settings</button></div>
+    <div className="modal-footer"><button type="button" className="secondary-button" disabled={saving} onClick={onClose}>Cancel</button><button type="button" className="secondary-button" disabled={saving || !!conflicts.length} onClick={() => save(false)} title="Save the settings and keep this dialog open.">Apply</button><button type="button" className="primary-button" disabled={saving || !!conflicts.length} onClick={() => save(true)} title="Save the settings and close this dialog.">{saving ? <LoaderCircle size={14} className="spin" /> : <Check size={14} />}Save settings</button></div>
   </Modal>;
 }

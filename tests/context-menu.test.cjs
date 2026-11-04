@@ -55,8 +55,19 @@ test('ordinary inputs use native text undo and clipboard permissions without man
   assert.equal(menu.find(item => item.role === 'paste').enabled, false);
   assert.equal(menu.some(item => item.id), false);
   assert.equal(contextMenuTemplate({ ...params, isEditable: false }, null, callbacks()).find(item => item.role === 'paste').enabled, false);
-  assert.deepEqual(editorMenuContext({ ...selected, privateBody: 'never forward', canRedo: 'yes' }), { editor: true, hasSelection: true, hasTextSelection: true, blocked: false, canUndo: true, canRedo: false, canCopyFormatting: true, canPasteFormatting: true, aiEnabled: true, hasSuggestion: false, hasImage: false, hasLink: false });
+  assert.deepEqual(editorMenuContext({ ...selected, privateBody: 'never forward', canRedo: 'yes' }), { editor: true, hasSelection: true, hasTextSelection: true, blocked: false, canUndo: true, canRedo: false, canCopyFormatting: true, canPasteFormatting: true, canSplitChapter: false, aiEnabled: true, hasSuggestion: false, hasImage: false, hasLink: false });
   assert.equal(editorMenuContext([]), null);
+});
+
+test('chapter division is available without AI only at a valid cursor and is blocked during requests', () => {
+  const handlers = callbacks();
+  const context = { ...selected, hasSelection: false, hasTextSelection: false, canSplitChapter: true, aiEnabled: false };
+  const item = byId(contextMenuTemplate(params, context, handlers), 'split-chapter');
+  assert.equal(item.label, 'Divide to new chapter here'); assert.equal(item.enabled, true);
+  item.click(); assert.deepEqual(handlers.calls, [['command', 'split-chapter']]);
+  for (const update of [{ canSplitChapter: false }, { blocked: true }]) {
+    assert.equal(byId(contextMenuTemplate(params, { ...context, ...update }, handlers), 'split-chapter').enabled, false);
+  }
 });
 
 test('spelling suggestions retain their original word and dictionary action before the new groups', () => {
@@ -64,6 +75,19 @@ test('spelling suggestions retain their original word and dictionary action befo
   assert.deepEqual(menu.slice(0, 6).map(item => item.label), ['word', 'R&&D', 'ward', 'wood', 'world', 'Add to dictionary']);
   menu[1].click(); menu[5].click(); assert.deepEqual(handlers.calls, [['spelling', 'R&D'], ['dictionary', 'wrod']]);
   assert.equal(menu[6].type, 'separator'); assert.equal(menu[7].label, 'Undo');
+});
+
+test('an existing AI hint has its own actions after dictionary suggestions and before undo', () => {
+  const handlers = callbacks(), grammarHint = { preview: 'R&D are → R&D is', reviewOnly: false };
+  const menu = contextMenuTemplate({ ...params, misspelledWord: 'wrod', dictionarySuggestions: ['word'] }, { ...selected, grammarHint }, handlers);
+  assert.deepEqual(menu.slice(0, 7).map(item => item.label || item.type), ['word', 'Add to dictionary', 'separator', 'AI grammar: R&&D are → R&&D is', 'Explain suggestion…', 'separator', 'Undo']);
+  menu[0].click(); menu[3].click(); menu[4].click();
+  assert.deepEqual(handlers.calls, [['spelling', 'word'], ['command', 'apply-grammar-hint'], ['command', 'review-grammar-hint']]);
+  const review = contextMenuTemplate(params, { ...selected, grammarHint: { preview: 'A longer change…', reviewOnly: true } }, handlers);
+  assert.match(review[0].label, /^Review AI grammar/); assert.equal(review[0].id, 'review-grammar-hint'); assert.equal(byId(review, 'apply-grammar-hint'), undefined);
+  for (const context of [{ editor: false, grammarHint }, { ...selected, aiEnabled: false, grammarHint }, { ...selected, blocked: true, grammarHint }, { ...selected, grammarHint: { ...grammarHint, preview: 'fake\taction' } }]) {
+    assert.ok(!contextMenuTemplate(params, context, handlers).some(item => item.id?.endsWith('grammar-hint')));
+  }
 });
 
 function bridge(t, timeout = 1000) {

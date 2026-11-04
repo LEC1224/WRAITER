@@ -2,7 +2,7 @@ const { hash, DEFAULT_SUGGESTION_COUNTS } = require('./core.cjs');
 const TASKS = ['continue', 'correct', 'rewrite', 'proofread', 'chat', 'checkpoint'];
 const PROVIDERS = ['ollama', 'openai', 'anthropic', 'compatible', 'codex', 'claude', 'local'];
 const DEFAULT_HOTKEYS = { complete: 'Tab', accept: 'Tab', acceptCharacter: 'ArrowRight', acceptWord: 'Ctrl+ArrowRight', dismiss: 'Escape', toggleAI: 'Ctrl+Shift+Space', toggleContinuous: 'Ctrl+Alt+Space', correct: 'Ctrl+Alt+G', rewrite: 'Ctrl+Alt+R', save: 'Ctrl+S', saveCopy: 'Ctrl+Shift+S', open: 'Ctrl+O', new: 'Ctrl+N', find: 'Ctrl+F', replace: 'Ctrl+H', findNext: 'F3', findPrevious: 'Shift+F3', goParagraph: 'Ctrl+G', insertLink: 'Ctrl+K', zoomIn: 'Ctrl+=', zoomOut: 'Ctrl+-', zoomReset: 'Ctrl+0', preferences: 'Ctrl+,', focus: 'F11', snapshot: 'Ctrl+Alt+S', pageBreak: 'Ctrl+Enter', closeTab: 'Ctrl+W', nextTab: 'Ctrl+Tab', previousTab: 'Ctrl+Shift+Tab' };
-const defaults = { tutorialSession: null, setupComplete: false, tutorialComplete: false, setupMode: 'simple', claudePath: '', provider: 'codex', baseUrl: 'http://localhost:11434', model: '', codexPath: '', enabled: false, continuous: false, predictionWords: 35, translationSuggestions: DEFAULT_SUGGESTION_COUNTS.translation, correctionSuggestions: DEFAULT_SUGGESTION_COUNTS.correction, rephraseSuggestions: DEFAULT_SUGGESTION_COUNTS.rephrase, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', startup: 'restore', pageMode: 'continuous', showRowNumbers: false, showPageNumbers: false, showParagraphNumbers: false, theme: 'paper', font: 'Georgia', fontSize: 19, lineHeight: 1.8, measure: 720, zoom: 100, spellcheck: true, goal: 500, language: 'en-US', nativeLanguage: '', taskProfiles: {}, hotkeys: DEFAULT_HOTKEYS };
+const defaults = { logCleanupEnabled: true, logRetentionMonths: 1, tutorialSession: null, setupComplete: false, tutorialComplete: false, setupMode: 'simple', claudePath: '', provider: 'codex', baseUrl: 'http://localhost:11434', model: '', codexPath: '', enabled: false, continuous: false, predictionWords: 35, translationSuggestions: DEFAULT_SUGGESTION_COUNTS.translation, correctionSuggestions: DEFAULT_SUGGESTION_COUNTS.correction, rephraseSuggestions: DEFAULT_SUGGESTION_COUNTS.rephrase, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', startup: 'restore', pageMode: 'continuous', showRowNumbers: false, showPageNumbers: false, showParagraphNumbers: false, theme: 'paper', font: 'Georgia', fontSize: 19, lineHeight: 1.8, measure: 720, zoom: 100, spellcheck: true, showFormattingMarks: false, localGrammar: false, aiGrammar: false, smartPunctuation: false, substitutions: [], goal: 500, language: 'en-US', nativeLanguage: '', taskProfiles: {}, hiddenModels: {}, hotkeys: DEFAULT_HOTKEYS };
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 const profileKeys = ['provider', 'baseUrl', 'model', 'codexPath', 'claudePath'];
 function validateProfile(profile) {
@@ -30,17 +30,34 @@ function validateSettings(update) {
   if ('tutorialSession' in allowed) allowed.tutorialSession = require('./tutorial-state.cjs').validateTutorial(allowed.tutorialSession);
   if ('pageMode' in allowed && !['continuous', 'pages'].includes(allowed.pageMode)) throw new Error('Choose continuous view or divided pages.');
   if ('startup' in allowed && !['restore', 'new'].includes(allowed.startup)) throw new Error('Choose whether to restore projects or start a new project.');
+  if ('substitutions' in allowed) {
+    if (!Array.isArray(allowed.substitutions) || allowed.substitutions.length > 100) throw new Error('Use at most 100 text substitutions.');
+    const seen = new Set();
+    for (const rule of allowed.substitutions) {
+      if (!object(rule) || typeof rule.from !== 'string' || !rule.from || rule.from.length > 80 || /\s|[\x00-\x1f\ufffc]/u.test(rule.from) || typeof rule.to !== 'string' || rule.to.length > 500 || /[\r\n\t\x00-\x1f]/.test(rule.to) || seen.has(rule.from)) throw new Error('Each text substitution needs a unique trigger without spaces and a replacement of at most 500 characters.');
+      seen.add(rule.from);
+    }
+    allowed.substitutions = allowed.substitutions.map(({ from, to }) => ({ from, to }));
+  }
   const strings = ['provider', 'baseUrl', 'model', 'codexPath', 'claudePath', 'theme', 'font', 'language', 'nativeLanguage', 'ollamaMode', 'pageMode'];
   for (const key of strings) if (key in allowed && (typeof allowed[key] !== 'string' || allowed[key].length > 4000)) throw new Error(`Invalid ${key} preference.`);
-  for (const key of ['setupComplete', 'tutorialComplete', 'enabled', 'continuous', 'spellcheck', 'allowReasoning', 'showRowNumbers', 'showPageNumbers', 'showParagraphNumbers']) if (key in allowed && typeof allowed[key] !== 'boolean') throw new Error(`Invalid ${key} preference.`);
-  const ranges = { predictionWords: [1, 500], translationSuggestions: [1, 8], correctionSuggestions: [1, 8], rephraseSuggestions: [1, 8], contextWords: [50, 16000], tokenCap: [64, 32768], temperature: [0, 2], fontSize: [8, 96], lineHeight: [1, 3], measure: [400, 1600], zoom: [50, 200], goal: [0, 1000000] };
+  for (const key of ['logCleanupEnabled', 'setupComplete', 'tutorialComplete', 'enabled', 'continuous', 'spellcheck', 'allowReasoning', 'showRowNumbers', 'showPageNumbers', 'showParagraphNumbers', 'showFormattingMarks', 'localGrammar', 'aiGrammar', 'smartPunctuation']) if (key in allowed && typeof allowed[key] !== 'boolean') throw new Error(`Invalid ${key} preference.`);
+  const ranges = { logRetentionMonths: [1, 24], predictionWords: [1, 500], translationSuggestions: [1, 8], correctionSuggestions: [1, 8], rephraseSuggestions: [1, 8], contextWords: [50, 16000], tokenCap: [64, 32768], temperature: [0, 2], fontSize: [8, 96], lineHeight: [1, 3], measure: [400, 1600], zoom: [50, 200], goal: [0, 1000000] };
   for (const [key, [min, max]] of Object.entries(ranges)) if (key in allowed && (!Number.isFinite(allowed[key]) || allowed[key] < min || allowed[key] > max)) throw new Error(`Invalid ${key} preference.`);
   for (const key of ['translationSuggestions', 'correctionSuggestions', 'rephraseSuggestions']) if (key in allowed && !Number.isInteger(allowed[key])) throw new Error('Suggestion counts must be whole numbers from 1 to 8.');
+  if ('logRetentionMonths' in allowed && !Number.isInteger(allowed.logRetentionMonths)) throw new Error('Log retention must be a whole number of months from 1 to 24.');
   if ('provider' in allowed && !PROVIDERS.includes(allowed.provider)) throw new Error('Unknown provider.');
   if ('theme' in allowed && !['paper', 'dark', 'contrast'].includes(allowed.theme)) throw new Error('Unknown theme.');
   if ('ollamaMode' in allowed && !['auto', 'guided', 'raw'].includes(allowed.ollamaMode)) throw new Error('Unknown Ollama connection mode.');
   if ('language' in allowed && !/^[a-z]{2,3}(?:-[a-zA-Z]{2,8}){0,2}$/.test(allowed.language)) throw new Error('Invalid content language.');
   if ('nativeLanguage' in allowed && allowed.nativeLanguage !== '' && !/^[a-z]{2,3}(?:-[a-zA-Z]{2,8}){0,2}$/.test(allowed.nativeLanguage)) throw new Error('Invalid native language.');
+  if ('hiddenModels' in allowed) {
+    if (!object(allowed.hiddenModels) || Object.keys(allowed.hiddenModels).length > 200) throw new Error('Invalid hidden model preferences.');
+    for (const [connection, models] of Object.entries(allowed.hiddenModels)) {
+      if (connection.length > 16000 || !Array.isArray(models) || models.length > 2000 || models.some(model => typeof model !== 'string' || !model || model.length > 4000)) throw new Error('Invalid hidden model preferences.');
+    }
+    allowed.hiddenModels = Object.fromEntries(Object.entries(allowed.hiddenModels).map(([key, models]) => [key, [...new Set(models)]]));
+  }
   if (allowed.taskProfiles !== undefined) {
     if (!object(allowed.taskProfiles) || Object.keys(allowed.taskProfiles).some(key => !TASKS.includes(key))) throw new Error('Invalid AI task profiles.');
     allowed.taskProfiles = Object.fromEntries(Object.entries(allowed.taskProfiles).map(([key, value]) => [key, validateProfile(value)]));

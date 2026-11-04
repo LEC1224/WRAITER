@@ -21,6 +21,7 @@ export function nodeText(node, separator = '\n', includeImages = false) {
   if (!node) return '';
   if (node.type === 'text') return node.text || '';
   if (node.type === 'hardBreak') return '\n';
+  if (node.type === 'note') return includeImages ? `[${node.attrs?.kind === 'endnote' ? 'Endnote' : 'Footnote'}: ${node.attrs?.text || ''}]` : '';
   if (node.type === 'horizontalRule') return '* * *';
   if (node.type === 'image') return includeImages ? node.attrs?.alt ? `[Image: ${node.attrs.alt}]` : '[Image]' : '';
   const block = ['doc', 'bulletList', 'orderedList', 'listItem', 'table', 'tableCell', 'tableHeader', 'blockquote'].includes(node.type);
@@ -39,7 +40,7 @@ export function contentWordCount(content) {
 }
 export const projectWords = project => project.chapters.reduce((sum, chapter) => sum + contentWordCount(chapter.content), 0);
 export function snapshot(project, name) {
-  return { id: uid(), name: name || `Revision ${new Date().toLocaleString()}`, createdAt: new Date().toISOString(), title: project.title, chapters: structuredClone(project.chapters), notes: project.notes, style: project.style, language: project.language, documentStyle: structuredClone(project.documentStyle), references: structuredClone(project.references || []), ...(project.comments ? { comments: structuredClone(project.comments) } : {}) };
+  return { id: uid(), name: name || `Revision ${new Date().toLocaleString()}`, createdAt: new Date().toISOString(), title: project.title, chapters: structuredClone(project.chapters), notes: project.notes, style: project.style, language: project.language, documentStyle: structuredClone(project.documentStyle), ...(project.printLayout ? { printLayout: structuredClone(project.printLayout) } : {}), references: structuredClone(project.references || []), ...(project.namedStyles ? { namedStyles: structuredClone(project.namedStyles) } : {}), ...(project.comments ? { comments: structuredClone(project.comments) } : {}), ...(project.bookmarks ? { bookmarks: structuredClone(project.bookmarks) } : {}) };
 }
 export function exportText(project) { return [project.title, ...project.chapters.flatMap(c => [c.title, nodeText(c.content, '\n', true)])].join('\n\n'); }
 export function inlineMarkup(node, format = 'md') {
@@ -61,6 +62,7 @@ export function inlineMarkup(node, format = 'md') {
   return text;
 }
 export function blockMarkup(node, format = 'md', depth = 0) {
+  if (node.type === 'note') return `[${node.attrs?.kind === 'endnote' ? 'Endnote' : 'Footnote'}: ${String(node.attrs?.text || '').replace(/[\[\]]/g, '')}]`;
   if (node.type === 'text') return inlineMarkup(node, format);
   if (node.type === 'hardBreak') return format === 'md' ? '  \n' : '\n';
   if (node.type === 'horizontalRule') return '\n* * *\n\n';
