@@ -28,11 +28,23 @@ export default memo(function DocumentPane({ id, project, chapterId, epoch, track
   return <div className={`document-pane-content layout-${project.layout || 'story'}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight }}
     onPointerDownCapture={event => {
       if (active || event.button !== 0 || event.target.closest('[data-pane-control]')) return;
-      // Transfer the whole mouse gesture across the save/journal boundary.
-      // Hover/scroll alone never steals focus.
-      event.preventDefault(); event.stopPropagation();
-      const position = event.target.closest('.manuscript') && currentRef.current?.view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
-      actions.current.activate(id, { x: event.clientX, y: event.clientY, position, pointerId: event.pointerId, shiftKey: event.shiftKey, target: event.target });
+      // Enable the resident editor before the browser handles this same press.
+      // Its native caret, selection, double-click and drag behavior stays intact.
+      const current = currentRef.current, inEditor = current?.view.dom.contains(event.target);
+      const position = inEditor ? current.view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos : null;
+      if (!actions.current.activate(id, { target: event.target })) { event.preventDefault(); event.stopPropagation(); return; }
+      if (inEditor && !current.isDestroyed) {
+        // ProseMirror counts clicks per editor, so a quick return can look like
+        // a double/triple click even after clicking in another document.
+        if (current.view.input?.lastClick) current.view.input.lastClick.time = 0;
+        const selected = current.state.selection;
+        if (position != null && (event.shiftKey || selected.empty || position < selected.from || position > selected.to)) {
+          current.commands.setTextSelection(event.shiftKey ? { from: selected.anchor, to: position } : position);
+        }
+        // Native focus of a freshly editable element otherwise starts at 1.
+        // Preserve a selected passage here so its next native drag can copy it.
+        current.view.focus();
+      }
     }} onFocusCapture={event => { if (!active && !event.target.closest('[data-pane-control]')) actions.current.activate(id, { target: event.target }); }}>
     <style>{namedStyleCSS(project.namedStyles, `[data-pane-id="${id}"] .manuscript `)}</style>
     {multiple && <div className="multitask-pane-heading">

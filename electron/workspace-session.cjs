@@ -80,14 +80,27 @@ class WorkspaceSession {
   paneProjects(panes) {
     const ids = new Set(panes.map(pane => pane.id));
     return this.entries.filter(entry => entry.id !== this.activeId && ids.has(entry.id) && entry.store.project)
-      .map(entry => ({ id: entry.id, project: entry.store.project, view: entry.view }));
+      .map(entry => ({ id: entry.id, project: entry.store.project, path: entry.store.currentPath, binding: entry.files.binding, view: entry.view }));
   }
-  rememberView(view, panes) {
-    this.active.view = cleanView(view);
+  focus(id) {
+    const entry = this.entries.find(item => item.id === id);
+    if (!entry?.store.project) throw new Error('That document is not open.');
+    // Focus is an in-memory choice. Recovery and manifest writes run separately.
+    this.activeId = id;
+  }
+  documentEntry(id, projectId) {
+    const entry = this.entries.find(item => item.id === id);
+    if (!entry || (entry.store.project && entry.store.project.id !== projectId)) throw new Error('This save belongs to a document that is no longer open.');
+    return entry;
+  }
+  rememberView(view, panes, id = this.activeId) {
+    const selected = this.entries.find(item => item.id === id);
+    if (!selected) return;
+    selected.view = cleanView(view);
     if (!Array.isArray(panes)) return;
     const views = new Map(panes.slice(0, 200).filter(pane => validId(pane?.id)).map(item => [item.id, item.view]));
     for (const entry of this.entries) {
-      if (entry.id !== this.activeId && views.has(entry.id)) entry.view = cleanView(views.get(entry.id));
+      if (entry.id !== id && views.has(entry.id)) entry.view = cleanView(views.get(entry.id));
     }
   }
   async persistChat(projectId, chat) {

@@ -1,3 +1,20 @@
+# Resident Multitask focus — 0.21.0-rc.4 — 2026-11-15
+
+Visible documents retain their editor, journal and file binding. Pointer-down switches the editable pane and shared manuscript/sidebar context synchronously, without waiting for autosave, disk, IPC or a journal reload. Restored visible journals are hydrated during startup. Native mouse selection and clipboard handling replace the previous asynchronous gesture replay. The editor's guarded per-view click timer resets only on pane activation, so rapid returns do not become accidental triple-clicks while native double-click selection remains available.
+
+Background saves and view updates carry their originating tab, project and format. The main process captures the destination file binding before asynchronous work; a completed save cannot overwrite another pane's binding or status. Duplicate pending snapshots are coalesced, saved snapshots are released when tabs close, and focus checkpoints are debounced outside the input event. Explicit file loading, pending assistant document replacements and journal repair retain the existing guarded transition.
+
+Verification:
+
+- `npm test`: **606 passed**, no failures or skipped tests. Production build passed.
+- The selected Git index built separately and passed both `multitask-selection-ui.cjs` and `multitask-resident-ui.cjs`, excluding unrelated pre-existing workspace edits.
+- The exact packaged application passed all 12 native selection checks: first-click cursor/paste, forward/backward/wrapped selection, Shift-click, double-click, rapid returns, immediate clipboard input with delayed saves, pane-local autoscroll, and zero document activations or workspace input blocks during resident focus. The test preserves the system clipboard.
+- Packaged mixed WRAITER/TXT tests held saves open during switches, verified both files and format labels, restarted the app, and verified independent restored undo/redo without any full activation calls. All six sidebar contexts, drafts and actions also passed the packaged sidebar regression.
+- Source tests passed three-document editing with 1,500 paragraphs each, workspace restoration, and the existing v06 tab/background-chat regressions. The combined packaged drag test held writes open across 12 switches between 1,502-paragraph documents; the maximum measured pointer event duration was **38.6 ms**, with one editable editor and native focus committed before bubbling finished. This is a local regression measurement, not a hardware-independent guarantee.
+- The packaged three-document, preview/layout and workspace-restart suites also passed: retained editors, hover-only scrolling, divider input, all 11 preview/final geometry comparisons, closing/reopening panes without lost space, and restored widths/reading positions/sidebar choices. The large-document packaged frame interval p95 was **7.1 ms**.
+
+Combined unsigned preview: `release/unsigned-preview/v0.21.0-rc.4-multitask-live/WRAITER-0.21.0-rc.4-Setup.exe` — **506,986,006 bytes**, product version **0.21.0-rc.4**, Authenticode **NotSigned**, SHA-256 `714ADEB5B8F9502DE5E941981365BC1E18F39AFCBE8E795BE81641FC61B8DF6C`. Previous artifacts were preserved. The installer was not installed or published. Reports and logs are under `test-output/multitask-live-*` and `test-output/multitask-*-packaged-results.json`.
+
 # Multitask first-click selection — 0.21.0-rc.4 — 2026-11-15
 
 The initial mouse press in an inactive document now places its cursor or starts a selection while that pane becomes active. The selection handoff retains both endpoints across the asynchronous save/activation boundary, including backward drags, wrapped lines, Shift-click and mouseup before activation finishes. Focus is committed with the editable pane. Selection movement is coalesced per animation frame, and edge autoscroll stays inside the dragged panel.

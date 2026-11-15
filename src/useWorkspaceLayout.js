@@ -20,11 +20,11 @@ export function useWorkspaceLayout(api, booted) {
     if (layout.panes.length < 2) return;
     try {
       const restored = await api.layoutPaneProjects();
-      for (const { id, project, view } of restored) {
+      for (const { id, project, view, path, binding } of restored) {
         try {
           const next = prepareProject(project);
           const chapter = next.chapters.find(chapter => chapter.id === view.chapterId);
-          paneSnapshots.current.set(id, { project: next, chapterId: (chapter || next.chapters[0]).id, epoch: 0, tracking: false });
+          paneSnapshots.current.set(id, { project: next, chapterId: (chapter || next.chapters[0]).id, epoch: 0, tracking: false, path, binding, view });
           if (chapter) restoredViews.current.set(id, view);
         } catch (error) { reportError('workspace.restore-pane', error); }
       }

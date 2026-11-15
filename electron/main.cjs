@@ -144,14 +144,14 @@ async function openPath(target) {
   }
   return result;
 }
-async function persistDocument(project, payload, events, options) {
+async function persistDocument(project, payload, events, options, files = documentFiles) {
   validateProject(project);
   if (events?.length) await editJournal.append(project.id, events);
   if (project.historySequence != null) {
     const history = await editJournal.read(project.id);
     if (!Number.isSafeInteger(project.historySequence) || project.historySequence < 0 || project.historySequence > history.totalEvents) throw new Error('The editing history must be saved before its document snapshot.');
   }
-  return documentFiles.persist(project, payload, options);
+  return files.persist(project, payload, options);
 }
 function updateMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys, prefs.recent, prefs, reviewMenuState)));
@@ -255,7 +255,15 @@ app.whenReady().then(async () => {
   handle('thesaurus:lookup', (_event, word, language) => require('./thesaurus.cjs').lookup(word, language));
   handle('workspace:layout', (_e, layout) => { profileLayout.rememberView(layout); return true; });
   handle('workspace:layout-projects', () => workspace.paneProjects(profileLayout.view.panes));
-  handle('workspace:view', (_e, view, panes) => serial(async () => { workspace.rememberView(view, panes); return true; }));
+  handle('workspace:view', (_e, view, panes, id) => serial(async () => { workspace.rememberView(view, panes, id); return true; }));
+  let focusCheckpoint;
+  handle('workspace:focus', (_e, id) => {
+    workspace.focus(id); syncWorkspace();
+    clearTimeout(focusCheckpoint);
+    focusCheckpoint = setTimeout(() => serial(() => true).catch(error => diagnostics.error('workspace.focus-checkpoint', error)), 200);
+    focusCheckpoint.unref();
+    return true;
+  });
   handle('workspace:reload', (_e, project, events = []) => serial(async () => {
     await cancelAll();
     validateProject(project);
@@ -280,7 +288,10 @@ app.whenReady().then(async () => {
   handle('link:open', (_e, href) => shell.openExternal(externalLink(href)));
   handle('recent:list', () => [...(prefs.recent || [])]);
   handle('recent:clear', () => serial(async () => { const next = { ...prefs, recent: [] }; await atomicWrite(file('settings.json'), JSON.stringify(next)); prefs = next; updateMenu(); return []; }));
-  handle('autosave', (_e, project, payload, events) => serial(async () => { const result = await persistDocument(project, payload, events); gitHistory.schedule(project); return result; }));
+  handle('autosave', (_e, project, payload, events, tabId) => serial(async () => {
+    const files = tabId ? workspace.documentEntry(tabId, project?.id).files : documentFiles;
+    const result = await persistDocument(project, payload, events, undefined, files); gitHistory.schedule(project); return result;
+  }));
   handle('chat:persist', (_e, projectId, chat) => serial(() => workspace.persistChat(projectId, chat)));
   handle('history:load', (_e, projectId) => serial(() => editJournal.read(projectId)));
   handle('history:append', (_e, projectId, events) => serial(() => editJournal.append(projectId, events)));
@@ -522,7 +533,10 @@ app.whenReady().then(async () => {
   handle('local:import', (_event, token, name) => { localIdle(); const file = ggufFiles.get(token); if (!file) throw new Error('Choose the GGUF file again.'); return localModels.importGGUF(file, name); });
   handle('shortcuts:capture', (_event, capturing) => { win?.webContents.setIgnoreMenuShortcuts(capturing === true); return true; });
   handle('document:language', (_e, language) => setDocumentLanguage(language));
-  handle('git:list', () => store.project ? gitHistory.list(store.project.id) : { available: true, entries: [] });
+  handle('git:list', (_e, projectId) => {
+    const project = projectId ? workspace.entries.find(entry => entry.store.project?.id === projectId)?.store.project : store.project;
+    return project ? gitHistory.list(project.id) : { available: true, entries: [] };
+  });
   handle('git:revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.revision(store.project.id, revision); });
   handle('git:activate-revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.activateRevision(store.project.id, revision); });
   handle('git:label', (_e, revision, metadata) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.updateLabel(store.project.id, revision, metadata); });

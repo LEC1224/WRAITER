@@ -34,13 +34,18 @@ const waitFor = async (check, message = 'Selection did not settle') => {
       BrowserWindow.getAllWindows()[0].setSize(1800, 1000);
       Menu.prototype.popup = function() { global.selectionMenu = this; };
       global.selectionClipboard = await Promise.all((await clipboard.read()).map(async item => new ClipboardItem(Object.fromEntries(await Promise.all(item.types.map(async type => [type, await item.getType(type)]))))));
-      // Exercise mouseup before a slow activation completes, without changing app code.
+      // Visible-pane focus must never use the loading/activation path.
       const activate = ipcMain._invokeHandlers.get('workspace:activate');
       ipcMain.removeHandler('workspace:activate');
       ipcMain.handle('workspace:activate', async (...args) => {
-        if (global.selectionDelay) await new Promise(resolve => setTimeout(resolve, global.selectionDelay));
-        if (global.selectionFail) { global.selectionFail = false; throw new Error('Selection test: activation failed'); }
+        global.selectionActivations = (global.selectionActivations || 0) + 1;
         return activate(...args);
+      });
+      const autosave = ipcMain._invokeHandlers.get('autosave');
+      ipcMain.removeHandler('autosave');
+      ipcMain.handle('autosave', async (...args) => {
+        if (global.selectionDelay) await new Promise(resolve => setTimeout(resolve, global.selectionDelay));
+        return autosave(...args);
       });
     });
     const boot = await page.evaluate(() => window.wraiter.boot());
@@ -80,7 +85,21 @@ const waitFor = async (check, message = 'Selection did not settle') => {
     await menu('Mountain', 'tab-multitask-right'); await ready('Mountain');
     await page.getByRole('button', { name: 'Toggle notes & voice', exact: true }).click();
     await page.locator('.manuscript').evaluateAll(elements => { window.selectionEditors = elements.map(element => element.editor); });
+    const activationCount = await app.evaluate(() => global.selectionActivations);
+    await page.evaluate(() => {
+      window.selectionInputBlocks = 0;
+      const workspace = document.querySelector('.workspace');
+      window.selectionBlockObserver = new MutationObserver(records => { window.selectionInputBlocks += records.filter(record => record.attributeName === 'inert').length; });
+      window.selectionBlockObserver.observe(workspace, { attributes: true, attributeFilter: ['inert'] });
+    });
 
+    const word = await point('Orchard', 9);
+    await page.mouse.dblclick(word.x, word.y);
+    assert.match((await selection('Orchard')).text, /^bravo ?$/);
+    await clickAt('Harbour', 13); await clickAt('Orchard', 25);
+    assert.deepEqual(await editor('Orchard').evaluate(element => ({ from: element.editor.state.selection.from, to: element.editor.state.selection.to })), { from: 25, to: 25 });
+    checks.push('Native double-click selects a word; rapid returns to another pane place a single cursor');
+    await clickAt('Mountain', 25);
     const copied = await drag('Orchard', 7, 20);
     assert.equal(copied, 'bravo charlie');
     checks.push('First drag selects text while activating an inactive pane');
@@ -109,12 +128,12 @@ const waitFor = async (check, message = 'Selection did not settle') => {
     checks.push('Shift-click extends the inactive document’s existing selection');
     await app.evaluate(() => { global.selectionDelay = 500; });
     await drag('Orchard', 7, 57);
-    checks.push('Wrapped-line selection released before a delayed activation completes');
+    checks.push('Native wrapped-line selection while background saves are delayed');
     await clickAt('Harbour', 25); await page.keyboard.press('Control+v');
     await ready('Harbour'); await focus('Harbour');
     await waitFor(async () => await editor('Harbour').evaluate(element => element.editor.state.doc.textContent) === original.slice(0, 24) + copied + original.slice(24), 'Paste was lost during delayed activation');
     await app.evaluate(() => { global.selectionDelay = 0; });
-    checks.push('Clipboard paste survives a slow activation');
+    checks.push('Clipboard paste does not wait for background saves');
 
     await app.evaluate(() => { global.selectionDelay = 500; });
     const a = await point('Mountain', 7), b = await point('Mountain', 20);
@@ -124,17 +143,17 @@ const waitFor = async (check, message = 'Selection did not settle') => {
     await ready('Mountain'); await focus('Mountain');
     assert.equal((await selection('Mountain')).text, copied);
     await app.evaluate(() => { global.selectionDelay = 0; });
-    checks.push('Copy immediately after mouseup survives a slow activation');
+    checks.push('Native copy immediately after mouseup while saves are delayed');
 
-    // A new interaction cancels a pending mouse handoff, so late focus cannot
-    // collapse a subsequent selection or redirect an unrelated edit.
+    // There is no delayed focus handoff to overwrite later input.
     await app.evaluate(() => { global.selectionDelay = 500; });
     await clickAt('Orchard', 25); await page.keyboard.press('Escape'); await ready('Orchard');
-    assert.notEqual(await editor('Orchard').evaluate(element => element === document.activeElement), true);
+    assert.equal(await editor('Orchard').evaluate(element => element === document.activeElement), true);
+    assert.equal((await selection('Orchard')).head, 25);
     await app.evaluate(() => { global.selectionDelay = 0; });
     await clickAt('Harbour', 7); await ready('Harbour'); await focus('Harbour');
     assert.equal((await selection('Harbour')).head, 7);
-    checks.push('Cancellation removes pending focus and gesture listeners');
+    checks.push('Escape does not undo an already committed first-click cursor');
 
     const mountainText = await editor('Mountain').evaluate(element => element.editor.state.doc.textContent);
     await app.evaluate(() => { global.selectionDelay = 500; });
@@ -147,15 +166,9 @@ const waitFor = async (check, message = 'Selection did not settle') => {
     await editor('Mountain').evaluate(element => window.selectionEditors.push(element.editor));
     checks.push('Delayed cut and undo affect only the selected document');
 
-    const beforeFailure = await page.locator('.manuscript').evaluateAll(elements => elements.map(el => el.editor.state.doc.textContent));
-    await app.evaluate(() => { global.selectionFail = true; });
-    await clickAt('Orchard', 25); await page.keyboard.press('Control+v');
-    await page.getByText('Selection test: activation failed', { exact: false }).waitFor(); await ready('Mountain');
-    assert.deepEqual(await page.locator('.manuscript').evaluateAll(elements => elements.map(el => el.editor.state.doc.textContent)), beforeFailure);
     await app.evaluate(() => { global.selectionDelay = 0; });
     await clickAt('Orchard', 7); await ready('Orchard'); await focus('Orchard');
     assert.equal((await selection('Orchard')).head, 7);
-    checks.push('Failed activation discards pending edits and the next click works');
 
     const scrolls = () => page.locator('.writing-scroll').evaluateAll(elements => elements.map(el => el.scrollTop));
     const beforeScroll = await scrolls(), edgeStart = await point('Harbour', 7), scrollBounds = await pane('Harbour').locator('.writing-scroll').boundingBox();
@@ -169,6 +182,10 @@ const waitFor = async (check, message = 'Selection did not settle') => {
     await page.waitForTimeout(100);
     assert.deepEqual(await scrolls(), afterScroll, 'Selection autoscroll continued after mouseup');
     checks.push('Selection autoscroll stays in the dragged pane and stops on release');
+
+    assert.equal(await app.evaluate(() => global.selectionActivations), activationCount, 'A visible-pane click loaded a document');
+    assert.equal(await page.evaluate(() => window.selectionInputBlocks), 0, 'A visible-pane click blocked workspace input');
+    checks.push('No document reload or inert workspace at any point while switching resident panes');
 
     assert.equal(await page.locator('.manuscript').evaluateAll(elements => elements.every(element => window.selectionEditors.includes(element.editor))), true, 'Switching replaced a retained editor');
     assert.deepEqual(errors, []);

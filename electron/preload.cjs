@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('wraiter', {
   setupInstall: invoke('setup:install'), setupCancel: invoke('setup:cancel'), setupHelp: invoke('setup:help'), setupChoose: invoke('setup:choose'), setupClaudeLogin: invoke('setup:claude-login'), setupTest: invoke('setup:test'),
   boot: invoke('boot'), getRecents: invoke('recent:list'), clearRecents: invoke('recent:clear'), open: invoke('open'), openRecent: invoke('open-recent'), save: invoke('save'),
   rememberWorkspaceLayout: invoke('workspace:layout'), layoutPaneProjects: invoke('workspace:layout-projects'),
-  activateProject: invoke('workspace:activate'), closeProject: invoke('workspace:close'), rememberProjectView: invoke('workspace:view'), reloadProject: invoke('workspace:reload'),
+  activateProject: invoke('workspace:activate'), focusProject: invoke('workspace:focus'), closeProject: invoke('workspace:close'), rememberProjectView: invoke('workspace:view'), reloadProject: invoke('workspace:reload'),
   autosave: invoke('autosave'), persistChat: invoke('chat:persist'), newProject: invoke('new-project'), exportFile: invoke('export'), exportClipboard: invoke('export:clipboard'), previewPDF: invoke('export:preview-pdf'),
   bindNative: invoke('native:bind'), chooseSaveTarget: invoke('save:choose'), saveEncoded: invoke('save:encoded'), loadEditHistory: invoke('history:load'), appendEditHistory: invoke('history:append'), restartEditHistory: invoke('history:restart'), runAgent: invoke('agent:run'),
   reference: invoke('reference'), image: invoke('image'), settings: invoke('settings'),

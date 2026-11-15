@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { version as appVersion } from '../package.json';
 import { Feather, Plus, Search, ChevronDown, ChevronRight, ArrowLeft, ArrowUp, ArrowDown, ArrowUpRight, Check, X, Minus, Maximize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, FileCheck2, Settings2, FileText, FolderOpen, Download, Save, Copy, MoreHorizontal, Bold, Italic, Underline, RemoveFormatting, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Quote, Image, Table2, Link2, Undo2, Redo2, Sparkles, WandSparkles, BookOpen, BookMarked, MessageSquare, Send, CircleStop, RotateCcw, CheckCheck, Sun, Moon, Contrast, Focus, Clock3, History, Trash2, FilePlus2, Keyboard, ShieldCheck, Circle, CheckCircle2, LoaderCircle, ExternalLink, SlidersHorizontal, Type, PenLine, GripVertical, Info, Eye, Laptop, ChevronUp, Target } from 'lucide-react';
 import { extensions } from './Editor.jsx';
 import DocumentPane from './DocumentPane.jsx';
 import MultitaskWorkspace from './MultitaskWorkspace.jsx';
 import { normalizePanes, placePane, reconcilePanes } from './multitask.js';
-import { capturePaneSelection } from './pane-selection.js';
 import { ghostKey, searchKey } from './extensions.js';
 import { newProject, uid, blankContent, nodeText, wordCount, contentWordCount, rememberContentWordCount, projectWords, snapshot } from './document.js';
 import { importDocument, exportPayload } from './io.js';
@@ -137,10 +137,9 @@ function Modal({ title, subtitle, children, onClose, wide = false, className = '
 export default function App() {
   const [workspace, setWorkspace] = useState({ tabs: [], activeId: null }), [switching, setSwitching] = useState(false), [savingNamed, setSavingNamed] = useState(false);
   const [draggingTab, setDraggingTab] = useState(null);
-  const [paneFocus, setPaneFocus] = useState(null);
-  const paneSelection = useRef(null);
   const paneActions = useRef({});
-  const locallySavedProject = useRef(null);
+  const locallySavedProjects = useRef(new Map());
+  const pendingDocumentSaves = useRef(new WeakMap());
   const tourRef = useRef(null);
   const [booted, setBooted] = useState(false), externalOpening = useRef(false), externalBlocked = useRef(true);
   const workspaceRef = useRef(workspace), tabCache = useRef(new Map()), warmTabs = useRef(new Map()), transition = useRef(null), namedSave = useRef(false), namedSaveCompletion = useRef(Promise.resolve()), restoreScroll = useRef(null), chatScrollRef = useRef(null);
@@ -208,18 +207,6 @@ export default function App() {
   useEffect(() => { api?.listFonts().then(setFonts).catch(() => {}); }, []);
   useEffect(() => { if (panel === 'history' && project) loadGitHistory(); }, [panel, project?.id, workspace.activeId]);
   useEffect(() => { document.getElementById(`project-tab-${workspace.activeId}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [workspace.activeId, focus]);
-  useEffect(() => () => paneSelection.current?.cancel(), []);
-  useLayoutEffect(() => {
-    if (!paneFocus || switching || paneFocus.id !== workspace.activeId || !editor || editor.isDestroyed || !editor.isEditable || paneEditors.current.get(paneFocus.id) !== editor) return;
-    // Commit focus with the newly editable pane, before the next input event.
-    // A drag may already have ended, or may continue after this handoff.
-    if (!document.querySelector('.workspace')?.inert && !document.querySelector('[role="dialog"]')) {
-      if (paneFocus.selection) paneFocus.selection.restore(editor);
-      else if (paneFocus.inEditor) editor.view.focus();
-      else if (paneFocus.pointer?.target?.isConnected && paneFocus.pointer.target.matches('input,select,textarea,button')) paneFocus.pointer.target.focus({ preventScroll: true });
-    } else paneFocus.selection?.cancel();
-    setPaneFocus(null);
-  }, [paneFocus, switching, workspace.activeId, editor]);
   useEffect(() => {
     if (panel !== 'assist' || (!messages.length && !agentActivity.length && !busy)) return;
     const frame = requestAnimationFrame(() => { const body = chatScrollRef.current; if (body) body.scrollTop = body.scrollHeight; });
@@ -231,6 +218,16 @@ export default function App() {
     api.boot().then(async result => {
       prefsRef.current = { ...DEFAULTS, ...result.prefs }; setPrefs(prefsRef.current);
       await restoreLayout(result, project => normalizeHistoryProject(project, schema));
+      // Hydrate visible documents once at startup, before mouse interaction.
+      // A click between resident panes must never load or replay a journal.
+      for (const [id, resident] of paneSnapshots.current) {
+        const saved = await api.loadEditHistory(resident.project.id).catch(() => null);
+        if (!saved) continue;
+        const restored = prepareHistoryLoad(resident.project, saved, schema);
+        if (restored.requiresJournalReset) continue;
+        persistedHistory.current.set(resident.project.id, saved.totalEvents || 0);
+        paneSnapshots.current.set(id, { ...resident, project: restored.project, history: restored.journal, saveState: 'saved' });
+      }
       await installWorkspace(result);
       setRecents(result.prefs.recent || []);
       if (result.warning) notify(result.warning);
@@ -271,9 +268,9 @@ export default function App() {
     if (restored.recoveredEvents) notify(`Recovered ${restored.recoveredEvents} editing actions from the journal.`);
     return restored;
   }
-  async function encodeNative(captured, format = bindingRef.current?.format) {
+  async function encodeNative(captured, format = bindingRef.current?.format, capturedBinding = bindingRef.current) {
     if (!format || format === 'wraiter') return null;
-    const fidelity = bindingRef.current?.format === format ? bindingRef.current?.fidelity : undefined;
+    const fidelity = capturedBinding?.format === format ? capturedBinding?.fidelity : undefined;
     const key = JSON.stringify([format, fidelity || null]);
     let cached = nativeEncodings.current.get(captured);
     if (!cached) { cached = new Map(); nativeEncodings.current.set(captured, cached); }
@@ -283,12 +280,12 @@ export default function App() {
     }
     return cached.get(key);
   }
-  async function encodeForSave(captured, format, journal) {
-    try { return await encodeNative(captured, format); }
+  async function encodeForSave(captured, format, journal, capturedBinding = bindingRef.current, tabId = workspaceRef.current.activeId) {
+    try { return await encodeNative(captured, format, capturedBinding); }
     catch (error) {
       // A codec failure must still protect the complete draft and its journal.
       // A null native payload stages recovery without replacing the source.
-      await api.autosave(captured, null, journal?.events.slice(persistedHistory.current.get(captured.id) || 0) || []);
+      await api.autosave(captured, null, journal?.events.slice(persistedHistory.current.get(captured.id) || 0) || [], tabId);
       throw error;
     }
   }
@@ -297,21 +294,36 @@ export default function App() {
     clearTimeout(autosaveTimer.current);
     if (!projectRef.current || opening.current) return;
     if (historyLoadError.current) { setSaveState('error'); setSaveError(historyLoadError.current); throw new Error(historyLoadError.current); }
-    const captured = projectRef.current;
-    const history = historyRef.current, format = bindingRef.current?.format;
+    const captured = projectRef.current, tabId = workspaceRef.current.activeId;
+    if (pendingDocumentSaves.current.has(captured)) return pendingDocumentSaves.current.get(captured);
+    if (locallySavedProjects.current.get(tabId) === captured) return;
+    const history = historyRef.current, capturedBinding = bindingRef.current, format = capturedBinding?.format;
     setSaveState('saving');
-    const work = pendingSave.current.then(async () => api.autosave(captured, await encodeForSave(captured, format, history), history?.events.slice(persistedHistory.current.get(captured.id) || 0) || [])).then(result => {
-      locallySavedProject.current = captured;
-      if (projectRef.current === captured) { setSaveState(result.recoveryOnly ? 'recovery' : 'saved'); setSaveError(result.needsReview ? 'Edits are safe in recovery. Use Save to review this file’s format compatibility.' : ''); }
-      setPath(result.path);
-      if ('binding' in result) { bindingRef.current = result.binding; setBinding(result.binding); }
+    const work = pendingSave.current.then(async () => api.autosave(captured, await encodeForSave(captured, format, history, capturedBinding, tabId), history?.events.slice(persistedHistory.current.get(captured.id) || 0) || [], tabId)).then(result => {
+      locallySavedProjects.current.set(tabId, captured);
+      const state = result.recoveryOnly ? 'recovery' : 'saved', error = result.needsReview ? 'Edits are safe in recovery. Use Save to review this file’s format compatibility.' : '';
+      const resident = paneSnapshots.current.get(tabId);
+      if (resident) paneSnapshots.current.set(tabId, { ...resident, path: result.path, ...('binding' in result ? { binding: result.binding } : {}), ...(resident.project === captured ? { saveState: state, saveError: error } : {}) });
+      if (workspaceRef.current.activeId === tabId) {
+        if (projectRef.current === captured) { setSaveState(state); setSaveError(error); }
+        setPath(result.path);
+        if ('binding' in result) { bindingRef.current = result.binding; setBinding(result.binding); }
+      }
       return result;
-    }).catch(error => { setSaveState('error'); setSaveError(errorText(error)); throw error; });
+    }).catch(error => {
+      const detail = errorText(error), resident = paneSnapshots.current.get(tabId);
+      if (resident) paneSnapshots.current.set(tabId, { ...resident, saveState: 'error', saveError: detail });
+      if (workspaceRef.current.activeId === tabId) { setSaveState('error'); setSaveError(detail); }
+      else notify(`Could not save “${captured.title}”: ${detail}`);
+      throw error;
+    });
+    pendingDocumentSaves.current.set(captured, work);
+    work.finally(() => pendingDocumentSaves.current.delete(captured)).catch(() => {});
     pendingSave.current = work.catch(() => {});
     return work;
   }, []);
   useEffect(() => {
-    if (!project) return;
+    if (!project || locallySavedProjects.current.get(workspaceRef.current.activeId) === project) return;
     // Avoid a second parent render when these displayed values are unchanged.
     if (saveState !== 'pending') setSaveState('pending');
     clearTimeout(autosaveTimer.current);
@@ -433,12 +445,12 @@ export default function App() {
     tabCache.current.set(id, { ...previous, chatId, chat: cachedChat, messages: nextMessages });
     return nextMessages;
   }
-  async function rememberTab() {
+  function rememberTab(persist = true) {
     if (!workspaceRef.current.activeId || !projectRef.current) return;
     const current = editorRef.current;
     const cached = tabCache.current.get(workspaceRef.current.activeId) || {};
     const view = { chapterId: activeId, selection: current && !current.isDestroyed ? { from: current.state.selection.from, to: current.state.selection.to } : undefined, scrollTop: current?.view.dom.closest('.writing-scroll')?.scrollTop || 0 };
-    paneSnapshots.current.set(workspaceRef.current.activeId, { project: projectRef.current, chapterId: activeId, epoch, tracking });
+    paneSnapshots.current.set(workspaceRef.current.activeId, { project: projectRef.current, chapterId: activeId, epoch, tracking, history: historyRef.current, path, binding: bindingRef.current, saveState, saveError, historyError: historyLoadError.current });
     const selected = getActiveChat(projectRef.current);
     // Consecutive file opens can share a callback from an earlier render. Read
     // the conversation from the current project instead of stale UI messages.
@@ -451,7 +463,7 @@ export default function App() {
     const visible = new Set(panesRef.current.map(pane => pane.id));
     const hidden = [...warm.keys()].filter(key => !visible.has(key));
     while (hidden.length > 4) warm.delete(hidden.shift());
-    await api.rememberProjectView(view, capturePaneViews(workspaceRef.current.activeId));
+    return persist ? api.rememberProjectView(view, capturePaneViews(id), id) : undefined;
   }
   async function installWorkspace(result, placement = null) {
     setTracking(false); setActiveRevision(null); setTrackingIssue('');
@@ -542,13 +554,12 @@ export default function App() {
   function projectTransition(action, recoveryOnly = false, preserveChat = false) {
     if (transition.current || tabReordering.current) return;
     if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action, recoveryOnly));
-    paneSelection.current?.cancel(); paneSelection.current = null;
-    setPaneFocus(null); setSwitching(true);
+    setSwitching(true);
     // Block editor input immediately while saves and view state move to the
     // destination tab. Chat requests may continue against their captured project.
     document.querySelector('.workspace')?.setAttribute('inert', '');
     const work = (async () => {
-      try { clearTimeout(autosaveTimer.current); if (!preserveChat || requestRef.current?.mode !== 'chat') await dismiss(); await pendingSave.current; if (!recoveryOnly && locallySavedProject.current !== projectRef.current) await saveLocal(); await rememberTab(); opening.current = true; await action(); }
+      try { clearTimeout(autosaveTimer.current); if (!preserveChat || requestRef.current?.mode !== 'chat') await dismiss(); await pendingSave.current; if (!recoveryOnly && locallySavedProjects.current.get(workspaceRef.current.activeId) !== projectRef.current) await saveLocal(); await rememberTab(); opening.current = true; await action(); }
       catch (error) { notify(errorText(error)); }
       finally { opening.current = false; transition.current = null; setSwitching(false); document.querySelector('.workspace')?.removeAttribute('inert'); }
     })();
@@ -556,6 +567,7 @@ export default function App() {
   }
   function switchProject(id) {
     if (id === workspaceRef.current.activeId) return;
+    if (focusVisiblePane(id)) return;
     const warm = warmTabs.current.get(id);
     const identity = warm?.project ? { projectId: warm.project.id, historySequence: warm.project.historySequence } : undefined;
     return projectTransition(async () => installWorkspace(await api.activateProject(id, identity)), false, true);
@@ -574,15 +586,52 @@ export default function App() {
     const warm = warmTabs.current.get(id), identity = warm?.project ? { projectId: warm.project.id, historySequence: warm.project.historySequence } : undefined;
     await projectTransition(async () => installWorkspace(await api.activateProject(id, identity), { target, side }), false, true);
   }
-  async function activatePane(id, pointer) {
-    if (transition.current || namedSave.current) return;
-    const inEditor = Boolean(pointer?.target?.closest('.manuscript'));
-    const switchingProject = switchProject(id);
-    const selection = inEditor ? capturePaneSelection(paneEditors.current.get(id), pointer) : null;
-    paneSelection.current = selection;
-    await switchingProject;
-    if (workspaceRef.current.activeId !== id) { selection?.cancel(); return; }
-    setPaneFocus({ id, pointer, inEditor, selection });
+  function focusVisiblePane(id) {
+    if (id === workspaceRef.current.activeId) return true;
+    const resident = paneSnapshots.current.get(id), current = paneEditors.current.get(id), cached = tabCache.current.get(id) || {};
+    if (!api.focusProject || transition.current || namedSave.current || tabReordering.current || modal || !resident?.history || !current || current.isDestroyed || cached.pendingAgent) return false;
+    const leaving = workspaceRef.current.activeId;
+    // Queue persistence using captured document/binding identities. Nothing in
+    // the native mouse gesture waits for disk, IPC, encoding or history replay.
+    rememberTab().catch(error => notify(errorText(error)));
+    if (locallySavedProjects.current.get(leaving) !== projectRef.current) saveLocal().catch(() => {});
+    else clearTimeout(autosaveTimer.current);
+    if (requestRef.current?.mode !== 'chat') dismiss();
+    let next = resident.project;
+    if (cached.chatId && cached.messages && (next.activeChatId !== cached.chatId || getActiveChat(next)?.messages !== cached.messages)) next = withChatMessages(next, cached.chatId, cached.messages);
+    const nextWorkspace = { ...workspaceRef.current, activeId: id };
+    flushSync(() => {
+      workspaceRef.current = nextWorkspace; setWorkspace(nextWorkspace);
+      projectRef.current = next; setProject(next);
+      historyRef.current = resident.history; setJournal(resident.history); historyLoadError.current = resident.historyError || '';
+      bindingRef.current = resident.binding; setBinding(resident.binding); setPath(resident.path);
+      restoreSelection.current = null; restoreScroll.current = null;
+      setActiveId(resident.chapterId); setEpoch(resident.epoch); setTracking(resident.tracking);
+      current.storage.wraiterContext = { projectId: next.id, chapterId: resident.chapterId };
+      editorRef.current = current; setEditor(current);
+      setSaveState(resident.saveState || 'saved'); setSaveError(resident.saveError || '');
+      setMessages(cached.messages || getActiveChat(next)?.messages || []); setInstruction(cached.instruction || '');
+      setQuery(cached.query || ''); setReplacement(cached.replacement || ''); setSearchOpen(cached.searchOpen || false); setSearchScope(cached.searchScope || 'manuscript'); setSearchOptions(cached.searchOptions || { caseSensitive: false, wholeWord: false }); setActiveSearchId(cached.activeSearchId || null);
+      setActiveCommentId(cached.activeCommentId || null); setCommentFocus(0); setAgentActivity(cached.agentActivity || []);
+      setActiveRevision(null); setTrackingIssue(''); setRenameId(null); setAiError(''); setProposal(null); setGhost(null);
+      setBusy(requestRef.current?.mode === 'chat' ? requestRef.current.tabId === id ? 'chat' : 'background-chat' : null);
+      gitHistoryRequest.current++; setGitHistory({ available: true, entries: [], loading: true });
+      sessionStart.current = cached.sessionStart ?? projectWords(next); rejected.current = []; lastRequest.current = null;
+    });
+    api.focusProject(id).catch(error => notify(errorText(error)));
+    return workspaceRef.current.activeId !== leaving;
+  }
+  function activatePane(id, pointer) {
+    if (focusVisiblePane(id)) return true;
+    if (transition.current || namedSave.current || modal) return false;
+    // A repaired journal or pending assistant edit can still require a full
+    // replacement. Ordinary visible-pane focus always takes the resident path.
+    Promise.resolve(switchProject(id)).then(() => {
+      if (workspaceRef.current.activeId !== id) return;
+      const current = paneEditors.current.get(id);
+      if (current && !current.isDestroyed && pointer?.target?.closest('.manuscript')) current.view.focus();
+    });
+    return false;
   }
   async function removePane(id) {
     if (panesRef.current.length < 2 || transition.current || namedSave.current) return;
@@ -595,7 +644,7 @@ export default function App() {
   }
   function closeProject(id = workspaceRef.current.activeId) {
     if (tabReordering.current) return;
-    return projectTransition(async () => { const result = await api.closeProject(id); tabCache.current.delete(id); warmTabs.current.delete(id); await installWorkspace(result); if (result.archivedPath) notify('Draft preserved in File → Open recent.'); });
+    return projectTransition(async () => { const result = await api.closeProject(id); tabCache.current.delete(id); warmTabs.current.delete(id); locallySavedProjects.current.delete(id); await installWorkspace(result); if (result.archivedPath) notify('Draft preserved in File → Open recent.'); });
   }
   async function moveProjectTab(id, target, after) {
     if (transition.current || namedSave.current || tabReordering.current) return;
@@ -805,7 +854,7 @@ export default function App() {
   async function loadGitHistory() {
     const projectId = projectRef.current?.id, tabId = workspaceRef.current.activeId, request = ++gitHistoryRequest.current;
     const isCurrent = () => request === gitHistoryRequest.current && projectRef.current?.id === projectId && workspaceRef.current.activeId === tabId;
-    try { await saveLocal(); if (!isCurrent()) return; const result = await api.listGitHistory(); if (isCurrent()) setGitHistory(result); }
+    try { await saveLocal(); if (!isCurrent()) return; const result = await api.listGitHistory(projectId); if (isCurrent()) setGitHistory(result); }
     catch (error) { if (isCurrent()) setGitHistory({ available: false, entries: [], error: errorText(error) }); }
   }
   async function createSnapshot(label) {

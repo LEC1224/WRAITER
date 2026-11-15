@@ -15,6 +15,29 @@ async function fixture(t) {
   const session = new WorkspaceSession(directory); await session.boot(); return { directory, session };
 }
 
+test('resident focus and view capture never wait for a checkpoint or move another document’s save', async t => {
+  const { directory, session } = await fixture(t), alphaId = session.activeId;
+  await session.create(project('Beta'));
+  const betaId = session.activeId, alphaFiles = session.documentEntry(alphaId, 'Alpha').files;
+  const checkpoint = session.checkpoint;
+  session.checkpoint = () => { throw new Error('Focus must not touch disk'); };
+  for (let index = 0; index < 20; index++) { session.focus(alphaId); session.focus(betaId); }
+  session.rememberView({ chapterId: 'Alpha-chapter', scrollTop: 312 }, [], alphaId);
+  assert.equal(session.activeId, betaId);
+  assert.equal(session.entries.find(entry => entry.id === alphaId).view.scrollTop, 312);
+  assert.equal(session.active.view.scrollTop, undefined);
+  await alphaFiles.persist(project('Alpha', 'Saved while Beta has focus'));
+  assert.equal(session.active.store.project.id, 'Beta');
+  assert.throws(() => session.documentEntry(alphaId, 'Beta'), /another|no longer/);
+  assert.throws(() => session.documentEntry('missing', 'Alpha'), /no longer/);
+  assert.throws(() => session.focus('missing'), /not open/);
+  assert.equal(session.activeId, betaId);
+  session.checkpoint = checkpoint; await session.checkpoint();
+  const restored = new WorkspaceSession(directory); await restored.boot();
+  assert.equal(restored.activeId, betaId);
+  assert.match(JSON.stringify(restored.documentEntry(alphaId, 'Alpha').store.project), /Saved while Beta has focus/);
+});
+
 test('single-project recovery migrates to separate tab stores and all tabs restore in order', async t => {
   const { directory, session } = await fixture(t), alpha = session.activeId;
   const beta = await session.create(project('Beta')); assert.notEqual(session.active.store.recoveryPath, session.legacy.recoveryPath);
