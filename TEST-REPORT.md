@@ -1,3 +1,13 @@
+# Copy selected text between Multitask panes — 0.21.0-rc.4 — 2026-11-15
+
+Dragging a selected passage into another visible document copies rich text at a blue insertion marker. Hovering leaves source focus intact; dropping synchronously activates the destination and lets its normal ProseMirror drop, schema and history handlers insert the copy. Undo belongs to the destination. Dragging within the same document retains the native move operation, and Escape cancels without changing either document. The marker is positioned directly without rerendering editors on drag-over and is removed on leave, cancellation or unmount.
+
+`multitask-text-drag-ui.cjs` passed against source and the exact packaged executable, using real mouse gestures and two 1,502-paragraph documents. It checks exact insertion position, retained bold formatting, unchanged source, independent undo, native same-document move/undo, cancellation, and rapid focus/editing while disk saves are held open. The source maximum focus event was 33.3 ms; the packaged measurement was 38.6 ms. Synthetic documents and isolated profiles were used. Unit and broader Multitask verification are recorded below.
+
+A separate checkout of the selected Git index also built and passed the complete native text-drag regression, excluding unrelated work. Its maximum measured focus event was 41.3 ms.
+
+This feature is included in the unsigned `v0.21.0-rc.4-multitask-live` installer recorded below. It adds `src/pane-text-drag.js`, pane event handlers, the insertion marker style, its desktop regression and package script, and the user-guide paragraph. Unrelated workspace changes remain outside the local commits.
+
 # Resident Multitask focus — 0.21.0-rc.4 — 2026-11-15
 
 Visible documents retain their editor, journal and file binding. Pointer-down switches the editable pane and shared manuscript/sidebar context synchronously, without waiting for autosave, disk, IPC or a journal reload. Restored visible journals are hydrated during startup. Native mouse selection and clipboard handling replace the previous asynchronous gesture replay. The editor's guarded per-view click timer resets only on pane activation, so rapid returns do not become accidental triple-clicks while native double-click selection remains available.

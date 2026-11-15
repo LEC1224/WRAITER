@@ -6,6 +6,7 @@ import { extensions } from './Editor.jsx';
 import DocumentPane from './DocumentPane.jsx';
 import MultitaskWorkspace from './MultitaskWorkspace.jsx';
 import { normalizePanes, placePane, reconcilePanes } from './multitask.js';
+import { createPaneTextDrag } from './pane-text-drag.js';
 import { ghostKey, searchKey } from './extensions.js';
 import { newProject, uid, blankContent, nodeText, wordCount, contentWordCount, rememberContentWordCount, projectWords, snapshot } from './document.js';
 import { importDocument, exportPayload } from './io.js';
@@ -138,6 +139,9 @@ export default function App() {
   const [workspace, setWorkspace] = useState({ tabs: [], activeId: null }), [switching, setSwitching] = useState(false), [savingNamed, setSavingNamed] = useState(false);
   const [draggingTab, setDraggingTab] = useState(null);
   const paneActions = useRef({});
+  const paneTextDrag = useRef(null);
+  if (!paneTextDrag.current) paneTextDrag.current = createPaneTextDrag();
+  useEffect(() => () => paneTextDrag.current.clear(), []);
   const locallySavedProjects = useRef(new Map());
   const pendingDocumentSaves = useRef(new WeakMap());
   const tourRef = useRef(null);
@@ -1534,6 +1538,11 @@ export default function App() {
     selection: id => { if (id === workspaceRef.current.activeId) onEditorSelection(); },
     action: (id, action) => { if (id === workspaceRef.current.activeId) onEditorAction(action); },
     activate: activatePane, remove: removePane, drag: setDraggingTab,
+    textDragStart: (id, current, event) => paneTextDrag.current.start(id, current, event),
+    textDragOver: (id, event) => paneTextDrag.current.over(id, paneEditors.current.get(id), event, !transition.current && !namedSave.current && !modal),
+    textDragLeave: (id, event) => paneTextDrag.current.leave(paneEditors.current.get(id), event),
+    textDragEnd: () => paneTextDrag.current.clear(),
+    textDrop: (id, event) => paneTextDrag.current.drop(id, paneEditors.current.get(id), event, activatePane, !transition.current && !namedSave.current && !modal),
     chapter: async (id, chapterId) => { await switchProject(id); if (workspaceRef.current.activeId === id && !transition.current) changeChapter(chapterId); },
     editChapter, reorderChapter, deleteChapter: () => openChapterDelete(chapter.id), canImportImages, notice: notify,
   };

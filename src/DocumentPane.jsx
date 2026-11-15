@@ -45,7 +45,12 @@ export default memo(function DocumentPane({ id, project, chapterId, epoch, track
         // Preserve a selected passage here so its next native drag can copy it.
         current.view.focus();
       }
-    }} onFocusCapture={event => { if (!active && !event.target.closest('[data-pane-control]')) actions.current.activate(id, { target: event.target }); }}>
+    }} onFocusCapture={event => { if (!active && !event.target.closest('[data-pane-control]')) actions.current.activate(id, { target: event.target }); }}
+    onDragStart={event => actions.current.textDragStart(id, currentRef.current, event.nativeEvent)}
+    onDragOverCapture={event => actions.current.textDragOver(id, event.nativeEvent)}
+    onDragLeave={event => actions.current.textDragLeave(id, event.nativeEvent)}
+    onDragEnd={() => actions.current.textDragEnd()}
+    onDropCapture={event => actions.current.textDrop(id, event.nativeEvent)}>
     <style>{namedStyleCSS(project.namedStyles, `[data-pane-id="${id}"] .manuscript `)}</style>
     {multiple && <div className="multitask-pane-heading">
       <button className="multitask-pane-title" data-pane-control="true" draggable onDragStart={event => startTabDrag(event, id, actions.current.drag)} onDragEnd={() => actions.current.drag(null)} onClick={event => actions.current.activate(id, { target: event.currentTarget })} title={`${project.title} · Drag to move this panel`}><GripVertical size={14} /><span>{project.title}</span></button>

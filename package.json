@@ -52,6 +52,7 @@
     "test:multitask-layout": "node tests/multitask-layout-ui.cjs",
     "test:multitask-selection": "node tests/multitask-selection-ui.cjs",
     "test:multitask-resident": "node tests/multitask-resident-ui.cjs",
+    "test:multitask-text-drag": "node tests/multitask-text-drag-ui.cjs",
     "test:large": "node tests/large-manuscript-ui.cjs",
     "test:navigation": "node tests/paragraph-navigation-ui.cjs",
     "test:soak": "node tests/soak-ui.cjs",
