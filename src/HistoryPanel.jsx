@@ -45,8 +45,8 @@ function EditDetails({ entry }) {
   })}</div>;
 }
 
-export default function HistoryPanel({ journal, gitHistory = { entries: [] }, onUndo, onRedo, onCheckpoint, onRestoreGit, onPreviewGit, onCheckpointSettings, onOpenTree, onInspectEntry }) {
-  const [tab, setTab] = useState('edits'), [query, setQuery] = useState(''), [shown, setShown] = useState(100), [expanded, setExpanded] = useState(null);
+export default function HistoryPanel({ tab, onTabChange, journal, gitHistory = { entries: [] }, onUndo, onRedo, onCheckpoint, onRestoreGit, onPreviewGit, onCheckpointSettings, onOpenTree, onInspectEntry }) {
+  const [query, setQuery] = useState(''), [shown, setShown] = useState(100), [expanded, setExpanded] = useState(null);
   const [checkpointQuery, setCheckpointQuery] = useState('');
   const status = historyStatus(journal);
   const entries = useMemo(() => timelineEntries(journal), [journal]);
@@ -61,8 +61,8 @@ export default function HistoryPanel({ journal, gitHistory = { entries: [] }, on
   }, [entries, query]);
   return <div className="inspector-body history-panel">
     <div className="history-tabs" role="tablist" aria-label="Revision history views">
-      <button role="tab" aria-selected={tab === 'edits'} onClick={() => setTab('edits')} title="Inspect the editing history and move through undo and redo steps.">Every edit <span>{status.totalEdits}</span></button>
-      <button role="tab" aria-selected={tab === 'checkpoints'} onClick={() => setTab('checkpoints')} title="Browse saved manuscript versions along the current version path.">Checkpoints <span>{gitHistory.entries?.length || 0}</span></button>
+      <button role="tab" aria-selected={tab === 'edits'} onClick={() => onTabChange('edits')} title="Inspect the editing history and move through undo and redo steps.">Every edit <span>{status.totalEdits}</span></button>
+      <button role="tab" aria-selected={tab === 'checkpoints'} onClick={() => onTabChange('checkpoints')} title="Browse saved manuscript versions along the current version path.">Checkpoints <span>{gitHistory.entries?.length || 0}</span></button>
     </div>
     {tab === 'edits' ? <>
       <div className="history-actions"><button className="secondary-button" disabled={!status.canUndo} title={status.undoLabel ? `Undo: ${status.undoLabel}` : 'Nothing to undo'} onClick={onUndo}><Undo2 size={14} />Undo</button><button className="secondary-button" disabled={!status.canRedo} title={status.redoLabel ? `Redo: ${status.redoLabel}` : 'Nothing to redo'} onClick={onRedo}><Redo2 size={14} />Redo</button></div>

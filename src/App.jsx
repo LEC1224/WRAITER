@@ -31,6 +31,7 @@ import CheckpointGraph from './CheckpointGraph.jsx';
 import AssistantChanges from './AssistantChanges.jsx';
 import { assistantChangeSummary, assistantEditState, revertAssistantEntry } from './editorial-report.js';
 import { LAYOUTS, documentLayout } from './layouts.js';
+import { useWorkspaceLayout } from './useWorkspaceLayout.js';
 import { normalizeHistoryProject, prepareHistoryLoad, recordTransaction, recordProjectChange, applyHistory, historyStatus } from './history.js';
 import { applyAgentResult, rebaseAgentResult } from './agent-edits.js';
 import RephraseOptions from './RephraseOptions.jsx';
@@ -137,7 +138,8 @@ export default function App() {
   workspaceRef.current = workspace;
   const [project, setProject] = useState(null), [prefs, setPrefs] = useState(DEFAULTS), [activeId, setActiveId] = useState(null);
   const [path, setPath] = useState(null), [saveState, setSaveState] = useState('saved'), [saveError, setSaveError] = useState('');
-  const [panel, setPanel] = useState(null), [leftOpen, setLeftOpen] = useState(true), [focus, setFocus] = useState(false);
+  const { panel, setPanel, leftOpen, setLeftOpen, focus, setFocus, historyTab, setHistoryTab,
+    panes, setPanes, panesRef, paneSnapshots, paneEditors, restoreLayout, capturePaneViews } = useWorkspaceLayout(api, booted);
   const [modal, setModal] = useState(null), [menu, setMenu] = useState(false), [toast, setToast] = useState(''), [epoch, setEpoch] = useState(0);
   externalBlocked.current = !booted || Boolean(modal);
   const [editor, setEditor] = useState(null), [, refreshToolbar] = useState(0);
@@ -204,6 +206,7 @@ export default function App() {
     if (!api) return;
     api.boot().then(async result => {
       prefsRef.current = { ...DEFAULTS, ...result.prefs }; setPrefs(prefsRef.current);
+      await restoreLayout(result, project => normalizeHistoryProject(project, schema));
       await installWorkspace(result);
       setRecents(result.prefs.recent || []);
       if (result.warning) notify(result.warning);
@@ -418,7 +421,7 @@ export default function App() {
     const id = workspaceRef.current.activeId, warm = warmTabs.current;
     warm.delete(id); warm.set(id, { project: projectRef.current, history: historyRef.current });
     while (warm.size > 4) warm.delete(warm.keys().next().value);
-    await api.rememberProjectView(view);
+    await api.rememberProjectView(view, capturePaneViews(workspaceRef.current.activeId));
   }
   async function installWorkspace(result) {
     setTracking(false); setActiveRevision(null); setTrackingIssue('');
@@ -1488,7 +1491,7 @@ export default function App() {
         {panel === 'notes' && <div className="inspector-body notes-panel"><div className="panel-description"><h3>Notes</h3><p>Private notes and instructions for this manuscript.</p></div><label className="field-label">PRIVATE NOTES <small>Not sent to AI</small></label><textarea className="notes-textarea" aria-label="Private manuscript notes" placeholder="A scene to come back to. A question to leave open…" value={project.notes || ''} onChange={e => updateProject({ notes: e.target.value })} /><label className="field-label">YOUR WRITING VOICE <small>Included in AI context</small></label><textarea className="notes-textarea voice" aria-label="Writing voice instructions" placeholder="For example: British spelling. Keep dialogue informal. Preserve deliberate fragments. Never rename characters." value={project.style || ''} onChange={e => updateProject({ style: e.target.value })} /><p className="small-muted">These are your instructions. AI suggestions never update them automatically.</p></div>}
         {panel === 'review' && <TrackedReview changes={trackedChanges} chapterId={activeId} tracking={tracking} selectedId={activeRevision} issue={trackingIssue} onToggle={toggleTracking} disabled={!!busy || switching || savingNamed} onReview={reviewEdits} onNavigate={change => { setActiveRevision(change.id); navigatePassage(change.chapterId, { from: change.from, to: change.to }, { focusEditor: false }); }} />}
         {panel === 'comments' && <CommentsPanel key={project.id} project={project} editor={editor} selection={editor && !editor.isDestroyed ? { chapterId: activeId, from: editor.state.selection.from, to: editor.state.selection.to } : null} onChange={commitProjectBatch} onNavigate={navigateComment} disabled={!!busy || switching} activeCommentId={activeCommentId} focusRequest={commentFocus} />}
-        {panel === 'history' && <><HistoryPanel journal={journal} gitHistory={gitHistory} onUndo={() => travelHistory('undo')} onRedo={() => travelHistory('redo')} onCheckpoint={() => createSnapshot()} onRestoreGit={item => setModal({ type: 'git-restore', item })} onPreviewGit={previewGitVersion} onCheckpointSettings={() => setModal({ type: 'settings', tab: 'connections', task: 'checkpoint' })} onOpenTree={() => setModal({ type: 'version-tree' })} />{Boolean(project.snapshots?.length) && <details className="legacy-snapshots"><summary>Earlier embedded snapshots</summary>{project.snapshots.map(item => <button className="secondary-button" key={item.id} onClick={() => setModal({ type: 'restore', item })} title="Review the option to restore this earlier embedded snapshot.">{item.name}</button>)}</details>}</>}
+        {panel === 'history' && <><HistoryPanel tab={historyTab} onTabChange={setHistoryTab} journal={journal} gitHistory={gitHistory} onUndo={() => travelHistory('undo')} onRedo={() => travelHistory('redo')} onCheckpoint={() => createSnapshot()} onRestoreGit={item => setModal({ type: 'git-restore', item })} onPreviewGit={previewGitVersion} onCheckpointSettings={() => setModal({ type: 'settings', tab: 'connections', task: 'checkpoint' })} onOpenTree={() => setModal({ type: 'version-tree' })} />{Boolean(project.snapshots?.length) && <details className="legacy-snapshots"><summary>Earlier embedded snapshots</summary>{project.snapshots.map(item => <button className="secondary-button" key={item.id} onClick={() => setModal({ type: 'restore', item })} title="Review the option to restore this earlier embedded snapshot.">{item.name}</button>)}</details>}</>}
       </aside>}
         </div>
       </div>

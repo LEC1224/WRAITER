@@ -31,6 +31,8 @@ Use **Ctrl+Tab** / **Ctrl+Shift+Tab** to cycle projects, and **Ctrl+W** or a tab
 - **Restore all open project tabs** (default): restores the tab order, last active project, chapter and reading position, including unnamed drafts. Each project's atomic undo history remains available.
 - **Open a clean new project**: starts with one blank tab. Named documents remain saved, and unnamed drafts or unreviewed native edits are preserved in Open Recent.
 
+WRAITER remembers the window size and position, whether it was maximized, which sidebars were open, the selected Revision history view, and Focus view. **Restore all open project tabs** also restores the visible Multitask panels in order, with their relative widths and reading positions. These choices stay in the local profile when you update WRAITER. Starting with a clean project keeps the window and sidebar choices and opens one document panel.
+
 Each tab has a separate recovery file in application data. Restoring projects does not require Git. A copied WRAITER document opened alongside its original receives an independent project identity so its future undo history cannot mix with the original's.
 
 ## Writing and formatting

@@ -77,7 +77,19 @@ class WorkspaceSession {
     await this.checkpoint();
     return this.snapshot({ warning: [...new Set(warnings)].join(' '), archivedPaths });
   }
-  rememberView(view) { this.active.view = cleanView(view); }
+  paneProjects(panes) {
+    const ids = new Set(panes.map(pane => pane.id));
+    return this.entries.filter(entry => entry.id !== this.activeId && ids.has(entry.id) && entry.store.project)
+      .map(entry => ({ id: entry.id, project: entry.store.project, view: entry.view }));
+  }
+  rememberView(view, panes) {
+    this.active.view = cleanView(view);
+    if (!Array.isArray(panes)) return;
+    const views = new Map(panes.slice(0, 200).filter(pane => validId(pane?.id)).map(item => [item.id, item.view]));
+    for (const entry of this.entries) {
+      if (entry.id !== this.activeId && views.has(entry.id)) entry.view = cleanView(views.get(entry.id));
+    }
+  }
   async persistChat(projectId, chat) {
     const entry = this.entries.find(item => item.store.project?.id === projectId);
     if (!entry) throw new Error('This chat belongs to a project that is no longer open.');

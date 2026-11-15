@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog: electronDialog, Menu, safeStorage, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog: electronDialog, Menu, safeStorage, shell, clipboard, screen } = require('electron');
 const { Diagnostics, installDiagnostics } = require('./diagnostics.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -17,6 +17,7 @@ const { EditJournal } = require('./edit-journal.cjs');
 const { runWritingAgent } = require('./writing-agent.cjs');
 const { LocalModels } = require('./local-models.cjs');
 const { WorkspaceSession } = require('./workspace-session.cjs');
+const { WorkspaceLayout, windowOptions } = require('./workspace-layout.cjs');
 const { documentArguments } = require('./file-open.cjs');
 const { runProofread, validateProofreadRequest } = require('./proofreading.cjs');
 const { validateInlineRequest, canReserveInline, cancelInline } = require('./inline-grammar.cjs');
@@ -114,6 +115,7 @@ function queueCheckpointLabel({ id, before, after, revision, label, automatic = 
   checkpointLabelQueue = work.catch(error => diagnostics.error('checkpoint.label-failed', error));
 }
 const file = name => path.join(app.getPath('userData'), name);
+const profileLayout = new WorkspaceLayout(app.getPath('userData'), error => diagnostics.error('workspace.layout', error));
 const serial = fn => { const result = writeQueue.then(async () => { try { return await fn(); } finally { await workspace?.checkpoint(); } }); writeQueue = result.catch(() => {}); return result; };
 function syncWorkspace() { store = workspace.active.store; documentFiles = workspace.active.files; }
 const tryRead = async (name, fallback) => { try { return JSON.parse(await fs.readFile(file(name), 'utf8')); } catch (e) { if (e.code !== 'ENOENT') diagnostics.error('preferences.read-failed', e); return fallback; } };
@@ -171,8 +173,19 @@ async function providerProbe(draft = {}) {
   const key = typeof draft === 'object' && draft.apiKey?.trim() || (draft.clearKey ? '' : await getKey(settings));
   return providers.probe(settings, key);
 }
+function rememberWindowLayout() {
+  if (!win?.isVisible() || win.isMinimized()) return;
+  profileLayout.rememberWindow({ bounds: win.getNormalBounds(), maximized: win.isMaximized() });
+}
+async function closeWindow() {
+  rememberWindowLayout();
+  await profileLayout.flush();
+  closing = true; win?.close();
+}
 function createWindow() {
-  win = new BrowserWindow({ width: 1450, height: 960, minWidth: 960, minHeight: 650, title: 'WRAITER', icon: path.join(__dirname, '../assets/icon.png'), backgroundColor: '#ececed', frame: true, autoHideMenuBar: false, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true } });
+  const saved = profileLayout.window;
+  const area = (saved ? screen.getDisplayMatching(saved.bounds) : screen.getPrimaryDisplay()).workArea;
+  win = new BrowserWindow({ ...windowOptions(saved, area), title: 'WRAITER', icon: path.join(__dirname, '../assets/icon.png'), backgroundColor: '#ececed', frame: true, autoHideMenuBar: false, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true } });
   setDocumentLanguage(store.project?.language || prefs.language);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -180,7 +193,12 @@ function createWindow() {
   win.webContents.on('zoom-changed', (_event, direction) => { win.webContents.setZoomFactor(1); win.webContents.send('command', direction === 'in' ? 'zoom-in' : 'zoom-out'); });
   win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   installContextMenu(win, { Menu, ipcMain, getPreferences: () => prefs });
-  win.once('ready-to-show', () => win.show());
+  for (const event of ['resize', 'move', 'maximize', 'unmaximize', 'restore']) win.on(event, rememberWindowLayout);
+  win.once('ready-to-show', () => {
+    if (saved?.maximized) win.maximize();
+    win.show();
+    rememberWindowLayout();
+  });
   win.on('close', event => {
     if (closing) return;
     event.preventDefault();
@@ -190,7 +208,7 @@ function createWindow() {
       if (closing || closeFinishing || !win) return;
       const result = await dialog.showMessageBox(win, { type: 'warning', message: 'The editor is not responding', detail: 'The last successful recovery is preserved. Closing now may lose typing that had not reached autosave.', buttons: ['Keep open', 'Close using last recovery'], defaultId: 0, cancelId: 0 });
       if (closing || closeFinishing || !win) return;
-      if (result.response === 1) { await writeQueue; await cancelAll(); await gitHistory.flush(); await checkpointFallbackQueue; await providers.shutdown?.(); closing = true; win.close(); }
+      if (result.response === 1) { await writeQueue; await cancelAll(); await gitHistory.flush(); await checkpointFallbackQueue; await providers.shutdown?.(); await closeWindow(); }
       else closePending = false;
     }, 10000);
   });
@@ -200,6 +218,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   if (!primaryInstance) return;
+  await profileLayout.load();
   const savedPrefs = await tryRead('settings.json', {});
   if (!Object.hasOwn(savedPrefs, 'setupMode')) {
     const mode = await fs.readFile(path.join(path.dirname(app.getPath('exe')), 'setup-mode.txt'), 'utf8').catch(() => 'simple');
@@ -232,9 +251,11 @@ app.whenReady().then(async () => {
   updateMenu();
   createWindow();
   require('./setup.cjs').registerSetup({ ipcMain: { handle }, app, dialog, shell, win: () => win, draftConnection });
-  handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
+  handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), layout: profileLayout.view, prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
   handle('thesaurus:lookup', (_event, word, language) => require('./thesaurus.cjs').lookup(word, language));
-  handle('workspace:view', (_e, view) => serial(async () => { workspace.rememberView(view); return true; }));
+  handle('workspace:layout', (_e, layout) => { profileLayout.rememberView(layout); return true; });
+  handle('workspace:layout-projects', () => workspace.paneProjects(profileLayout.view.panes));
+  handle('workspace:view', (_e, view, panes) => serial(async () => { workspace.rememberView(view, panes); return true; }));
   handle('workspace:reload', (_e, project, events = []) => serial(async () => {
     await cancelAll();
     validateProject(project);
@@ -609,7 +630,7 @@ app.whenReady().then(async () => {
     await gitHistory.flush();
     await checkpointFallbackQueue;
     await providers.shutdown?.();
-    closing = true; win?.close(); return true;
+    await closeWindow(); return true;
   });
   ipcMain.on('review:state', (_event, state) => { if (typeof state?.tracking === 'boolean' && typeof state?.blocked === 'boolean' && (state.tracking !== reviewMenuState.tracking || state.blocked !== reviewMenuState.blocked)) { reviewMenuState = { tracking: state.tracking, blocked: state.blocked }; updateMenu(); } });
   ipcMain.on('window', (_e, action) => { if (action === 'minimize') win.minimize(); else if (action === 'maximize') win.isMaximized() ? win.unmaximize() : win.maximize(); else if (action === 'close') win.close(); });
