@@ -43,6 +43,7 @@ import NoteDialog from './NoteDialog.jsx';
 import PageSetupDialog from './PageSetupDialog.jsx';
 import { captureNoteTarget, captureNoteAt, applyNote, removeNote } from './notes.js';
 import ChapterOutline from './ChapterOutline.jsx';
+import { duplicateChapter, MAX_CHAPTERS } from './chapter-actions.js';
 import BookmarksPanel from './BookmarksPanel.jsx';
 import TemplatesDialog from './TemplatesDialog.jsx';
 import CaseMenu from './CaseMenu.jsx';
@@ -659,6 +660,46 @@ export default function App() {
     tourRef.current?.emit('chapter-created', { chapterId: next.id });
   }
   function editChapter(id, update) { updateProject({ chapters: projectRef.current.chapters.map(c => c.id === id ? { ...c, ...update } : c) }); }
+  function chapterActionsBlocked() {
+    return !projectRef.current || !!(requestRef.current || transition.current || namedSave.current);
+  }
+  function chapterTarget(chapterId) {
+    return { chapterId, projectId: projectRef.current.id, tabId: workspaceRef.current.activeId };
+  }
+  function isCurrentChapterTarget(target) {
+    const current = projectRef.current;
+    return current?.id === target.projectId && workspaceRef.current.activeId === target.tabId &&
+      current.chapters.some(item => item.id === target.chapterId);
+  }
+  function renameOutlineChapter(id, title) {
+    if (chapterActionsBlocked()) return;
+    const current = projectRef.current, item = current.chapters.find(chapter => chapter.id === id);
+    if (!item || item.title === title) return;
+    try {
+      const chapters = current.chapters.map(chapter => chapter === item ? { ...chapter, title } : chapter);
+      commitProjectBatch({ ...current, chapters }, 'Rename chapter');
+    } catch (error) { notify(errorText(error)); }
+  }
+  function openChapterDelete(id) {
+    const current = projectRef.current, item = current?.chapters.find(chapter => chapter.id === id);
+    if (!item || current.chapters.length < 2 || chapterActionsBlocked() || externalBlocked.current) return;
+    setModal({ type: 'delete-chapter', ...chapterTarget(id), title: item.title });
+  }
+  function confirmChapterDelete() {
+    setModal(null);
+    if (chapterActionsBlocked() || !isCurrentChapterTarget(modal)) return;
+    const current = projectRef.current, index = current.chapters.findIndex(item => item.id === modal.chapterId);
+    if (current.chapters.length < 2) return;
+    const chapters = current.chapters.filter(item => item.id !== modal.chapterId);
+    const replacement = activeId === modal.chapterId ? chapters[Math.min(index, chapters.length - 1)] : null;
+    try {
+      const snapshots = [snapshot(current, 'Before deleting a chapter'), ...(current.snapshots || [])].slice(0, 20);
+      const selection = replacement && Selection.atStart(schema.nodeFromJSON(replacement.content)).toJSON();
+      commitProjectBatch({ ...current, chapters, snapshots }, 'Delete chapter', replacement?.id ?? activeId, selection);
+      if (replacement) setActiveSearchId(null);
+      setRenameId(null);
+    } catch (error) { notify(errorText(error)); }
+  }
   function divideChapter() {
     const current = editorRef.current;
     if (!current || current.isDestroyed || !current.isEditable || requestRef.current || transition.current || namedSave.current) return;
@@ -1267,6 +1308,11 @@ export default function App() {
     editorMenuRef.current = null;
     const current = editorRef.current, keyboard = request.source === 'keyboard';
     const target = keyboard ? document.activeElement : document.elementFromPoint(request.x, request.y);
+    const chapterId = target?.closest('[data-chapter-id]')?.dataset.chapterId, manuscript = projectRef.current;
+    if (!externalBlocked.current && manuscript?.chapters.some(item => item.id === chapterId)) {
+      editorMenuRef.current = { id: request.id, outlineChapter: chapterTarget(chapterId) };
+      return { chapter: true, blocked: chapterActionsBlocked(), canDelete: manuscript.chapters.length > 1, canDuplicate: manuscript.chapters.length < MAX_CHAPTERS };
+    }
     const tab = target?.closest('[data-project-tab]'), tabs = workspaceRef.current.tabs, tabIndex = tabs.findIndex(item => item.id === tab?.dataset.projectTab);
     if (tabIndex >= 0 && !document.querySelector('[role="dialog"]')) { editorMenuRef.current = { id: request.id, tabId: tabs[tabIndex].id }; return { tab: true, tabId: tabs[tabIndex].id, canMoveLeft: tabIndex > 0, canMoveRight: tabIndex < tabs.length - 1, canCloseOthers: tabs.length > 1, blocked: !!transition.current || namedSave.current || tabReordering.current }; }
     if (!current || current.isDestroyed || !current.isEditable || target?.closest('.manuscript') !== current.view.dom || transition.current || savingNamed || document.querySelector('[role="dialog"]')) return null;
@@ -1293,6 +1339,20 @@ export default function App() {
     const context = editorMenuRef.current, current = editorRef.current;
     if (!context || context.id !== action?.id) return;
     editorMenuRef.current = null;
+    if (context.outlineChapter) {
+      if (chapterActionsBlocked() || externalBlocked.current) return;
+      if (!isCurrentChapterTarget(context.outlineChapter)) { notify('The chapter is no longer available.'); return; }
+      const { chapterId } = context.outlineChapter;
+      if (action.command === 'chapter-rename') setRenameId(chapterId);
+      else if (action.command === 'chapter-delete') openChapterDelete(chapterId);
+      else if (action.command === 'chapter-duplicate') {
+        try {
+          const manuscript = projectRef.current, chapters = duplicateChapter(manuscript.chapters, chapterId, schema);
+          if (chapters !== manuscript.chapters) commitProjectBatch({ ...manuscript, chapters }, 'Duplicate chapter');
+        } catch (error) { notify(errorText(error)); }
+      }
+      return;
+    }
     if (context.tabId) { if (['tab-close', 'tab-close-others', 'tab-close-right', 'tab-left', 'tab-right'].includes(action.command)) tabMenuAction(action.command, context.tabId); return; }
     if (transition.current || savingNamed || document.querySelector('[role="dialog"]') || current !== context.editor || current.isDestroyed || current.state.doc !== context.doc || projectRef.current.id !== context.projectId || activeId !== context.chapterId) { notify('The manuscript changed. Right-click the passage again.'); return; }
     if (action.command === 'apply-grammar-hint' || action.command === 'review-grammar-hint') {
@@ -1362,7 +1422,7 @@ export default function App() {
         <div className="project-switcher"><div className="project-avatar"><BookOpen size={21} /></div><div className="project-switcher-text"><small>YOUR MANUSCRIPT</small><button className="project-title-button" onClick={() => setModal({ type: 'rename' })} title="Rename this manuscript.">{project.title}<PenLine size={12} /></button></div></div>
         <button className="sidebar-search" onClick={() => searchOpen ? closeSearch() : openSearch()} title={shortcutHint("Find and replace text across the manuscript or current chapter.", prefs.hotkeys?.find)}><Search size={15} />Find in manuscript<kbd>{formatShortcut(prefs.hotkeys?.find)}</kbd></button>
         <div className="sidebar-section-label">MANUSCRIPT <IconButton icon={Plus} title="Add chapter" onClick={addChapter} /></div>
-        <ChapterOutline project={project} activeId={chapter.id} renameId={renameId} onRenameStart={setRenameId} onRenameEnd={() => setRenameId(null)} onActivate={changeChapter} onNavigate={navigatePassage} onRename={(id, title) => { if (!requestRef.current && !transition.current) updateProject({ chapters: projectRef.current.chapters.map(item => item.id === id ? { ...item, title } : item) }, 'Rename chapter'); }} onMove={moveChapter} disabled={!!busy || switching || savingNamed} />
+        <ChapterOutline project={project} activeId={chapter.id} renameId={renameId} onRenameStart={setRenameId} onRenameEnd={() => setRenameId(null)} onActivate={changeChapter} onNavigate={navigatePassage} onRename={renameOutlineChapter} onMove={moveChapter} disabled={!!busy || switching || savingNamed} />
         <button className="add-chapter" onClick={addChapter}><Plus size={15} />New chapter</button>
         <button className="add-chapter" onClick={() => setModal({ type: 'templates' })} title="Create a reusable manuscript template or start a new manuscript from one.">Document templates…</button>
         <BookmarksPanel project={project} editor={editor} chapterId={chapter.id} onChange={commitProjectBatch} onNavigate={navigatePassage} disabled={!!busy || switching || savingNamed} onError={notify} />
@@ -1394,7 +1454,7 @@ export default function App() {
         <div className={`writing-scroll ${prefs.pageMode === 'pages' ? 'divided-pages' : 'continuous-pages'} ${prefs.showRowNumbers || prefs.showPageNumbers || prefs.showParagraphNumbers ? 'has-numbering' : ''}`} onDragOver={event => imageSurfaceEvent(editorRef.current, 'dragover', event.nativeEvent)} onDragLeave={event => imageSurfaceEvent(editorRef.current, 'dragleave', event.nativeEvent)} onDrop={event => imageSurfaceEvent(editorRef.current, 'drop', event.nativeEvent)} style={{ '--numbering-width': `${[prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers].filter(Boolean).length * 34}px` }}>
           <article className="writing-sheet">
             <div className="chapter-kicker"><span>CHAPTER {String(project.chapters.findIndex(c => c.id === chapter.id) + 1).padStart(2, '0')}</span><span className="kicker-line" /><select aria-label="Chapter status" value={chapter.status || 'Draft'} onChange={e => editChapter(chapter.id, { status: e.target.value })} title="Label this chapter’s progress for your own organisation."><option>Draft</option><option>Notes</option><option>Revising</option><option>Final</option></select></div>
-            <div className="chapter-title-row"><input className="chapter-title" aria-label="Chapter title" value={chapter.title} onChange={e => editChapter(chapter.id, { title: e.target.value })} /><div className="chapter-tools"><IconButton icon={ArrowUp} title="Move chapter earlier" disabled={project.chapters[0].id === chapter.id} onClick={() => reorderChapter(chapter.id, -1)} /><IconButton icon={ArrowDown} title="Move chapter later" disabled={project.chapters.at(-1).id === chapter.id} onClick={() => reorderChapter(chapter.id, 1)} /><IconButton icon={Trash2} title="Delete chapter" disabled={project.chapters.length === 1} onClick={() => setModal({ type: 'delete-chapter' })} /></div></div>
+            <div className="chapter-title-row"><input className="chapter-title" aria-label="Chapter title" value={chapter.title} onChange={e => editChapter(chapter.id, { title: e.target.value })} /><div className="chapter-tools"><IconButton icon={ArrowUp} title="Move chapter earlier" disabled={project.chapters[0].id === chapter.id} onClick={() => reorderChapter(chapter.id, -1)} /><IconButton icon={ArrowDown} title="Move chapter later" disabled={project.chapters.at(-1).id === chapter.id} onClick={() => reorderChapter(chapter.id, 1)} /><IconButton icon={Trash2} title="Delete chapter" disabled={project.chapters.length === 1} onClick={() => openChapterDelete(chapter.id)} /></div></div>
             {(project.showStatistics ?? layout.showStatistics) && <div className="chapter-meta">{chapterWords.toLocaleString()} words<span>·</span>{Math.max(1, Math.ceil(chapterWords / 220))} min read</div>}
             <ManuscriptEditor key={`${project.id}:${chapter.id}:${epoch}`} chapter={chapter} tracking={tracking} prefs={{ ...prefs, language: documentLanguage }} layoutSignature={JSON.stringify([docStyle, chapter.title, project.showStatistics])} onReady={handleEditorReady} onChange={onContentChanged} onSelection={onEditorSelection} onAction={onEditorAction} onNotice={notify} canImportImages={canImportImages} />
             {ghost && <div className="ghost-controls"><span>{ghost.kind === 'revision' ? 'Selected text · proposed replacement' : 'Suggested continuation'}</span><button onClick={() => acceptGhost()} title={shortcutHint(ghost.kind === "revision" ? "Replace the selected text with this suggestion." : "Insert this suggestion at the cursor.", prefs.hotkeys?.accept)}><kbd>{formatShortcut(prefs.hotkeys?.accept ?? 'Tab')}</kbd> Accept</button><button onClick={retryAI} title="Discard this preview and ask AI for a different suggestion."><RotateCcw size={13} />Another</button><button onClick={rejectSuggestion} title={shortcutHint("Discard this suggestion and keep your wording.", prefs.hotkeys?.dismiss)}><kbd>{formatShortcut(prefs.hotkeys?.dismiss ?? 'Escape')}</kbd> Dismiss</button></div>}
@@ -1462,7 +1522,7 @@ export default function App() {
     {modal?.type === 'git-preview' && <Modal title={modal.item.title || modal.item.message} subtitle={new Date(modal.item.date).toLocaleString()} onClose={() => setModal(null)} wide><p className="small-muted">{modal.item.summary || 'Saved manuscript version'}{modal.item.location ? ` · ${modal.item.location}` : ''}</p><label className="field-label">Chapter<select className="field-input" aria-label="Preview chapter" value={modal.chapterId} onChange={event => setModal({ ...modal, chapterId: event.target.value })}>{modal.version.chapters.map(chapter => <option key={chapter.id} value={chapter.id}>{chapter.title}</option>)}</select></label><pre className="checkpoint-preview">{nodeText(modal.version.chapters.find(chapter => chapter.id === modal.chapterId)?.content || modal.version.chapters[0].content, '\n', true)}</pre><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Close preview</button><button className="primary-button" onClick={() => setModal({ type: 'git-restore', item: modal.item, chapterId: modal.chapterId })} title="Review restoring this saved version and continuing from it.">Continue from this version</button></div></Modal>}
     {modal?.type === 'git-restore' && <Modal title="Continue from this version?" subtitle={(modal.item.title || modal.item.message) + ' · ' + new Date(modal.item.date).toLocaleString()} onClose={() => setModal(null)}><p className="notice-copy">Your current document will be saved as a checkpoint. You can return to either path in the version tree.</p><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Cancel</button><button className="primary-button" onClick={() => restoreGitVersion(modal.item.revision)} title="Save a checkpoint of the current draft, then restore this version and continue from it.">Continue here</button></div></Modal>}
     {modal?.type === 'recent' && <Modal title="Recent manuscripts" onClose={() => setModal(null)}><div className="recent-list">{recents.length ? recents.map(target => <button className="secondary-button" key={target} title={target} onClick={() => { setModal(null); openDocument(target); }}>{target.split(/[\\/]/).pop()}</button>) : <p>No saved manuscripts yet.</p>}</div></Modal>}
-    {modal?.type === 'delete-chapter' && <Modal title={`Delete “${chapter.title}”?`} subtitle="A snapshot of your manuscript will be kept before the chapter is removed." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep chapter</button><button className="danger-button" onClick={() => { const current = projectRef.current; const chapters = current.chapters.filter(c => c.id !== chapter.id); dismiss(); updateProject({ chapters, snapshots: [snapshot(current, 'Before deleting a chapter'), ...(current.snapshots || [])].slice(0, 20) }); setActiveId(chapters[0].id); setModal(null); }}>Delete chapter</button></div></Modal>}
+    {modal?.type === 'delete-chapter' && <Modal title={'Delete “' + modal.title + '”?'} subtitle="A snapshot of your manuscript will be kept before the chapter is removed." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep chapter</button><button className="danger-button" onClick={confirmChapterDelete}>Delete chapter</button></div></Modal>}
     {modal?.type === 'restore' && <Modal title="Return to this revision?" subtitle="We’ll capture your current version first, so you can return to it later." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep writing</button><button className="primary-button" onClick={() => { const item = modal.item; dismiss(); updateProject({ title: item.title, chapters: structuredClone(item.chapters), notes: item.notes || '', style: item.style || '', language: item.language || project.language, documentStyle: item.documentStyle || project.documentStyle, printLayout: structuredClone(item.printLayout), namedStyles: structuredClone(item.namedStyles || []), references: structuredClone(item.references || []), comments: structuredClone(item.comments || []), bookmarks: structuredClone(item.bookmarks || []), snapshots: [snapshot(project, 'Before restoring a revision'), ...project.snapshots].slice(0, 20) }); setActiveId(item.chapters[0].id); setEpoch(x => x + 1); setModal(null); notify('Revision restored.'); }} title="Replace the current manuscript with this embedded snapshot. This can be undone.">Restore revision</button></div></Modal>}
     {modal?.type === 'reference' && <Modal title={modal.reference.name} subtitle="Attached copy. Linked files refresh separately before each AI request." onClose={() => setModal(null)} wide><pre className="reference-reader">{modal.reference.text}</pre></Modal>}
     {modal?.type === 'notice' && <Modal title={modal.title} onClose={() => setModal(null)}><p className="notice-copy">{modal.text}</p><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Continue writing</button></div></Modal>}

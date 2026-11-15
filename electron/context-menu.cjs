@@ -2,6 +2,7 @@ const { randomUUID } = require('node:crypto');
 
 const CONTEXT_FLAGS = ['hasSelection', 'hasTextSelection', 'blocked', 'canUndo', 'canRedo', 'canCopyFormatting', 'canPasteFormatting', 'canSplitChapter', 'aiEnabled', 'hasSuggestion', 'hasImage', 'hasLink'];
 function editorMenuContext(value) {
+  if (value?.chapter === true) return { chapter: true, blocked: value.blocked === true, canDelete: value.canDelete === true, canDuplicate: value.canDuplicate === true };
   if (value?.tab === true && typeof value.tabId === 'string' && /^[a-f0-9-]{36}$/.test(value.tabId)) return { tab: true, tabId: value.tabId, canMoveLeft: value.canMoveLeft === true, canMoveRight: value.canMoveRight === true, canCloseOthers: value.canCloseOthers === true, blocked: value.blocked === true };
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.editor !== true) return null;
   const context = { editor: true, ...Object.fromEntries(CONTEXT_FLAGS.map(key => [key, value[key] === true])) };
@@ -19,6 +20,12 @@ function contextMenuTemplate(params, context, handlers, shortcuts = {}) {
     id: command, label, enabled, click: () => handlers.command(command),
     ...(shortcut ? { accelerator: shortcut, registerAccelerator: false } : {})
   });
+  if (editor?.chapter) return [
+    action('Rename', 'chapter-rename', !editor.blocked, 'F2'),
+    action('Duplicate', 'chapter-duplicate', !editor.blocked && editor.canDuplicate),
+    separator,
+    action('Delete…', 'chapter-delete', !editor.blocked && editor.canDelete)
+  ];
   if (editor?.tab) return [action('Close tab', 'tab-close', !editor.blocked, shortcuts.closeTab), action('Close other tabs', 'tab-close-others', !editor.blocked && editor.canCloseOthers), action('Close tabs to the right', 'tab-close-right', !editor.blocked && editor.canMoveRight), separator, action('Move tab left', 'tab-left', !editor.blocked && editor.canMoveLeft), action('Move tab right', 'tab-right', !editor.blocked && editor.canMoveRight)];
   const items = (params.dictionarySuggestions || []).slice(0, 5).map(word => ({ label: word.replace(/&/g, '&&'), click: () => handlers.replaceMisspelling(word) }));
   if (params.misspelledWord) items.push({ label: 'Add to dictionary', click: () => handlers.addToDictionary(params.misspelledWord) });

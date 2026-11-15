@@ -60,7 +60,9 @@ You can continue typing while an image loads; its insertion point follows those 
 
 Select an image to show its corner handles and **Image properties…**. Corner dragging keeps its proportions and commits one undo step. Image properties lets you edit the description and pixel dimensions, with **Keep proportions** enabled by default. Description and size apply together and survive WRAITER, ODT and DOCX save/reopen.
 
-Double-click a chapter in the outline, or focus it and press **F2**, to rename it. **Enter** commits; **Escape** cancels. Drag chapters to reorder them using the insertion marker. Chapter rename and reorder each have one undo step; the existing Move earlier/later buttons are also available.
+Right-click a chapter in the outline to **Rename**, **Duplicate**, or **Delete** it. A duplicate appears below the original with the same content, formatting and status. Comments and bookmarks stay with the original. Deleting asks for confirmation and keeps a manuscript snapshot. A manuscript must keep at least one chapter.
+
+To rename in place, click the chapter name, pause briefly, then click it again. You can also focus the chapter and press **F2**. **Enter** saves the name; **Escape** cancels. Drag chapters to reorder them using the insertion marker, or use the Move earlier/later buttons. Each of these chapter edits can be undone.
 
 **Ctrl+G** or **Edit → Go to paragraph…** jumps to a numbered paragraph in the current chapter. Enter its number, check the passage preview, then press **Enter**. Numbers match paragraph numbering in the page margin, including headings and paragraphs inside lists, quotes and tables. Navigation preserves your text and undo history. If Ctrl+G was already assigned to another action, that assignment is preserved; Go to paragraph remains available from Edit and can receive its own shortcut in Settings.
 

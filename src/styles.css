@@ -309,7 +309,6 @@ h1, h2, h3, p { margin-top: 0; }
 .image-resize-handle.bottom-right { right: -5px; bottom: -5px; cursor: nwse-resize; }
 .image-selection-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 16px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .chapter-item { position: relative; }
-.outline-rename { position: absolute; left: 38px; right: 20px; top: 7px; width: calc(100% - 58px); padding: 5px; font: inherit; color: var(--text); background: var(--panel-raised); border: 1px solid var(--accent); border-radius: 3px; z-index: 2; }
 .chapter-item.drop-before::before, .chapter-item.drop-after::after { content: ''; position: absolute; left: 5px; right: 5px; height: 3px; background: var(--accent); z-index: 3; pointer-events: none; }
 .chapter-item.drop-before::before { top: 0; }
 .chapter-item.drop-after::after { bottom: 0; }
