@@ -1,5 +1,5 @@
 import { documentExtensions } from '../electron/editor-schema.mjs';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Fragment, Slice, Mark } from '@tiptap/pm/model';
 
@@ -148,7 +148,7 @@ export default function ManuscriptEditor({ chapter, prefs, tracking, layoutSigna
   const editor = useEditor(options);
   editorInstance.current = editor;
   useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(trackModeKey, !!tracking)); }, [editor, tracking]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!editor) return;
     const captureSelection = ({ transaction }) => transaction.setMeta(HISTORY_SELECTION_META, editor.state.selection.toJSON());
     editor.on('beforeTransaction', captureSelection);

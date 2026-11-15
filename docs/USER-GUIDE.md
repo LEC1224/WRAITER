@@ -35,6 +35,18 @@ WRAITER remembers the window size and position, whether it was maximized, which 
 
 Each tab has a separate recovery file in application data. Restoring projects does not require Git. A copied WRAITER document opened alongside its original receives an independent project identity so its future undo history cannot mix with the original's.
 
+## Side-by-side multitasking
+
+Right-click another document's tab and choose **Multitask → Open to the left** or **Open to the right**. This places it beside the active document. Repeat to add more documents in a row. You can also drag a tab onto either half of a document panel: the preview shows the resulting arrangement, with the destination highlighted at its final width. Moving a visible document keeps its panel width; adding another document splits the target panel. Press **Escape** to cancel. Drag a visible document's tab or panel title to move its existing panel.
+
+The focused tab has a bright blue line along its top edge. Other tabs open in Multitask have the same line in a pale, greyed blue, so you can see which documents are visible together.
+
+Drag a divider to change the two neighbouring panels' widths. Double-click it to balance that pair. A focused divider also supports **Left/Right**, **Shift+Left/Right** for larger steps, **Home/End** for the minimum/maximum, and **Enter** to balance. Panels keep a readable minimum width; use the horizontal scrollbar when more documents fit than the window can show.
+
+The mouse wheel scrolls only the panel under the pointer, even while you are editing another document. Click a document to direct the shared formatting toolbar, chapter outline, Find, Save and undo/redo to it. The selected sidebar stays open and shows that document's revision history, AI conversations, comments, references, notes or tracked edits. Closing the sidebar keeps it closed when you switch documents. Each panel retains its editor, cursor, typography and scroll position when focus changes. Its chapter dropdown lets you choose another chapter. Inactive documents do not rerender for each keystroke in the active document, and page divisions are recalculated after divider dragging settles.
+
+The **×** in a panel heading, or **Multitask → Remove from multitask**, removes that panel while keeping its tab open. The remaining panels expand to fill the available workspace while preserving their relative widths. Closing a tab still closes its document. Clicking a tab that is already visible focuses its panel; selecting a hidden tab replaces the active panel while leaving the others in place.
+
 ## Writing and formatting
 
 - Chapter outline, titles, ordering, status, and word counts; optional comments, notes, references, history, and assistant panels.

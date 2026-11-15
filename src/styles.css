@@ -1012,6 +1012,7 @@ select.field-input { padding:5px 7px; }
 .project-tabs-bar { display:flex; flex:0 0 35px; min-height:35px; align-items:stretch; background:var(--workspace); border-bottom:1px solid var(--line); padding:0 8px; gap:4px; }
 .project-tabs { display:flex; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; align-items:stretch; }
 .project-tab { display:flex; flex:0 0 auto; max-width:250px; min-width:130px; align-items:center; border-right:1px solid var(--line); border-top:2px solid transparent; color:var(--muted); }
+.project-tab.multitasking { border-top-color:color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .project-tab.selected { background:var(--panel); border-top-color:var(--accent); color:var(--ink); }
 .project-tab > [role=tab] { display:flex; align-items:center; gap:7px; min-width:0; text-align:left; flex:1; padding:7px 8px 7px 11px; font-size:12px; }
 .project-tab > [role=tab] > span:first-of-type { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -1022,6 +1023,42 @@ select.field-input { padding:5px 7px; }
 .tab-assistant-status { flex:0 0 auto; color:var(--accent); }
 .tab-assistant-status.unread { font-size:8px; line-height:1; }
 .workspace[inert] { cursor:progress; opacity:.8; }
+.multitask-workspace { position:relative; flex:1 1 auto; min-width:0; min-height:0; overflow-x:auto; overflow-y:hidden; overscroll-behavior:contain; }
+.multitask-strip { position:relative; display:flex; height:100%; width:100%; }
+.multitask-pane { position:relative; display:flex; flex-direction:column; flex-basis:0; min-width:0; min-height:0; overflow:hidden; }
+.is-multitasking .multitask-pane { min-width:240px; }
+.document-pane-content { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; min-width:0; container-type:inline-size; }
+.multitask-pane .writing-scroll { overscroll-behavior:contain; contain:layout style; }
+.multitask-pane-heading { display:flex; align-items:center; gap:5px; flex:0 0 34px; padding:0 6px; min-width:0; border-bottom:1px solid var(--line); border-top:2px solid transparent; background:var(--panel); color:var(--muted); }
+.multitask-pane[data-active=true] .multitask-pane-heading { border-top-color:var(--accent); color:var(--ink); background:var(--accent-faint); }
+.multitask-pane-title { display:flex; align-items:center; gap:5px; min-width:40px; flex:1; padding:3px 0; text-align:left; font-size:12px; cursor:grab; }
+.multitask-pane-title:active { cursor:grabbing; }
+.multitask-pane-title svg { flex-shrink:0; opacity:.6; }
+.multitask-pane-title span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.multitask-pane-heading select { max-width:40%; min-width:50px; font-size:11px; background:transparent; color:var(--muted); border:0; }
+.multitask-pane-heading .icon-button { width:24px; height:24px; flex-shrink:0; }
+.multitask-divider { position:relative; flex:0 0 8px; cursor:col-resize; touch-action:none; background:var(--workspace); outline:none; z-index:2; }
+.multitask-divider span { position:absolute; top:0; bottom:0; left:3px; width:2px; background:var(--line-strong); transition:background .12s; }
+.multitask-divider:hover span,.multitask-divider:focus-visible span,[data-resizing=true] .multitask-divider:active span { background:var(--accent); width:4px; left:2px; }
+.multitask-divider:focus-visible { box-shadow:inset 0 0 0 1px var(--accent); }
+.resizing-multitask,.resizing-multitask * { cursor:col-resize !important; user-select:none !important; }
+.multitask-preview-clip { position:absolute; inset:0; overflow:clip; pointer-events:none; z-index:10; }
+.multitask-drop-preview { display:flex; height:100%; width:100%; }
+.multitask-drop-slot { position:relative; flex-basis:0; min-width:240px; }
+.multitask-preview-divider { flex:0 0 8px; }
+.multitask-drop-remaining { position:absolute; inset:0; border:1px dashed var(--line-strong); background:color-mix(in srgb,var(--panel) 45%,transparent); }
+.multitask-drop-field { position:absolute; inset:0; display:flex; min-width:0; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:10px; text-align:center; border:1px dashed var(--line-strong); border-radius:8px; color:var(--muted); background:color-mix(in srgb,var(--panel) 88%,transparent); }
+.multitask-drop-field strong { font-size:13px; }
+.multitask-drop-field span { font-size:11px; }
+.multitask-drop-field.selected { color:var(--accent); border:2px solid var(--accent); background:color-mix(in srgb,var(--accent-soft) 94%,transparent); box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--accent) 12%,transparent); }
+@container (max-width:540px) {
+  .is-multitasking .writing-scroll { padding:12px; }
+  .is-multitasking .writing-sheet { padding:26px 22px 60px; }
+  .is-multitasking .chapter-title { font-size:22px; }
+  .is-multitasking .chapter-title-row { flex-wrap:wrap; }
+  .is-multitasking .chapter-tools { margin-left:auto; }
+}
+@media (prefers-reduced-motion:reduce) { .multitask-divider span { transition:none; } }
 .writing-sheet { position:relative; isolation:isolate; }
 .writing-scroll.has-numbering { padding-left:calc(16px + (var(--numbering-width) + 10px) * var(--document-zoom,1)); }
 .text-numbering { position:absolute; top:0; bottom:0; left:calc(-1 * var(--numbering-width,0px) - 10px); width:var(--numbering-width,0px); display:flex; pointer-events:none; user-select:none; color:color-mix(in srgb,var(--muted) 72%,var(--workspace)); font:10px/24px 'Segoe UI',sans-serif; font-variant-numeric:tabular-nums; z-index:1; }

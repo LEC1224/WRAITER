@@ -7,6 +7,16 @@ const selected = { editor: true, hasSelection: true, hasTextSelection: true, can
 const callbacks = () => { const calls = []; return { calls, command: value => calls.push(['command', value]), replaceMisspelling: value => calls.push(['spelling', value]), addToDictionary: value => calls.push(['dictionary', value]) }; };
 const byId = (menu, id) => menu.find(item => item.id === id);
 const settled = () => new Promise(resolve => setImmediate(resolve));
+test('Multitask routes both sides and removal, respecting busy and current-tab states', () => {
+  const handlers = callbacks(), context = { tab: true, tabId: '12345678-1234-1234-1234-123456789abc', canMultitask: true, inMultitask: true };
+  const menu = byId(contextMenuTemplate(params, context, handlers), 'tab-multitask');
+  for (const command of ['tab-multitask-left', 'tab-multitask-right', 'tab-multitask-remove']) { assert.equal(byId(menu.submenu, command).enabled, true); byId(menu.submenu, command).click(); }
+  assert.deepEqual(handlers.calls.map(call => call[1]), ['tab-multitask-left', 'tab-multitask-right', 'tab-multitask-remove']);
+  assert.equal(byId(contextMenuTemplate(params, { ...context, blocked: true }, handlers), 'tab-multitask').enabled, false);
+  const active = byId(contextMenuTemplate(params, { ...context, canMultitask: false }, handlers), 'tab-multitask');
+  assert.equal(byId(active.submenu, 'tab-multitask-left').enabled, false);
+  assert.equal(byId(active.submenu, 'tab-multitask-remove').enabled, true);
+});
 test('object menus expose image properties and link actions with appropriate busy states', () => {
   const handlers = callbacks(), menu = contextMenuTemplate(params, { ...selected, hasLink: true, hasImage: true, blocked: true }, handlers, { insertLink: 'Ctrl+K' });
   assert.equal(byId(menu, 'open-link').enabled, true); assert.equal(byId(menu, 'edit-link').enabled, false); assert.equal(byId(menu, 'remove-link').enabled, false); assert.equal(byId(menu, 'image-properties').enabled, false);
