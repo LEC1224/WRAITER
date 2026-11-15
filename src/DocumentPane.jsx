@@ -28,11 +28,11 @@ export default memo(function DocumentPane({ id, project, chapterId, epoch, track
   return <div className={`document-pane-content layout-${project.layout || 'story'}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight }}
     onPointerDownCapture={event => {
       if (active || event.button !== 0 || event.target.closest('[data-pane-control]')) return;
-      // Keep the original click's caret position while the existing save and
-      // journal boundary completes. Hover/scroll alone never steals focus.
+      // Transfer the whole mouse gesture across the save/journal boundary.
+      // Hover/scroll alone never steals focus.
       event.preventDefault(); event.stopPropagation();
       const position = event.target.closest('.manuscript') && currentRef.current?.view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
-      actions.current.activate(id, { x: event.clientX, y: event.clientY, position, target: event.target });
+      actions.current.activate(id, { x: event.clientX, y: event.clientY, position, pointerId: event.pointerId, shiftKey: event.shiftKey, target: event.target });
     }} onFocusCapture={event => { if (!active && !event.target.closest('[data-pane-control]')) actions.current.activate(id, { target: event.target }); }}>
     <style>{namedStyleCSS(project.namedStyles, `[data-pane-id="${id}"] .manuscript `)}</style>
     {multiple && <div className="multitask-pane-heading">

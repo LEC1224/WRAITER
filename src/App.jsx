@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { version as appVersion } from '../package.json';
 import { Feather, Plus, Search, ChevronDown, ChevronRight, ArrowLeft, ArrowUp, ArrowDown, ArrowUpRight, Check, X, Minus, Maximize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, FileCheck2, Settings2, FileText, FolderOpen, Download, Save, Copy, MoreHorizontal, Bold, Italic, Underline, RemoveFormatting, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Quote, Image, Table2, Link2, Undo2, Redo2, Sparkles, WandSparkles, BookOpen, BookMarked, MessageSquare, Send, CircleStop, RotateCcw, CheckCheck, Sun, Moon, Contrast, Focus, Clock3, History, Trash2, FilePlus2, Keyboard, ShieldCheck, Circle, CheckCircle2, LoaderCircle, ExternalLink, SlidersHorizontal, Type, PenLine, GripVertical, Info, Eye, Laptop, ChevronUp, Target } from 'lucide-react';
 import { extensions } from './Editor.jsx';
 import DocumentPane from './DocumentPane.jsx';
 import MultitaskWorkspace from './MultitaskWorkspace.jsx';
 import { normalizePanes, placePane, reconcilePanes } from './multitask.js';
+import { capturePaneSelection } from './pane-selection.js';
 import { ghostKey, searchKey } from './extensions.js';
 import { newProject, uid, blankContent, nodeText, wordCount, contentWordCount, rememberContentWordCount, projectWords, snapshot } from './document.js';
 import { importDocument, exportPayload } from './io.js';
@@ -137,6 +138,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState({ tabs: [], activeId: null }), [switching, setSwitching] = useState(false), [savingNamed, setSavingNamed] = useState(false);
   const [draggingTab, setDraggingTab] = useState(null);
   const [paneFocus, setPaneFocus] = useState(null);
+  const paneSelection = useRef(null);
   const paneActions = useRef({});
   const locallySavedProject = useRef(null);
   const tourRef = useRef(null);
@@ -206,24 +208,17 @@ export default function App() {
   useEffect(() => { api?.listFonts().then(setFonts).catch(() => {}); }, []);
   useEffect(() => { if (panel === 'history' && project) loadGitHistory(); }, [panel, project?.id, workspace.activeId]);
   useEffect(() => { document.getElementById(`project-tab-${workspace.activeId}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [workspace.activeId, focus]);
-  useEffect(() => {
+  useEffect(() => () => paneSelection.current?.cancel(), []);
+  useLayoutEffect(() => {
     if (!paneFocus || switching || paneFocus.id !== workspace.activeId || !editor || editor.isDestroyed || !editor.isEditable || paneEditors.current.get(paneFocus.id) !== editor) return;
-    // Run after React has committed both the active editor and removal of inert.
-    // Focusing from the activation promise can run before that commit and lose
-    // the click, especially when the sidebar also changes document context.
-    const frame = requestAnimationFrame(() => {
-      if (workspaceRef.current.activeId !== paneFocus.id || editorRef.current !== editor || editor.isDestroyed) return;
-      if (!document.querySelector('.workspace')?.inert && !document.querySelector('[role="dialog"]')) {
-        const pointer = paneFocus.pointer;
-        if (paneFocus.inEditor) {
-          const position = Number.isInteger(pointer.position) ? pointer.position : Number.isFinite(pointer.x) && Number.isFinite(pointer.y) ? editor.view.posAtCoords({ left: pointer.x, top: pointer.y })?.pos : null;
-          if (position != null) editor.commands.setTextSelection(Math.min(position, editor.state.doc.content.size));
-          editor.view.focus();
-        } else if (pointer?.target?.isConnected && pointer.target.matches('input,select,textarea,button')) pointer.target.focus({ preventScroll: true });
-      }
-      setPaneFocus(null);
-    });
-    return () => cancelAnimationFrame(frame);
+    // Commit focus with the newly editable pane, before the next input event.
+    // A drag may already have ended, or may continue after this handoff.
+    if (!document.querySelector('.workspace')?.inert && !document.querySelector('[role="dialog"]')) {
+      if (paneFocus.selection) paneFocus.selection.restore(editor);
+      else if (paneFocus.inEditor) editor.view.focus();
+      else if (paneFocus.pointer?.target?.isConnected && paneFocus.pointer.target.matches('input,select,textarea,button')) paneFocus.pointer.target.focus({ preventScroll: true });
+    } else paneFocus.selection?.cancel();
+    setPaneFocus(null);
   }, [paneFocus, switching, workspace.activeId, editor]);
   useEffect(() => {
     if (panel !== 'assist' || (!messages.length && !agentActivity.length && !busy)) return;
@@ -547,6 +542,7 @@ export default function App() {
   function projectTransition(action, recoveryOnly = false, preserveChat = false) {
     if (transition.current || tabReordering.current) return;
     if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action, recoveryOnly));
+    paneSelection.current?.cancel(); paneSelection.current = null;
     setPaneFocus(null); setSwitching(true);
     // Block editor input immediately while saves and view state move to the
     // destination tab. Chat requests may continue against their captured project.
@@ -581,9 +577,12 @@ export default function App() {
   async function activatePane(id, pointer) {
     if (transition.current || namedSave.current) return;
     const inEditor = Boolean(pointer?.target?.closest('.manuscript'));
-    await switchProject(id);
-    if (workspaceRef.current.activeId !== id) return;
-    setPaneFocus({ id, pointer, inEditor });
+    const switchingProject = switchProject(id);
+    const selection = inEditor ? capturePaneSelection(paneEditors.current.get(id), pointer) : null;
+    paneSelection.current = selection;
+    await switchingProject;
+    if (workspaceRef.current.activeId !== id) { selection?.cancel(); return; }
+    setPaneFocus({ id, pointer, inEditor, selection });
   }
   async function removePane(id) {
     if (panesRef.current.length < 2 || transition.current || namedSave.current) return;

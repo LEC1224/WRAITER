@@ -1,3 +1,22 @@
+# Multitask first-click selection — 0.21.0-rc.4 — 2026-11-15
+
+The initial mouse press in an inactive document now places its cursor or starts a selection while that pane becomes active. The selection handoff retains both endpoints across the asynchronous save/activation boundary, including backward drags, wrapped lines, Shift-click and mouseup before activation finishes. Focus is committed with the editable pane. Selection movement is coalesced per animation frame, and edge autoscroll stays inside the dragged panel.
+
+Copy, cut and text/HTML paste events arriving during activation retain their intended document and selection. Paste/cut run through the destination editor's normal transaction and history handling only after successful activation. Cancellation or failed activation discards pending edits. Existing mounted editors, sidebar context, scroll positions and per-document history are retained.
+
+Changed for this fix: `src/App.jsx`, `src/DocumentPane.jsx`, new `src/pane-selection.js`, new `tests/multitask-selection-ui.cjs`, its package script, the multitask user-guide paragraph and this report. The previously uncommitted multitask feature was recorded separately before this fix; unrelated workspace edits were left outside those commits.
+
+Verification:
+
+- Reproduced the original bug with an actual mouse drag: expected selection 7 → 20, but the old code left a collapsed cursor at 7.
+- `npm test`: **605 passed**, no failures or skipped tests; `npm run build` passed.
+- A separate checkout of the selected Git index also built and passed all 11 focused selection checks, without the unrelated uncommitted workspace changes.
+- The new desktop regression passed with an isolated profile and synthetic documents. It uses actual mouse input and Ctrl+C/Ctrl+V/Ctrl+X, checks exact cursor/selection positions and copied formatting, imposes a 500 ms activation delay, and verifies cancellation, failed activation, independent cut/undo, retained editors and pane-local selection autoscroll. The test snapshots and restores the system clipboard.
+- All four suites (`multitask-selection-ui.cjs`, `multitask-sidebar-ui.cjs`, `multitask-ui.cjs`, `multitask-layout-ui.cjs`) passed against the exact packaged `win-unpacked/WRAITER.exe`. This includes all six sidebar contexts and muted indicators, 11 preview/final geometry comparisons, divider input, close/reopen sizing, independent hover scrolling and writing/save/history in three documents with **1,500 paragraphs each**. Packaged frame interval p95 was **8.1 ms**; source was **7.1 ms**. These are local regression measurements, not a guarantee for every machine.
+- Installer product version, Authenticode status, file size and SHA-256 verified. Previous installers were preserved; this installer was not installed or published.
+
+Unsigned installer: `release/unsigned-preview/v0.21.0-rc.4-multitask-selection/WRAITER-0.21.0-rc.4-Setup.exe` — **506,983,681 bytes**, Authenticode **NotSigned**, SHA-256 `8F12D477E30DA34F27F9C00B6AE4C37791EDFAAFB7B0A97132035438B77F6502`. Checksums and the portable build are in the same directory. Test reports: `test-output/multitask-selection-packaged-results.json`, `test-output/multitask-sidebar-packaged-results.json`, `test-output/multitask-packaged-results.json`, `test-output/multitask-layout-packaged-results.json`, and `test-output/multitask-selection-unit-tests.txt`.
+
 # WRAITER 0.20.2 release — remembered exports — 2026-11-04
 
 The final 0.20.2 packages include persistent export settings and **Reset to defaults** in the export popup, in addition to the writing/review, grammar, diagnostics and distribution work recorded below. The [complete changelist](docs/releases/v0.20.2.md) covers changes since public version 0.17.0. Earlier entries are historical validation records; their older package paths and publication status describe those earlier checks.
