@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { setTimeout: delay } = require('node:timers/promises');
 const { hash, atomicWrite, readLimited, writeSnapshot, validateProject, samePath } = require('./core.cjs');
 const FORMATS = ['wraiter', 'odt', 'docx', 'txt', 'md', 'html'];
 const formatOf = target => ({ htm: 'html', markdown: 'md' }[path.extname(target).slice(1).toLowerCase()] || path.extname(target).slice(1).toLowerCase());
@@ -47,11 +48,37 @@ class DocumentFiles {
     const binding = migrateBinding(saved?.binding, saved?.project);
     this.binding = { ...binding, path: target, format: formatOf(target), contentHash: binding?.contentHash || '', fidelity: binding?.fidelity || {}, reviewed: binding?.reviewed || false };
   }
-  async open(target) {
+  async sourceStatus(force = false) {
+    const target = this.store.currentPath;
+    if (!target) return { state: 'unsaved', path: null };
+    try {
+      const stat = await fs.stat(target, { bigint: true });
+      if (!stat.isFile()) return { state: 'unavailable', path: target, message: 'The document path no longer points to a file.' };
+      const key = [target, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
+      // Poll metadata cheaply; hash again on focus, a new binding or a disk change.
+      if (force || this.sourceCheck?.key !== key) this.sourceCheck = { key, hash: hash(await readLimited(target)) };
+      return { state: this.sourceCheck.hash === this.store.expectedHash ? 'unchanged' : 'changed', path: target };
+    } catch (error) {
+      this.sourceCheck = null;
+      return { state: ['ENOENT', 'ENOTDIR'].includes(error.code) ? 'missing' : 'unavailable', path: target, message: 'The document could not be read. It may be in use by another application.' };
+    }
+  }
+  async open(target, { fresh = false } = {}) {
     const format = formatOf(target);
     if (!FORMATS.includes(format)) throw new Error('Choose an ODT, DOCX, WRAITER, Markdown, HTML or plain text document.');
-    if (format === 'wraiter') { const result = await this.store.open(target); this.binding = null; return { ...result, binding: null }; }
-    const bytes = await readLimited(target), fingerprint = hash(bytes), saved = await this.readSidecar(target);
+    let bytes;
+    for (let attempt = 0; ; attempt++) {
+      try { bytes = await readLimited(target); break; }
+      catch (error) {
+        if (!fresh || attempt >= 3 || !['ENOENT', 'EBUSY', 'EACCES', 'EPERM'].includes(error.code)) throw error;
+        await delay(80 * (attempt + 1));
+      }
+    }
+    const fingerprint = hash(bytes);
+    if (format === 'wraiter') { const result = await this.store.replace(JSON.parse(bytes.toString('utf8')), path.resolve(target), fingerprint); this.binding = null; return { ...result, binding: null }; }
+    // Sidecars can contain recovery-only edits. Refresh must parse the actual
+    // file even when its bytes still match the last saved fingerprint.
+    const saved = fresh ? null : await this.readSidecar(target);
     if (saved?.sourceHash === fingerprint && saved.project) {
       try {
         validateProject(saved.project);
@@ -117,7 +144,7 @@ class DocumentFiles {
     await this.store.writeRecovery(project, this.store.currentPath, this.store.expectedHash);
     let actual = null, bytes = null;
     try { bytes = await readLimited(target); actual = hash(bytes); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    if (actual !== (chosen ? chosen.expectedHash : this.store.expectedHash)) throw new Error('This file changed outside WRAITER. Your edits are safe in recovery. Save a copy to preserve both versions.');
+    if (actual !== (chosen ? chosen.expectedHash : this.store.expectedHash)) throw new Error('This file changed outside WRAITER. Your edits are safe in recovery. Refresh from disk or locate the file to load it, or save a copy to keep both versions.');
     const unchanged = !chosen && this.binding?.contentHash === contentHash(project);
     if (this.reviewWarnings(project, payload, options).length && !options.reviewed) {
       await this.saveSidecar(project); return { path: target, binding: this.binding, recoveryOnly: true, needsReview: true };

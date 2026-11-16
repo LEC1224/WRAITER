@@ -163,21 +163,26 @@ class WorkspaceSession {
     try { await entry.files.bind(project, source); return entry.reloadOf ? await this.finishReload(entry) : await this.adopt(entry); }
     finally { this.pending.delete(source.openToken); }
   }
-  async reload(project) {
+  async reload(project, target = this.active.store.currentPath) {
     validateProject(project);
     const previous = this.active;
     if (!previous.store.currentPath || previous.store.project?.id !== project.id) throw new Error('This document is no longer attached to the active file.');
+    this.assertSaveTarget(target);
     // Save recovery only: attempting a normal save would hit the very conflict
     // this operation resolves, or overwrite the version the user wants to load.
     await previous.store.writeRecovery(project, previous.store.currentPath, previous.store.expectedHash);
-    const entry = this.entry(); entry.reloadOf = previous.id;
-    const result = await entry.files.open(previous.store.currentPath);
+    // An unsuccessful import may never reach bind(). Retrying invalidates its
+    // token so it cannot later replace this tab with an older import.
+    for (const [token, pending] of this.pending) if (pending.reloadOf === previous.id) this.pending.delete(token);
+    const entry = this.entry(); entry.reloadOf = previous.id; entry.view = { ...previous.view };
+    const result = await entry.files.open(target, { fresh: true });
     if (result.import) { this.pending.set(result.openToken, entry); return result; }
     return this.finishReload(entry);
   }
   async finishReload(entry) {
     const index = this.entries.findIndex(item => item.id === entry.reloadOf), previous = this.entries[index];
     if (!previous || this.activeId !== previous.id) throw new Error('Switch back to the original tab before reloading.');
+    this.assertSaveTarget(entry.store.currentPath);
     if (hash(await readLimited(entry.store.currentPath)) !== entry.store.expectedHash) throw new Error('The file changed while reloading. Load the modified version again.');
     // A new journal identity prevents old undo/recovery events from replaying
     // over the externally edited content, even if the file carries the old ID.

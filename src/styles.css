@@ -236,6 +236,8 @@ h1, h2, h3, p { margin-top: 0; }
 .inline-warning > svg { flex-shrink: 0; }
 .inline-warning > span { flex: 1; overflow-wrap: anywhere; }
 .inline-warning button { font-weight: 600; text-decoration: underline; flex-shrink: 0; }
+.file-warning { flex-wrap: wrap; }
+.file-warning > span { flex-basis: 260px; }
 .writing-scroll { overflow: auto; flex: 1 1 auto; min-height: 0; scroll-behavior: auto; scrollbar-gutter: stable; }
 .writing-sheet { width: calc(100% - 112px); max-width: var(--writing-measure, 720px); margin: 0 auto; padding: 63px 0 80px; }
 .chapter-kicker { display: flex; align-items: center; gap: 13px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: normal; }

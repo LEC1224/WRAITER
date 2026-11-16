@@ -197,7 +197,7 @@ async function atomicWrite(file, data, backup = false, options = {}) {
         if (Object.hasOwn(options, 'expectedHash')) {
           let actual = null;
           try { actual = hash(await readLimited(file)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-          if (actual !== options.expectedHash) throw new Error(options.conflictMessage || 'This file changed outside WRAITER. Your edits are safe in recovery. Save a copy to preserve both versions.');
+          if (actual !== options.expectedHash) throw new Error(options.conflictMessage || 'This file changed outside WRAITER. Your edits are safe in recovery. Refresh from disk or locate the file to load it, or save a copy to keep both versions.');
         }
         if (backup) await fs.copyFile(file, `${file}.bak`).catch(error => { if (error.code !== 'ENOENT') throw error; });
         await fs.rename(temp, file);
@@ -287,7 +287,7 @@ class DocumentStore {
     if (target) {
       let actual = null;
       try { actual = hash(await readLimited(target)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      const conflictMessage = 'This file changed outside WRAITER, or already exists. Your edits are safe in recovery. Use Save a copy to preserve both versions.';
+      const conflictMessage = 'This file changed outside WRAITER, or already exists. Your edits are safe in recovery. Refresh from disk or locate the file to load it, or save a copy to keep both versions.';
       if ((samePath(target, this.currentPath) && actual !== this.expectedHash) || (!samePath(target, this.currentPath) && actual && !overwrite)) throw new Error(conflictMessage);
       if (actual !== fingerprint) await atomicWrite(target, serialized, true, { expectedHash: actual, conflictMessage });
       await this.writeRecovery(project, target, fingerprint);

@@ -150,6 +150,7 @@ export default function App() {
   workspaceRef.current = workspace;
   const [project, setProject] = useState(null), [prefs, setPrefs] = useState(DEFAULTS), [activeId, setActiveId] = useState(null);
   const [path, setPath] = useState(null), [saveState, setSaveState] = useState('saved'), [saveError, setSaveError] = useState('');
+  const [sourceStatus, setSourceStatus] = useState(null);
   // Sidebar selection belongs to the workspace; its contents follow the active
   // document. Restoring a tab must not close or replace the chosen sidebar.
   const { panel, setPanel, leftOpen, setLeftOpen, focus, setFocus, historyTab, setHistoryTab,
@@ -246,6 +247,26 @@ export default function App() {
     if (!booted || modal || switching || savingNamed || !api?.externalFilesReady) return;
     api.externalFilesReady().then(() => actionRef.current.openExternalFiles()).catch(error => notify(errorText(error)));
   }, [booted, modal, switching, savingNamed]);
+  useEffect(() => {
+    if (!booted || !path || switching || savingNamed || !api?.documentFileStatus) return;
+    const tabId = workspace.activeId, projectId = projectRef.current?.id;
+    let cancelled = false, checking = false;
+    const check = async (force = false) => {
+      if (checking || document.hidden || transition.current || namedSave.current) return;
+      checking = true;
+      try {
+        const status = await api.documentFileStatus(tabId, projectId, force);
+        if (!cancelled) setSourceStatus({ ...status, tabId });
+      } catch { /* A closing or switching tab has no status to display. */ }
+      finally { checking = false; }
+    };
+    const focus = () => { void check(true); };
+    const timer = setInterval(() => { void check(); }, 5000);
+    window.addEventListener('focus', focus);
+    document.addEventListener('visibilitychange', focus);
+    void check(true);
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', focus); document.removeEventListener('visibilitychange', focus); };
+  }, [booted, workspace.activeId, path, switching, savingNamed, saveError]);
 
   function publishHistory(next) {
     historyRef.current = next; setJournal(next);
@@ -758,19 +779,25 @@ export default function App() {
     } catch (error) { notify(errorText(error)); }
     finally { externalOpening.current = false; }
   }
-  function reloadDocument() {
+  function reloadDocument(locate = false) {
+    if (!path || !api.reloadProject) return;
+    setMenu(false);
     return projectTransition(async () => {
       const previousId = workspaceRef.current.activeId, captured = projectRef.current;
-      let result = await api.reloadProject(captured, historyRef.current?.events.slice(persistedHistory.current.get(captured.id) || 0) || []);
+      let result = await api.reloadProject(captured, historyRef.current?.events.slice(persistedHistory.current.get(captured.id) || 0) || [], { locate });
+      if (!result) return;
       let warning;
       if (result.import) {
         const imported = await importDocument(result, extensions); warning = imported.warning;
-        const reloaded = { ...imported.project, chats: captured.chats || [], activeChatId: captured.activeChatId || null };
+        const reloaded = { ...imported.project, notes: captured.notes || '', style: captured.style || '', references: captured.references || [], chats: captured.chats || [], activeChatId: captured.activeChatId || null };
         result = await api.bindNative(normalizeHistoryProject(reloaded, schema), { openToken: result.openToken, fidelity: imported.fidelity || { requiresReview: !!warning, warnings: warning ? [warning] : [] } });
       }
       tabCache.current.delete(previousId);
+      warmTabs.current.delete(previousId);
+      locallySavedProjects.current.delete(previousId);
       await installWorkspace(result);
-      notify('Modified version loaded. Your previous draft is available in File → Open recent.');
+      setSourceStatus(null);
+      notify('File refreshed. Your previous draft is available in File → Open recent.');
       if (warning) setModal({ type: 'notice', title: 'Document compatibility', text: warning });
     }, true);
   }
@@ -1275,7 +1302,7 @@ export default function App() {
     if (command.startsWith('edit-note:')) { showNote(null, Number(command.slice(10))); return; }
     if (command === 'tracking-blocked') { trackingBlocked(); return; }
     if (command.startsWith('comment:')) { setActiveCommentId(command.slice(8)); showComments(); return; }
-    if (document.querySelector('[role="dialog"]') && (command.startsWith('open-recent:') || ['new', 'open', 'close-tab', 'next-tab', 'previous-tab', 'save', 'save-copy', 'export', 'proofread', 'statistics'].includes(command))) return;
+    if (document.querySelector('[role="dialog"]') && (command.startsWith('open-recent:') || ['new', 'open', 'close-tab', 'next-tab', 'previous-tab', 'save', 'save-copy', 'refresh-file', 'locate-file', 'export', 'proofread', 'statistics'].includes(command))) return;
     if (command.startsWith('open-recent:')) { openDocument(command.slice(12)); return; }
     if (['setup', 'tutorial', 'about', 'privacy', 'report-ai'].includes(command)) { setModal({ type: command }); return; }
     if (command === 'proofreading-connection') { setModal({ type: 'settings', tab: 'connections', task: 'proofread' }); return; }
@@ -1289,7 +1316,7 @@ export default function App() {
       'insert-footnote': () => showNote('footnote'), 'insert-endnote': () => showNote('endnote'),
       'document-notes': () => setModal({ type: 'document-notes' }), 'paragraph-layout': showParagraphLayout,
       'insert-tab': () => { if (current && !current.isDestroyed) { const { from, to } = current.state.selection; const tr = tracking ? suggestText(current.state, from, to, '\t') : current.state.tr.insertText('\t', from, to); if (tr) { current.view.dispatch(tr); current.commands.focus(); } else trackingBlocked(); } },
-      new: createNew, open: () => openDocument(), save: () => saveNamed(), 'save-copy': () => saveNamed(true), export: () => openExport(), print: () => openExport('print'),
+      new: createNew, open: () => openDocument(), save: () => saveNamed(), 'save-copy': () => saveNamed(true), 'refresh-file': () => reloadDocument(), 'locate-file': () => reloadDocument(true), export: () => openExport(), print: () => openExport('print'),
       'close-tab': () => closeProject(), 'next-tab': () => cycleProject(1), 'previous-tab': () => cycleProject(-1),
       'zoom-in': () => stepDocumentZoom(1), 'zoom-out': () => stepDocumentZoom(-1), 'zoom-reset': () => setDocumentZoom(100),
       'edit-link': editLink, 'open-link': () => { const href = current?.getAttributes('link').href; if (href) api.openLink(href).catch(error => notify(errorText(error))); }, 'remove-link': () => editorCommand(chain => chain.extendMarkRange('link').unsetLink()),
@@ -1580,6 +1607,10 @@ export default function App() {
   const docStyle = project.documentStyle || { fontFamily: 'Cambria', fontSize: 12, lineHeight: 1.5 };
   const titleStyle = editor?.isActive('heading', { level: 1 }) ? 'heading1' : editor?.isActive('heading', { level: 2 }) ? 'heading2' : editor?.isActive('heading', { level: 3 }) ? 'heading3' : 'paragraph';
 
+  const currentSource = sourceStatus?.tabId === workspace.activeId && sourceStatus.path === path ? sourceStatus : null;
+  const fileWarning = currentSource?.state === 'missing' ? 'This file was moved, renamed or deleted. Locate it to load the saved version. Your current draft is safe in recovery.'
+    : currentSource?.state === 'changed' ? 'This file changed outside WRAITER. Load the modified version to refresh it. Your current draft will be kept in Open recent.'
+    : currentSource?.state === 'unavailable' ? currentSource.message : saveError;
   return <div onDropCapture={captureFileDrop} onDragOverCapture={captureFileHover} onDragLeave={event => { const reference = event.target.closest?.(".reference-panel"); if (reference && !reference.contains(event.relatedTarget)) reference.removeAttribute("data-file-drop"); }} className={`app ${focus ? 'focus-mode' : ''}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight, '--writing-measure': `${prefs.measure}px`, '--document-zoom': (prefs.zoom || 100) / 100 }}>
     {!focus && <ProjectTabs tabs={workspace.tabs} activeId={workspace.activeId} panes={panes} project={project} path={path} saveState={saveState} request={requestRef.current} cache={tabCache.current} disabled={switching || savingNamed || reorderingTabs || !!modal} onActivate={switchProject} onClose={closeProject} onCycle={cycleProject} onMove={moveProjectTab} onNew={createNew} onDrag={setDraggingTab} />}
     <div className="workspace" id="project-workspace" role="tabpanel" aria-labelledby={`project-tab-${workspace.activeId}`} inert={switching || (modal && modal.type !== 'tutorial') ? true : undefined}>
@@ -1605,7 +1636,7 @@ export default function App() {
       <main className="main-panel">
         {!focus && <div className="writer-toolbar formatbar" role="toolbar" aria-label="Text formatting">
           <CaseMenu editor={editor} disabled={!!busy || switching || savingNamed} onError={notify} />
-          <div className="native-toolbar-group"><IconButton icon={FilePlus2} title="New manuscript" onClick={createNew} /><IconButton icon={FolderOpen} title="Open manuscript" onClick={() => openDocument()} /><IconButton icon={Save} title="Save manuscript" onClick={() => saveNamed()} /><IconButton icon={Undo2} title="Undo (Ctrl Z)" disabled={!undoInfo.canUndo} onClick={() => travelHistory('undo')} /><IconButton icon={Redo2} title="Redo (Ctrl Shift Z)" disabled={!undoInfo.canRedo} onClick={() => travelHistory('redo')} /></div>
+          <div className="native-toolbar-group"><IconButton icon={FilePlus2} title="New manuscript" onClick={createNew} /><IconButton icon={FolderOpen} title="Open manuscript" onClick={() => openDocument()} /><IconButton icon={Save} title="Save manuscript" onClick={() => saveNamed()} />{api.reloadProject && api.platform !== 'web' && <IconButton icon={RotateCcw} title="Refresh from disk" disabled={!path || switching || savingNamed} onClick={() => reloadDocument()} hint="Load the saved file, or locate it if it moved. Your current draft is preserved in Open recent." />}<IconButton icon={Undo2} title="Undo (Ctrl Z)" disabled={!undoInfo.canUndo} onClick={() => travelHistory('undo')} /><IconButton icon={Redo2} title="Redo (Ctrl Shift Z)" disabled={!undoInfo.canRedo} onClick={() => travelHistory('redo')} /></div>
           <div className="native-toolbar-group"><select className="paragraph-style-select" aria-label="Paragraph style" value={titleStyle} onChange={e => editorCommand(c => e.target.value === 'paragraph' ? c.setParagraph() : c.setHeading({ level: Number(e.target.value.at(-1)) }))} title="Apply normal text or a heading level to the current or selected paragraphs."><option value="paragraph">Normal</option><option value="heading1">Heading 1</option><option value="heading2">Heading 2</option><option value="heading3">Heading 3</option></select><button className="secondary-button" type="button" onMouseDown={event => event.preventDefault()} onClick={() => setModal({ type: 'named-styles' })} title="Create, edit, and apply reusable paragraph or character styles.">Styles…</button><FontPicker value={editor?.getAttributes('textStyle').fontFamily || docStyle.fontFamily} fonts={fonts} onChange={font => editorCommand(c => c.setFontFamily(font))} /><FontSizeInput value={parseFloat(editor?.getAttributes('textStyle').fontSize || docStyle.fontSize)} onApply={size => editorCommand(c => c.setFontSize(size + 'pt'))} /></div>
           <div className="native-toolbar-group"><IconButton icon={Bold} title="Bold (Ctrl B)" active={editor?.isActive('bold')} onClick={() => editorCommand(c => c.toggleBold())} /><IconButton icon={Italic} title="Italic (Ctrl I)" active={editor?.isActive('italic')} onClick={() => editorCommand(c => c.toggleItalic())} /><IconButton icon={Underline} title="Underline (Ctrl U)" active={editor?.isActive('underline')} onClick={() => editorCommand(c => c.toggleUnderline())} /><label className="font-color" style={{ '--font-color': editor?.getAttributes('textStyle').color || 'var(--text)' }} title="Change the colour of selected text or the next text you type."><Type size={17} /><input type="color" aria-label="Text colour" value={editor?.getAttributes('textStyle').color || '#222222'} onChange={e => editorCommand(c => c.setColor(e.target.value))} /></label><HighlightPicker active={editor?.isActive('highlight') || !!backgroundColour} colour={editor?.getAttributes('highlight').color || backgroundColour} onApply={colour => editorCommand(c => c.unsetBackgroundColor().setHighlight({ color: colour }))} onClear={() => editorCommand(c => c.unsetHighlight().unsetBackgroundColor())} /><IconButton icon={RemoveFormatting} title="Clear formatting" onMouseDown={e => e.preventDefault()} onClick={clearFormatting} hint="Remove text and paragraph formatting from the selection, or reset formatting at the cursor." /><FormatPainter available={!!editor && !busy && !switching} hasFormatting={!!formatting} onCopy={copyFormat} onPaste={pasteFormat} /><IconButton icon={MessageSquare} title="Add comment" disabled={!editor || editor.state.selection.empty || !!busy || switching} onMouseDown={e => e.preventDefault()} onClick={() => showComments(true)} hint={selectedWords ? "Attach a comment to the selected passage." : "Select a passage first, then add a comment."} /></div>
           <div className="native-toolbar-group"><IconButton icon={AlignLeft} title="Align left" active={editor?.isActive({ textAlign: 'left' })} onClick={() => editorCommand(c => c.setTextAlign('left'))} /><IconButton icon={AlignCenter} title="Align centre" active={editor?.isActive({ textAlign: 'center' })} onClick={() => editorCommand(c => c.setTextAlign('center'))} /><IconButton icon={AlignRight} title="Align right" active={editor?.isActive({ textAlign: 'right' })} onClick={() => editorCommand(c => c.setTextAlign('right'))} /><IconButton icon={List} title="Bullet list" active={editor?.isActive('bulletList')} onClick={() => editorCommand(c => c.toggleBulletList())} /><IconButton icon={ListOrdered} title="Numbered list" active={editor?.isActive('orderedList')} onClick={() => editorCommand(c => c.toggleOrderedList())} /></div>
@@ -1615,7 +1646,7 @@ export default function App() {
         <AIGrammarHints grammar={aiGrammar} editor={editor} />
         {selectedImage(editor) && <div className="image-selection-tools" role="toolbar" aria-label="Image controls"><span>Drag a corner to resize</span><button className="secondary-button" disabled={!!busy || switching || savingNamed} onMouseDown={event => event.preventDefault()} onClick={showImageProperties} title="Adjust image size, text wrapping and the description used by screen readers.">Image properties…</button></div>}
         {searchOpen && <SearchPanel focusRequest={searchFocus} key={project.id} query={query} onQueryChange={setQuery} replacement={replacement} onReplacementChange={setReplacement} scope={searchScope} onScopeChange={setSearchScope} options={searchOptions} onOptionsChange={setSearchOptions} results={searchResults} activeResult={activeSearchId} onActivate={activateSearchResult} onReplace={(result, value) => replaceSearchResults([result], value)} onReplaceAll={(results, value) => replaceSearchResults(results, value, true)} onClose={closeSearch} busy={!!busy || switching} />}
-        {saveError && <div className="inline-warning"><Info size={16} /><span>{saveError}</span><button disabled={switching || savingNamed} onClick={() => saveNamed(true)} title="Choose a new file for this manuscript when the current file cannot be saved.">Save a copy</button>{path && /file changed outside WRAITER/i.test(saveError) && <button disabled={switching || savingNamed} title="Load the file from disk. Your current draft will be preserved in Open recent." onClick={reloadDocument}>Load modified version</button>}</div>}
+        {fileWarning && <div className="inline-warning file-warning" role="status"><Info size={16} /><span>{fileWarning}</span>{path && api.reloadProject && api.platform !== 'web' && <><button disabled={switching || savingNamed} title="Load the file from disk. Your current draft will be preserved in Open recent." onClick={() => reloadDocument()}>{currentSource?.state === 'missing' ? 'Try original path' : 'Load modified version'}</button><button disabled={switching || savingNamed} onClick={() => reloadDocument(true)}>Locate file…</button></>}<button disabled={switching || savingNamed} onClick={() => saveNamed(true)} title="Choose a new file for this manuscript when the current file cannot be saved.">Save a copy</button></div>}
         <MultitaskWorkspace panes={panes} activeId={workspace.activeId} draggingId={draggingTab} disabled={switching || savingNamed || reorderingTabs || !!modal}
           onPlace={multitaskProject} onResize={resizePanes} onDragEnd={() => setDraggingTab(null)} renderPane={(id, multiple) => {
             const active = id === workspace.activeId;

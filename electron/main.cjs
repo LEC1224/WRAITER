@@ -264,13 +264,38 @@ app.whenReady().then(async () => {
     focusCheckpoint.unref();
     return true;
   });
-  handle('workspace:reload', (_e, project, events = []) => serial(async () => {
+  handle('workspace:file-status', (_e, id, projectId, force = false) => serial(async () => {
+    const entry = workspace.documentEntry(id, projectId);
+    return entry.files.sourceStatus(force === true);
+  }));
+  handle('workspace:reload', (_e, project, events = [], options = {}) => serial(async () => {
     await cancelAll();
     validateProject(project);
     if (store.project?.id !== project.id) throw new Error('This reload belongs to another document.');
     if (events.length) await editJournal.append(project.id, events);
-    const result = await workspace.reload(project); syncWorkspace();
+    if (!store.currentPath) throw new Error('Save this document to a file before refreshing it.');
+    await store.writeRecovery(project, store.currentPath, store.expectedHash);
+    let target = store.currentPath;
+    const locate = async () => {
+      let directory = path.dirname(target);
+      while (directory !== path.dirname(directory)) {
+        if (await fs.stat(directory).then(stat => stat.isDirectory()).catch(() => false)) break;
+        directory = path.dirname(directory);
+      }
+      const chosen = await dialog.showOpenDialog(win, { title: `Locate ${path.basename(target)}`, buttonLabel: 'Load selected file', defaultPath: path.join(directory, path.basename(target)), properties: ['openFile'], filters: [{ name: 'Writing documents', extensions: ['odt', 'docx', 'wraiter', 'txt', 'md', 'markdown', 'html', 'htm'] }] });
+      return chosen.canceled ? null : chosen.filePaths[0];
+    };
+    if (options.locate === true) { target = await locate(); if (!target) return null; }
+    let result;
+    try { result = await workspace.reload(project, target); }
+    catch (error) {
+      if (options.locate === true || !['ENOENT', 'ENOTDIR'].includes(error.code)) throw error;
+      target = await locate(); if (!target) return null;
+      result = await workspace.reload(project, target);
+    }
+    syncWorkspace();
     if (result.preservedPath) await rememberPath(result.preservedPath);
+    if (result.project) await rememberPath(result.path);
     return result;
   }));
   handle('workspace:activate', (_e, id, cached = {}) => serial(async () => {

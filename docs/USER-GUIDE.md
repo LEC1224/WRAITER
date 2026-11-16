@@ -292,7 +292,11 @@ Runtime downloads come from [Ollama's official Windows releases](https://github.
 
 ## Editing history and Git versions
 
-If a save detects that another program changed the open file, the warning offers **Save a copy** and **Load modified version**. Loading replaces the current tab with the disk version and clears the conflict. WRAITER first preserves your current draft in **File → Open recent**, with “before reload” in its filename. The loaded version starts a fresh undo history so earlier edits cannot overwrite the external changes. If the file is missing, invalid or changes again during import, the current draft stays open.
+WRAITER checks the active file for external changes when you return to the window and periodically while it is visible. The warning offers **Load modified version**, **Locate file…**, and **Save a copy**. You can also use **File → Refresh from disk** or the refresh button beside Save at any time. Refresh reads the saved file again, including when WRAITER has cached an unsaved draft.
+
+If the document or a containing folder was moved or renamed, refresh opens a file picker. Select the file in its new location; WRAITER replaces the current tab's document and uses that path for later saves. **Locate file…** also lets you choose the location directly. Canceling, selecting an unreadable file, or a file changing again during import leaves your current draft open. A file already open in another tab cannot be attached a second time.
+
+Before replacing the tab, WRAITER preserves your complete current draft in **File → Open recent**, with “before reload” in its filename. Office and text refreshes retain private notes, references, writing instructions and assistant conversations. The loaded version starts a fresh undo history so earlier edits cannot overwrite the external changes.
 
 **View → Revision history → Every edit** lists text, formatting, chapter, and document-setting actions with timestamps and before/after details. Ctrl+Z, Ctrl+Y, and Ctrl+Shift+Z work across chapter switches and application restarts. Ordinary typing and deletion are grouped into word-sized undo steps; pauses, punctuation, caret moves, and other edits start a new step. A multi-step replacement or assistant batch remains one undo operation. New typing after undo starts a new path, while abandoned edits remain visible in the audit trail. History begins with edits made in 0.3; earlier keystrokes cannot be reconstructed.
 
