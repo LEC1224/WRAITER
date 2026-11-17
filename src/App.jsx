@@ -180,7 +180,7 @@ export default function App() {
   const gitHistoryRequest = useRef(0);
   const [localProgress, setLocalProgress] = useState(null);
   const [journal, setJournal] = useState(null), [binding, setBinding] = useState(null), [agentActivity, setAgentActivity] = useState([]);
-  const historyRef = useRef(null), bindingRef = useRef(null), persistedHistory = useRef(new Map()), restoreSelection = useRef(null), revealRestoredCaret = useRef(false), historyLoadError = useRef('');
+  const historyRef = useRef(null), bindingRef = useRef(null), persistedHistory = useRef(new Map()), submittedHistory = useRef(new Map()), restoreSelection = useRef(null), revealRestoredCaret = useRef(false), historyLoadError = useRef('');
   bindingRef.current = binding;
   const documentLanguage = project?.language || prefs.language;
   const proposalRef = useRef(null); proposalRef.current = proposal;
@@ -271,11 +271,29 @@ export default function App() {
   function publishHistory(next) {
     historyRef.current = next; setJournal(next);
     if (historyLoadError.current) return;
-    const events = next.events.slice(persistedHistory.current.get(next.projectId) || 0);
-    if (events.length) api.appendEditHistory(next.projectId, events).then(result => persistedHistory.current.set(next.projectId, Math.max(result.sequence, persistedHistory.current.get(next.projectId) || 0))).catch(error => { setSaveError(errorText(error)); notify(errorText(error)); });
+    const id = next.projectId, durable = persistedHistory.current.get(id) || 0;
+    const writing = submittedHistory.current.get(id) || { through: durable };
+    const from = Math.max(durable, writing.through);
+    if (from >= next.events.length) return;
+    // Submit every keystroke immediately. Earlier IPC calls already carry
+    // their own events, even if the disk has not acknowledged those writes.
+    writing.through = next.events.length; submittedHistory.current.set(id, writing);
+    api.appendEditHistory(id, next.events.slice(from)).then(result => {
+      if (submittedHistory.current.get(id) !== writing) return;
+      persistedHistory.current.set(id, Math.max(result.sequence, persistedHistory.current.get(id) || 0));
+      if (result.sequence >= writing.through) submittedHistory.current.delete(id);
+    }).catch(error => {
+      if (submittedHistory.current.get(id) !== writing) return;
+      // The next edit or snapshot resends from the last confirmed sequence.
+      // Ignore late callbacks from this failed batch or a replaced lineage.
+      submittedHistory.current.delete(id);
+      if (projectRef.current?.id === id) setSaveError(errorText(error));
+      notify(errorText(error));
+    });
   }
   async function loadHistory(initial) {
     const restored = await loadDocumentHistory(initial, api, schema);
+    submittedHistory.current.delete(initial.id);
     historyLoadError.current = '';
     if (restored.requiresJournalReset) {
       try {
