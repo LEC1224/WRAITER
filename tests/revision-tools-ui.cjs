@@ -171,7 +171,8 @@ const annotations = (node, id) => all(node).filter(node => node.marks?.some(mark
     await waitFor(async () => (await page.evaluate(() => window.wraiter.boot())).path === otherFile && (await editor.innerText()).includes('two other matches.'), 'second synthetic project opened');
     await command('find'); await search().waitFor(); await page.getByLabel('Find text', { exact: true }).fill('stream'); await expectCount(2);
     assert.equal(await page.getByRole('region', { name: 'Replace all preview', exact: true }).count(), 0, 'A replacement preview must stay in its originating project.');
-    await page.locator('.sidebar').getByRole('button', { name: /^Comments/ }).click(); await panel().waitFor();
+    // Comments stays open across tabs; its draft and cards belong to the active document.
+    await panel().waitFor();
     assert.equal(await panel().getByRole('textbox', { name: 'New comment text', exact: true }).inputValue(), '');
     assert.equal(await panel().locator('.comment-card').count(), 0); assert.ok(!(await page.locator('body').innerText()).includes('PRIVATE_'));
     assert.deepEqual(JSON.parse(await fs.readFile(otherFile, 'utf8')).comments, []);
