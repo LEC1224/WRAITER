@@ -545,37 +545,71 @@ export function historyStatus(journal) {
   // panel can share this calculation until an edit, undo or redo replaces it.
   const cached = statusCache.get(journal);
   if (cached) return { ...cached };
-  const lookup = new Map(journal.entries.map(entry => [entry.id, entry]));
-  const positions = new Map(journal.activeIds.map((entryId, index) => [entryId, index]));
-  let totalEdits = 0, priorGroup = null, priorStatus = null;
+  let totalEdits = 0, priorGroup = null, priorStatus = null, active = 0, undoLabel = '', redoLabel = '';
+  // The active branch is a subsequence of the chronological ledger, including
+  // after undo and branching. Both can be walked together without two indexes.
   for (const entry of journal.entries) {
-    const status = !positions.has(entry.id) ? 'branched' : positions.get(entry.id) < journal.cursor ? 'applied' : 'undone';
+    let status = 'branched';
+    if (entry.id === journal.activeIds[active]) {
+      status = active < journal.cursor ? 'applied' : 'undone';
+      if (active === journal.cursor - 1) undoLabel = entry.label;
+      if (active === journal.cursor) redoLabel = entry.label;
+      active++;
+    }
     if (!entry.groupId || entry.groupId !== priorGroup || status !== priorStatus) totalEdits++;
     priorGroup = entry.groupId || null; priorStatus = status;
   }
-  const status = { canUndo: journal.cursor > 0, canRedo: journal.cursor < journal.activeIds.length, undoLabel: lookup.get(journal.activeIds[journal.cursor - 1])?.label || '', redoLabel: lookup.get(journal.activeIds[journal.cursor])?.label || '', totalEdits, sequence: journal.sequence };
+  const status = { canUndo: journal.cursor > 0, canRedo: journal.cursor < journal.activeIds.length, undoLabel, redoLabel, totalEdits, sequence: journal.sequence };
   statusCache.set(journal, status);
   return { ...status };
 }
 
-export function timelineEntries(journal) {
-  if (!journal) return [];
-  const positions = new Map(journal.activeIds.map((entryId, index) => [entryId, index]));
-  const groups = [];
-  for (const entry of journal.entries) {
-    const status = !positions.has(entry.id) ? 'branched' : positions.get(entry.id) < journal.cursor ? 'applied' : 'undone';
-    const previous = groups.at(-1);
-    if (entry.kind === 'steps' && entry.groupId && previous?.kind === 'steps' && previous.groupId === entry.groupId && previous.status === status) {
-      previous.forward.push(...entry.forward);
-      previous.inverse.unshift(...entry.inverse);
-      previous.afterFingerprint = entry.afterFingerprint;
-      previous.afterDocFingerprint = entry.afterDocFingerprint;
-      previous.selectionAfter = entry.selectionAfter;
-      previous.timestamp = entry.timestamp;
-      previous.summary = excerpt(previous.forward.map(step => textOf(step.slice)).join('')) || excerpt(previous.inverse.map(step => textOf(step.slice)).join(''));
-      previous.current = journal.activeIds[journal.cursor - 1] === entry.id;
-      previous.editCount++;
-    } else groups.push({ ...entry, ...(entry.kind === 'steps' ? { forward: [...entry.forward], inverse: [...entry.inverse] } : {}), status, current: journal.activeIds[journal.cursor - 1] === entry.id, editCount: 1 });
+// The panel opens at the newest edits. Walk backwards so its first page costs
+// only the groups it displays, even when a manuscript has years of history.
+function* timelineRows(journal) {
+  let active = journal.activeIds.length - 1;
+  const statusOf = entry => entry.id !== journal.activeIds[active] ? 'branched' : active < journal.cursor ? 'applied' : 'undone';
+  for (let last = journal.entries.length - 1; last >= 0;) {
+    const latest = journal.entries[last], status = statusOf(latest);
+    let first = last;
+    if (status !== 'branched') active--;
+    if (latest.kind === 'steps' && latest.groupId) {
+      while (first > 0) {
+        const earlier = journal.entries[first - 1];
+        if (earlier.groupId !== latest.groupId || earlier.kind !== 'steps' || statusOf(earlier) !== status) break;
+        if (status !== 'branched') active--;
+        first--;
+      }
+    }
+    const earliest = journal.entries[first];
+    const row = { ...earliest, status, current: latest.id === journal.activeIds[journal.cursor - 1], editCount: last - first + 1 };
+    if (earliest.kind === 'steps') {
+      row.forward = []; row.inverse = [];
+      for (let i = first; i <= last; i++) for (const step of journal.entries[i].forward) row.forward.push(step);
+      for (let i = last; i >= first; i--) for (const step of journal.entries[i].inverse) row.inverse.push(step);
+      if (first !== last) {
+        row.afterFingerprint = latest.afterFingerprint; row.afterDocFingerprint = latest.afterDocFingerprint;
+        row.selectionAfter = latest.selectionAfter; row.timestamp = latest.timestamp;
+        row.summary = excerpt(row.forward.map(step => textOf(step.slice)).join('')) || excerpt(row.inverse.map(step => textOf(step.slice)).join(''));
+      }
+    }
+    yield row;
+    last = first - 1;
   }
-  return groups.reverse();
+}
+
+export function timelinePage(journal, limit, matches) {
+  if (!journal) return { rows: [], total: 0 };
+  const rows = []; let total = 0;
+  for (const row of timelineRows(journal)) {
+    if (matches && !matches(row)) continue;
+    if (rows.length < limit) rows.push(row);
+    total++;
+    if (!matches && rows.length === limit) break;
+  }
+  return { rows, total: matches ? total : historyStatus(journal).totalEdits };
+}
+
+export function timelineEntries(journal) {
+  return journal ? [...timelineRows(journal)] : [];
 }
