@@ -69,7 +69,12 @@ const waitFor = async (check, label) => { const until = Date.now() + 15000; whil
     await editor.locator('img').click(); await page.screenshot({ path: path.join(userData, 'image-handles.png') });
     const imageMenu = await popup(editor.locator('img')); assert.ok(imageMenu.some(item => item.id === 'image-properties' && item.enabled)); await menuAction('image-properties'); await page.getByRole('dialog', { name: 'Image properties' }).waitFor(); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
     checks.push('Image description and explicit dimensions apply together, undo together, and open from the native menu.');
-    await page.getByRole('combobox', { name: 'Document zoom' }).selectOption('125'); await page.waitForTimeout(100); await editor.locator('img').click();
+    await page.getByRole('combobox', { name: 'Document zoom' }).selectOption('125');
+    await editor.locator('img').click();
+    await page.waitForFunction(() => {
+      const image = document.querySelector('.manuscript img');
+      return image?.clientWidth === 300 && Math.abs(image.getBoundingClientRect().width / image.clientWidth - 1.25) < .01;
+    });
     const scaledHandle = await handle.boundingBox(); await page.mouse.move(scaledHandle.x + scaledHandle.width / 2, scaledHandle.y + scaledHandle.height / 2); await page.mouse.down(); await page.mouse.move(scaledHandle.x + scaledHandle.width / 2 + 75, scaledHandle.y + scaledHandle.height / 2 + 50, { steps: 8 }); await page.mouse.up();
     await waitFor(async () => (await images())[0].attrs.width === 360, 'resize at document zoom'); assert.equal((await images())[0].attrs.height, 240); await command('undo'); await waitFor(async () => (await images())[0].attrs.width === 300, 'scaled resize undo'); await page.getByRole('combobox', { name: 'Document zoom' }).selectOption('100');
     checks.push('Resize accounts for document zoom and preserves explicitly edited proportions.');
@@ -85,12 +90,15 @@ const waitFor = async (check, label) => { const until = Date.now() + 15000; whil
     await page.keyboard.press('F3'); await page.waitForFunction(() => document.querySelector('.chapter-title').value === 'Middle'); await page.keyboard.press('Shift+F3'); await page.waitForFunction(() => document.querySelector('.chapter-title').value === 'Opening');
     checks.push('Find seeds selected prose, refocuses on Ctrl+F, keeps input focus across chapters, and supports Escape/F3/Shift+F3.');
 
-    await page.locator('.chapter-select').filter({ hasText: 'Middle' }).dblclick(); let rename = page.getByRole('textbox', { name: 'Rename chapter Middle', exact: true }); await rename.fill('Middle revised'); await rename.press('Escape'); assert.equal(await page.locator('.chapter-select').filter({ hasText: 'Middle revised' }).count(), 0);
+    const middleTitle = page.locator('[data-chapter-title]').filter({ hasText: /^Middle$/ });
+    await middleTitle.click();
+    await page.waitForTimeout(650); // A deliberate second title click opens rename.
+    await middleTitle.click(); let rename = page.getByRole('textbox', { name: 'Rename chapter Middle', exact: true }); await rename.fill('Middle revised'); await rename.press('Escape'); assert.equal(await page.locator('.chapter-select').filter({ hasText: 'Middle revised' }).count(), 0);
     const middle = page.locator('.chapter-select').filter({ hasText: 'Middle' }); await middle.focus(); await middle.press('F2'); rename = page.getByRole('textbox', { name: 'Rename chapter Middle', exact: true }); await rename.fill('Middle revised'); await rename.press('Enter'); await waitFor(async () => (await saved()).chapters[1].title === 'Middle revised', 'chapter rename');
     await command('undo'); await waitFor(async () => (await saved()).chapters[1].title === 'Middle', 'rename undo');
     await reorderDrag(page.locator('.chapter-item').first(), page.locator('.chapter-item').last(), 'bottom'); await waitFor(async () => (await saved()).chapters[2].id === 'opening', 'chapter drag order'); assert.deepEqual((await saved()).chapters.map(item => item.id), ['middle', 'ending', 'opening']);
     await command('undo'); await waitFor(async () => (await saved()).chapters[0].id === 'opening', 'chapter reorder undo'); await page.locator('.chapter-select').filter({ hasText: 'Opening' }).click();
-    checks.push('Outline double-click/F2 rename supports Enter/Escape; dragging chapters reorders once and undoes once.');
+    checks.push('Outline second-click/F2 rename supports Enter/Escape; dragging chapters reorders once and undoes once.');
 
     const link = editor.locator('a').filter({ hasText: 'Visit the example' }); await link.click(); assert.deepEqual(await app.evaluate(() => globalThis.uxLinks), []);
     await link.click({ modifiers: ['Control'] }); assert.deepEqual(await app.evaluate(() => globalThis.uxLinks), ['https://example.com/reading']);
