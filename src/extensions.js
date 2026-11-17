@@ -5,27 +5,60 @@ import { findTextMatches, matchesTextRange } from './search.js';
 export const ghostKey = new PluginKey('wraiterGhost');
 export const searchKey = new PluginKey('wraiterSearch');
 export const formattingMarksKey = new PluginKey('wraiterFormattingMarks');
+
+function paragraphMark() {
+  const mark = document.createElement('span');
+  mark.className = 'format-mark-paragraph';
+  mark.textContent = '¶';
+  mark.setAttribute('aria-hidden', 'true');
+  return mark;
+}
+
+function formattingMarks(doc, from, to) {
+  const decorations = [];
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (node.isText) {
+      const start = Math.max(0, from - pos);
+      const text = node.text.slice(start, to - pos);
+      for (const match of text.matchAll(/[ \t]/g)) {
+        const at = pos + start + match.index;
+        decorations.push(Decoration.inline(at, at + 1, { class: match[0] === '\t' ? 'format-mark-tab' : 'format-mark-space' }));
+      }
+    } else if (node.isTextblock) {
+      const end = pos + node.nodeSize - 1;
+      if (end >= from && end <= to) decorations.push(Decoration.widget(end, paragraphMark, { side: 1 }));
+    }
+  });
+  return decorations;
+}
+
 export const FormattingMarks = Extension.create({
   name: 'formattingMarks',
   addProseMirrorPlugins() {
-    let cachedDoc = null, cached = null;
     return [new Plugin({ key: formattingMarksKey,
-      state: { init: () => false, apply: (tr, value) => tr.getMeta(formattingMarksKey) ?? value },
-      props: { decorations(state) {
-        if (!formattingMarksKey.getState(state)) return null;
-        if (state.doc === cachedDoc) return cached;
-        const decorations = [];
-        state.doc.descendants((node, pos) => {
-          if (node.isText) {
-            for (const match of node.text.matchAll(/[ \t]/g)) decorations.push(Decoration.inline(pos + match.index, pos + match.index + 1, { class: match[0] === '\t' ? 'format-mark-tab' : 'format-mark-space' }));
-          } else if (node.isTextblock) {
-            decorations.push(Decoration.widget(pos + node.nodeSize - 1, () => {
-              const mark = document.createElement('span'); mark.className = 'format-mark-paragraph'; mark.textContent = '¶'; mark.setAttribute('aria-hidden', 'true'); return mark;
-            }, { side: 1 }));
+      state: {
+        init: () => null,
+        apply(tr, previous) {
+          const enabled = tr.getMeta(formattingMarksKey);
+          if (enabled === false || (!previous && !enabled)) return null;
+          const doc = tr.doc;
+          if (!previous) return DecorationSet.create(doc, formattingMarks(doc, 0, doc.content.size));
+          const changed = tr.changedRange();
+          if (!changed) return previous;
+          // An insertion, deletion or split can also move a paragraph marker
+          // onto its boundary. Recheck both edges along with the changed text.
+          const from = Math.max(0, changed.from - 1), to = Math.min(doc.content.size, changed.to + 1);
+          // For a bulk replacement, mapping every old marker through every
+          // step and then removing most of them costs more than a fresh set.
+          if (tr.steps.length > 8 || to - from > doc.content.size / 2) {
+            return DecorationSet.create(doc, formattingMarks(doc, 0, doc.content.size));
           }
-        });
-        cachedDoc = state.doc; cached = DecorationSet.create(state.doc, decorations); return cached;
-      } }
+          const mapped = previous.map(tr.mapping, doc);
+          const replaced = mapped.find(from, to).filter(mark => mark.from >= from && mark.to <= to);
+          return mapped.remove(replaced).add(doc, formattingMarks(doc, from, to));
+        }
+      },
+      props: { decorations: state => formattingMarksKey.getState(state) }
     })];
   }
 });
