@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog: electronDialog, Menu, safeStorage, shell, clipboard, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog: electronDialog, Menu, safeStorage, shell, clipboard, ClipboardItem, screen } = require('electron');
 const { Diagnostics, installDiagnostics } = require('./diagnostics.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -581,14 +581,14 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Choose codex.exe', properties: ['openFile'], filters: [{ name: 'Codex executable', extensions: ['exe'] }] });
     return result.canceled ? null : result.filePaths[0];
   });
-  handle('export:clipboard', (_e, payload) => {
+  handle('export:clipboard', async (_e, payload) => {
     if (!payload || !['txt', 'md', 'html', 'bbcode', 'discord', 'telegram-md', 'telegram-html', 'rich-text'].includes(payload.format)) throw new Error('This format cannot be exported to clipboard.');
     const validText = value => typeof value === 'string' && Buffer.byteLength(value) <= 100 * 1024 * 1024;
     if (!validText(payload.data)) throw new Error('Invalid or oversized clipboard content.');
     if (payload.format === 'rich-text') {
       if (!validText(payload.clipboardHTML) || !validText(payload.clipboardText)) throw new Error('Invalid formatted clipboard content.');
-      clipboard.write({ text: payload.clipboardText, html: payload.clipboardHTML });
-    } else clipboard.writeText(payload.data);
+      await clipboard.write([new ClipboardItem({ 'text/plain': payload.clipboardText, 'text/html': payload.clipboardHTML })]);
+    } else await clipboard.writeText(payload.data);
     return true;
   });
   handle('export:preview-pdf', async (_e, payload) => {

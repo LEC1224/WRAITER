@@ -19,10 +19,14 @@ const root = path.resolve(__dirname, '..');
     const page = await app.firstWindow();
     page.setDefaultTimeout(10000);
     await page.getByRole('textbox', { name: 'Manuscript editor', exact: true }).waitFor();
-    await app.evaluate(({ clipboard, dialog }) => {
+    await app.evaluate(({ clipboard, ClipboardItem, dialog }) => {
       global.exportWrites = []; global.saveDialogs = 0;
-      clipboard.writeText = text => { if (global.failCopy) throw new Error('Clipboard unavailable'); global.exportWrites.push({ text }); };
-      clipboard.write = value => global.exportWrites.push(value);
+      clipboard.writeText = async text => { if (global.failCopy) throw new Error('Clipboard unavailable'); global.exportWrites.push({ text }); };
+      clipboard.write = async items => {
+        if (!Array.isArray(items) || items.length !== 1 || !(items[0] instanceof ClipboardItem)) throw new TypeError('Expected one Electron ClipboardItem');
+        const plain = await items[0].getType('text/plain'), formatted = await items[0].getType('text/html');
+        global.exportWrites.push({ text: await plain.text(), html: await formatted.text() });
+      };
       dialog.showSaveDialog = async () => { global.saveDialogs++; return { canceled: !global.exportTarget, filePath: global.exportTarget }; };
     });
     const open = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('command', 'export'));
