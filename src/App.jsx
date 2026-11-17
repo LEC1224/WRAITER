@@ -626,7 +626,20 @@ export default function App() {
     // destination tab. Chat requests may continue against their captured project.
     document.querySelector('.workspace')?.setAttribute('inert', '');
     const work = (async () => {
-      try { clearTimeout(autosaveTimer.current); if (!preserveChat || requestRef.current?.mode !== 'chat') await dismiss(); await pendingSave.current; if (!recoveryOnly && locallySavedProjects.current.get(workspaceRef.current.activeId) !== projectRef.current) await saveLocal(); await rememberTab(); opening.current = true; await action(); }
+      try {
+        clearTimeout(autosaveTimer.current);
+        if (!preserveChat || requestRef.current?.mode !== 'chat') {
+          const cancelled = dismiss();
+          // An existing tab can open as soon as its outgoing document is safe.
+          // The provider retains its slot until its cancellation settles.
+          if (!targetId) await cancelled;
+        }
+        await pendingSave.current;
+        if (!recoveryOnly && locallySavedProjects.current.get(workspaceRef.current.activeId) !== projectRef.current) await saveLocal();
+        await rememberTab();
+        opening.current = true;
+        await action();
+      }
       catch (error) { notify(errorText(error)); }
       finally { opening.current = false; transition.current = null; setSwitching(false); setOpeningTab(null); document.querySelector('.workspace')?.removeAttribute('inert'); }
     })();
@@ -1101,7 +1114,7 @@ export default function App() {
     if (!settings.enabled) { setModal({ type: 'settings', tab: 'connections' }); return; }
     if (!current || requestRef.current) return;
     await dismiss(); setAiError('');
-    if (current.isDestroyed || editorRef.current !== current || requestRef.current) return;
+    if (transition.current || current.isDestroyed || editorRef.current !== current || requestRef.current) return;
     const { from, to } = current.state.selection;
     if (['correct', 'rewrite'].includes(mode) && from === to) { notify('Select a word, sentence, or passage first.'); return; }
     const selected = current.state.doc.textBetween(from, to, '\n', '\n');
@@ -1152,8 +1165,9 @@ export default function App() {
     if (tracking) { notify('Turn off text tracking before using the writing assistant.'); return; }
     if (!text.trim() || requestRef.current) return;
     if (!prefsRef.current.enabled) { setModal({ type: 'settings', tab: 'connections' }); return; }
+    const tabIdWhenAsked = workspaceRef.current.activeId;
     await dismiss(); setAiError('');
-    if (requestRef.current) return;
+    if (transition.current || workspaceRef.current.activeId !== tabIdWhenAsked || requestRef.current) return;
     let baseline = normalizeProjectChats(projectRef.current);
     let selected = getActiveChat(baseline);
     if (!selected) {
