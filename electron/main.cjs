@@ -59,22 +59,25 @@ let checkpointFallbackQueue = Promise.resolve();
 let prefs = {};
 let reviewMenuState = { tracking: false, blocked: false };
 const activeRequests = new Map();
-let foregroundPending = 0;
-const cancelRequests = async (predicate = () => true) => {
-  const controllers = [...activeRequests.values()].filter(predicate);
+const pendingForegroundRequests = new Set();
+const abortRequests = (predicate = () => true) => {
+  const controllers = [...activeRequests.values(), ...pendingForegroundRequests].filter(predicate);
   for (const controller of controllers) controller.abort();
-  await Promise.all(controllers.map(controller => controller.finished));
+  return controllers;
+};
+const cancelRequests = async predicate => {
+  await Promise.all(abortRequests(predicate).map(controller => controller.finished));
 };
 const cancelAll = () => cancelRequests();
-const cancelForegroundRequests = () => cancelRequests(controller => controller.kind !== 'agent');
 async function reserveForegroundRequest(id, controller, busyMessage) {
-  foregroundPending++;
+  pendingForegroundRequests.add(controller);
   try {
     // Author-initiated writing assistance takes priority over a background label.
     await cancelRequests(active => active.kind === 'checkpoint' || active.kind === 'inline-grammar');
+    controller.signal.throwIfAborted();
     if (activeRequests.size) throw new Error(busyMessage);
     activeRequests.set(id, controller);
-  } finally { foregroundPending--; }
+  } finally { pendingForegroundRequests.delete(controller); }
 }
 async function describeCheckpoint(payload, waitForIdle = false) {
   if (waitForIdle && activeRequests.size) {
@@ -82,13 +85,13 @@ async function describeCheckpoint(payload, waitForIdle = false) {
     try { await Promise.race([Promise.all([...activeRequests.values()].map(controller => controller.finished)), new Promise(resolve => { timeout = setTimeout(resolve, 30000); })]); }
     finally { clearTimeout(timeout); }
   }
-  const available = prefs.enabled && !activeRequests.size && !foregroundPending;
+  const available = prefs.enabled && !activeRequests.size && !pendingForegroundRequests.size;
   const settings = available ? resolveTask(prefs, 'checkpoint') : null;
   let key = '';
   if (settings) {
     try { key = await getKey(settings); } catch { return summarizeCheckpoint(payload, null); }
   }
-  if (!settings || activeRequests.size || foregroundPending) return summarizeCheckpoint(payload, null);
+  if (!settings || activeRequests.size || pendingForegroundRequests.size) return summarizeCheckpoint(payload, null);
   const id = `checkpoint-${require('node:crypto').randomUUID()}`;
   const controller = new AbortController(); controller.kind = 'checkpoint';
   let finished; controller.finished = new Promise(resolve => { finished = resolve; });
@@ -303,7 +306,10 @@ app.whenReady().then(async () => {
     return result;
   }));
   handle('workspace:activate', (_e, id, cached = {}) => serial(async () => {
-    await cancelForegroundRequests(); const result = await workspace.activate(id); syncWorkspace();
+    // Provider cleanup can wait on a subprocess or remote acknowledgement.
+    // Signal it now, keeping document writes independent of that teardown.
+    abortRequests(controller => controller.kind !== 'agent');
+    const result = await workspace.activate(id); syncWorkspace();
     // A renderer may retain a bounded warm copy. If its manuscript identity and
     // durable journal position match, avoid cloning the complete novel through
     // Electron IPC merely to confirm that it is unchanged.
@@ -452,9 +458,11 @@ app.whenReady().then(async () => {
       const warnings = refreshed.warnings.join(' ');
       if (warnings && warnings !== lastReferenceWarnings) win?.webContents.send('command', `reference-warning:${warnings}`);
       lastReferenceWarnings = warnings;
-      return await providers.generate(settings, await getKey(settings), { ...request, references: refreshed.references }, controller.signal, undefined, message => {
+      const result = await providers.generate(settings, await getKey(settings), { ...request, references: refreshed.references }, controller.signal, undefined, message => {
         if (!controller.signal.aborted && activeRequests.get(request.id) === controller) win?.webContents.send('command', `continuation-notice:${JSON.stringify({ requestId: request.id, message })}`);
       });
+      controller.signal.throwIfAborted();
+      return result;
     }
     catch (error) { throw new Error(controller.signal.aborted ? 'Request cancelled or timed out.' : error.message); }
     finally { clearTimeout(timeout); if (activeRequests.get(request.id) === controller) activeRequests.delete(request.id); finished(); }
@@ -477,7 +485,7 @@ app.whenReady().then(async () => {
     if (store.project && store.project.id !== request.projectId) return { skipped: true };
     // No await between the idle check and reservation: foreground requests set
     // their pending flag before they yield, closing the check/reserve race.
-    if (!canReserveInline(activeRequests, foregroundPending)) return { skipped: true };
+    if (!canReserveInline(activeRequests, pendingForegroundRequests.size)) return { skipped: true };
     const settings = resolveTask(prefs, 'proofread'), controller = new AbortController();
     controller.kind = 'inline-grammar';
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
