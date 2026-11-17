@@ -288,7 +288,7 @@ class DocumentStore {
     const bytes = await readLimited(target); const project = validateProject(JSON.parse(bytes.toString('utf8')));
     return this.replace(project, path.resolve(target), hash(bytes));
   }
-  async persist(project, target = this.currentPath, overwrite = false, serialized = validatedProjectJSON(project)) {
+  async persist(project, target = this.currentPath, overwrite = false, { serialized = validatedProjectJSON(project), expectedTargetHash } = {}) {
     if (this.project && project.id !== this.project.id) throw new Error('This save belongs to a document that is no longer open. Its earlier recovery is preserved.');
     if (target != null && (typeof target !== 'string' || !path.isAbsolute(target) || !target.toLowerCase().endsWith('.wraiter'))) throw new Error('Native documents must use an absolute .wraiter path.');
     const fingerprint = hash(serialized);
@@ -296,6 +296,7 @@ class DocumentStore {
     if (target) {
       let actual = null;
       try { actual = hash(await readLimited(target)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      if (expectedTargetHash !== undefined && actual !== expectedTargetHash) throw new Error('The save destination changed after it was chosen. Choose a new destination to preserve both versions.');
       const conflictMessage = 'This file changed outside WRAITER, or already exists. Your edits are safe in recovery. Refresh from disk or locate the file to load it, or save a copy to keep both versions.';
       if ((samePath(target, this.currentPath) && actual !== this.expectedHash) || (!samePath(target, this.currentPath) && actual && !overwrite)) throw new Error(conflictMessage);
       if (actual !== fingerprint) await atomicWrite(target, serialized, true, { expectedHash: actual, conflictMessage });

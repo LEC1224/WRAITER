@@ -100,6 +100,27 @@ test('Save As converts a reviewed or unreviewed native document while preserving
   assert.equal(f.store.currentPath, destination); await assert.rejects(f.files.persist(changed, encoded('docx', 'Again'), { token: chosen.token }), /destination again/);
 });
 
+test('WRAITER Save As preserves a destination changed or created while local recovery is staged', async t => {
+  for (const existed of [false, true]) {
+    const f = await fixture(t), source = await openSynthetic(f, 'odt');
+    const target = path.join(f.directory, 'New destination.wraiter');
+    if (existed) await fs.writeFile(target, 'Existing version.');
+    const selected = await f.files.authorizeTarget(target);
+    const writeRecovery = f.store.writeRecovery.bind(f.store);
+    let changed = false;
+    t.mock.method(f.store, 'writeRecovery', async (...args) => {
+      await writeRecovery(...args);
+      if (!changed) { changed = true; await fs.writeFile(target, 'Version written by another application.'); }
+    });
+    const draft = project('Keep this local revision.');
+    await assert.rejects(f.files.persist(draft, null, { token: selected.token }), /destination changed/);
+    assert.equal(await fs.readFile(target, 'utf8'), 'Version written by another application.');
+    assert.deepEqual(await fs.readFile(source.target), source.original);
+    assert.equal(f.store.currentPath, source.target);
+    assert.deepEqual((await new DocumentStore(f.userData).boot()).project, draft);
+  }
+});
+
 test('native autosave preserves edits when another application changes or deletes the bound file', async t => {
   for (const action of ['changed', 'deleted']) {
     const f = await fixture(t); const { target } = await openSynthetic(f, 'docx');

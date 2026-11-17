@@ -130,13 +130,9 @@ class DocumentFiles {
     const target = chosen?.path || this.store.currentPath, format = chosen?.format || this.binding?.format || 'wraiter';
     if (!target || format === 'wraiter') {
       const previousBinding = this.binding;
-      if (chosen) {
-        let actual = null;
-        try { actual = hash(await readLimited(target)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-        if (actual !== chosen.expectedHash) throw new Error('The save destination changed after it was chosen. Choose a new destination to preserve both versions.');
-      }
       // A format change cannot pass a native binary path into the JSON writer.
-      const result = await this.store.persist(project, target, Boolean(chosen), serialized);
+      // Keep the selected destination fingerprint through recovery staging and replacement.
+      const result = await this.store.persist(project, target, Boolean(chosen), { serialized, expectedTargetHash: chosen?.expectedHash });
       this.binding = null; if (chosen) this.targets.delete(options.token);
       return { ...result, binding: null, previousFormat: previousBinding?.format };
     }
