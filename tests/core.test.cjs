@@ -80,6 +80,28 @@ test('bounded imports reject oversized files and directories', async t => {
   await assert.rejects(readLimited(directory), /regular|EISDIR|EACCES|EPERM/);
 });
 
+test('bounded reads handle short reads, growth and truncation after the size check', async t => {
+  const directory = await temporary(t), target = path.join(directory, 'changing.txt');
+  const open = fs.open;
+  let reportedSize = 2;
+  t.mock.method(fs, 'open', async (...args) => {
+    const handle = await open(...args);
+    if (args[0] === target && args[1] === 'r') {
+      const read = handle.read.bind(handle);
+      handle.stat = async () => ({ isFile: () => true, size: reportedSize });
+      handle.read = (buffer, offset, length, position) => read(buffer, offset, Math.min(2, length), position);
+    }
+    return handle;
+  });
+  await fs.writeFile(target, 'abcdef');
+  assert.equal((await readLimited(target, 6)).toString(), 'abcdef');
+  await assert.rejects(readLimited(target, 5), /grew beyond/);
+  reportedSize = 20;
+  assert.equal((await readLimited(target, 20)).toString(), 'abcdef');
+  await fs.writeFile(target, '');
+  assert.equal((await readLimited(target, 20)).length, 0);
+});
+
 test('autosave recovers untitled work and archives it before switching', async t => {
   const directory = await temporary(t); const store = new DocumentStore(directory); const draft = project();
   await store.persist(draft);

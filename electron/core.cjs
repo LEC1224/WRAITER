@@ -216,16 +216,25 @@ async function readLimited(file, max = 60 * 1024 * 1024) {
     const stat = await handle.stat();
     if (!stat.isFile()) throw new Error('Choose a regular document file.');
     if (stat.size > max) throw new Error(`This file exceeds the ${Math.round(max / 1024 / 1024)} MB import limit.`);
-    const chunks = []; let total = 0;
+    // A stable file fits in one buffer. Reserve one extra byte to observe
+    // growth, then fall back to bounded chunks only if the stat was stale.
+    const chunks = [];
+    let buffer = Buffer.alloc(stat.size + 1), offset = 0, total = 0;
     while (true) {
-      const buffer = Buffer.alloc(Math.min(256 * 1024, max - total + 1));
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
-      if (!bytesRead) break;
+      const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, null);
+      if (!bytesRead) {
+        const tail = buffer.subarray(0, offset);
+        return chunks.length ? Buffer.concat([...chunks, tail], total) : tail;
+      }
+      offset += bytesRead;
       total += bytesRead;
       if (total > max) throw new Error('The file grew beyond the import limit while it was being read.');
-      chunks.push(buffer.subarray(0, bytesRead));
+      if (offset === buffer.length) {
+        chunks.push(buffer);
+        buffer = Buffer.alloc(Math.min(256 * 1024, max - total + 1));
+        offset = 0;
+      }
     }
-    return Buffer.concat(chunks, total);
   } finally { await handle.close(); }
 }
 async function writeSnapshot(file, data, previous = null, backup = false) {
