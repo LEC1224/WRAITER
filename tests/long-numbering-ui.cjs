@@ -48,9 +48,9 @@ const geometry = () => {
     }
     assert.fail(`${label}: ${JSON.stringify(result)}`);
   };
-  const jump = async index => {
+  const jump = async (index, label = `Scroll to paragraph ${index + 1}`) => {
     await editor.locator(':scope > p').nth(index).evaluate(element => element.scrollIntoView({ block: 'start' }));
-    await aligned(`Scroll to paragraph ${index + 1}`);
+    await aligned(label);
   };
   try {
     app = await _electron.launch(options); page = await app.firstWindow();
@@ -66,7 +66,10 @@ const geometry = () => {
     await page.getByRole('combobox', { name: 'Document zoom', exact: true }).selectOption('150');
     await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.writing-sheet')).zoom) === 1.5);
     await aligned('150% zoom');
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(960, 650)); await aligned('Minimum window at 150%');
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(960, 650));
+    // Rewrapping can leave the whole viewport inside one tall paragraph.
+    // Bring a known start into view before comparing its label to its glyphs.
+    await jump(330, 'Minimum window at 150%');
     await page.screenshot({ path: path.join(output, 'long-numbering-minimum.png') });
     await page.getByRole('combobox', { name: 'Document zoom', exact: true }).selectOption('100');
     await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.writing-sheet')).zoom) === 1);
