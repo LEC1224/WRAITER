@@ -5,6 +5,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { Mark } from '@tiptap/pm/model';
 import { diffChars } from 'diff';
 import { suggestText, trackModeKey } from './tracked-editor.js';
+import { updateHintDecorations } from './grammar-decorations.js';
 
 export const aiGrammarKey = new PluginKey('aiGrammar');
 export const AIGrammar = Extension.create({
@@ -13,12 +14,13 @@ export const AIGrammar = Extension.create({
     return [new Plugin({ key: aiGrammarKey, state: {
       init: () => ({ hints: [], decorations: DecorationSet.empty }),
       apply(tr, previous) {
-        const hints = tr.getMeta(aiGrammarKey) ?? (tr.docChanged ? [] : null);
-        if (!hints) return previous;
-        return { hints, decorations: DecorationSet.create(tr.doc, hints.map(hint => Decoration.inline(hint.from, hint.to, {
+        const update = tr.getMeta(aiGrammarKey);
+        if (!update && (!tr.docChanged || !previous.hints.length)) return previous;
+        const hints = update ?? [];
+        return { hints, decorations: updateHintDecorations(tr, previous.decorations, previous.hints, hints, hint => Decoration.inline(hint.from, hint.to, {
           class: 'ai-grammar-hint', 'data-ai-grammar-id': hint.id,
           'aria-description': ['AI grammar suggestion.', hint.reason, hint.replacement ? `Suggested wording: ${hint.replacement}` : 'Remove the underlined text.'].filter(Boolean).join(' ')
-        }))) };
+        }, { hint })) };
       }
     }, props: { decorations: state => aiGrammarKey.getState(state).decorations } })];
   }

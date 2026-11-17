@@ -9,11 +9,16 @@ export default function useInlineGrammar({ editor, api, prefs, projectId, chapte
   const signature = JSON.stringify([prefs.provider, prefs.baseUrl, prefs.model, prefs.codexPath, prefs.claudePath, prefs.taskProfiles?.proofread]);
   const enabled = !!prefs.aiGrammar && !!prefs.enabled;
   useEffect(() => {
+    setSelected(null);
+    if (!enabled) { setStatus(previous => previous.kind === 'idle' ? previous : { kind: 'idle', count: 0 }); return; }
     if (!editor || editor.isDestroyed || !api) return;
     let timer, active, generation = 0, disposed = false, failures = 0, currentKey = '', displayedKey = '';
     const publish = (hints, key = '') => {
       if (disposed || editor.isDestroyed) return;
-      displayedKey = key; editor.view.dispatch(editor.state.tr.setMeta(aiGrammarKey, hints).setMeta('addToHistory', false));
+      displayedKey = key;
+      const previous = aiGrammarKey.getState(editor.state)?.hints || [];
+      if (previous.length !== hints.length || hints.some((hint, i) => hint !== previous[i]))
+        editor.view.dispatch(editor.state.tr.setMeta(aiGrammarKey, hints).setMeta('addToHistory', false));
     };
     const cancel = () => { clearTimeout(timer); timer = null; generation++; if (active) { api.cancelInlineGrammar(active).catch(() => {}); active = null; } };
     const set = next => { if (!disposed) setStatus(next); };
@@ -70,7 +75,7 @@ export default function useInlineGrammar({ editor, api, prefs, projectId, chapte
       }
     };
     schedule();
-    return () => { cancel(); disposed = true; runtime.current = null; editor.off('transaction', schedule); editor.off('focus', schedule); editor.off('blur', blur); if (!editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(aiGrammarKey, []).setMeta('addToHistory', false)); };
+    return () => { cancel(); disposed = true; runtime.current = null; editor.off('transaction', schedule); editor.off('focus', schedule); editor.off('blur', blur); if (!editor.isDestroyed && aiGrammarKey.getState(editor.state)?.hints.length) editor.view.dispatch(editor.state.tr.setMeta(aiGrammarKey, []).setMeta('addToHistory', false)); };
   }, [editor, api, enabled, paused, projectId, chapterId, language, signature]);
   function actOnHint(hint, action) {
     if (!enabled || paused || !editor || editor.isDestroyed || !aiGrammarKey.getState(editor.state)?.hints.includes(hint)) {
