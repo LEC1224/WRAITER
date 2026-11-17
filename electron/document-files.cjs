@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
-const { hash, atomicWrite, readLimited, writeSnapshot, validateProject, samePath } = require('./core.cjs');
+const { hash, atomicWrite, readLimited, writeSnapshot, validatedProjectJSON, validateProject, samePath } = require('./core.cjs');
 const FORMATS = ['wraiter', 'odt', 'docx', 'txt', 'md', 'html'];
 const formatOf = target => ({ htm: 'html', markdown: 'md' }[path.extname(target).slice(1).toLowerCase()] || path.extname(target).slice(1).toLowerCase());
 const hashFields = project => ({ title: project.title, chapters: project.chapters, documentStyle: project.documentStyle, language: project.language, layout: project.layout, ...(project.namedStyles?.length ? { namedStyles: project.namedStyles } : {}), ...(project.printLayout ? { printLayout: project.printLayout } : {}) });
@@ -123,8 +123,7 @@ class DocumentFiles {
     const acknowledged = !chosen ? this.binding?.reviewedLossWarnings || [] : [];
     return [...new Set([...warnings, ...(payload?.lossWarnings || []).filter(warning => !acknowledged.includes(warning))])];
   }
-  async persist(project, payload, options = {}) {
-    validateProject(project);
+  async persist(project, payload, options = {}, serialized = validatedProjectJSON(project)) {
     if (this.store.project && this.store.project.id !== project.id) throw new Error('This save belongs to another document.');
     const chosen = options.token ? this.targets.get(options.token) : null;
     if (options.token && !chosen) throw new Error('Choose the save destination again.');
@@ -137,7 +136,7 @@ class DocumentFiles {
         if (actual !== chosen.expectedHash) throw new Error('The save destination changed after it was chosen. Choose a new destination to preserve both versions.');
       }
       // A format change cannot pass a native binary path into the JSON writer.
-      const result = await this.store.persist(project, target, Boolean(chosen));
+      const result = await this.store.persist(project, target, Boolean(chosen), serialized);
       this.binding = null; if (chosen) this.targets.delete(options.token);
       return { ...result, binding: null, previousFormat: previousBinding?.format };
     }

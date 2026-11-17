@@ -156,7 +156,7 @@ function validatePrintLayout(page) {
   for (const side of ['top', 'right', 'bottom', 'left']) if (typeof page[side] !== 'number' || !Number.isFinite(page[side]) || page[side] < 8 || page[side] > 60) invalid('Invalid page margin.');
   for (const field of ['header', 'footer']) string(page[field], `page ${field}`, 500);
 }
-function validateProject(project) {
+function validatedProjectJSON(project) {
   if (!project || project.format !== 'wraiter' || project.version !== 1) throw new Error('This is not a supported WRAITER document.');
   string(project.id, 'document identifier', 200, true); string(project.title, 'document title', 2000);
   validatePrintLayout(project.printLayout);
@@ -181,8 +181,9 @@ function validateProject(project) {
   }
   let json; try { json = JSON.stringify(project, null, 2); } catch { invalid('This document contains invalid JSON.'); }
   if (Buffer.byteLength(json) > MAX_DOCUMENT_BYTES) throw new Error('This preview supports documents up to 60 MB, including snapshots, chats, and images.');
-  return project;
+  return json;
 }
+function validateProject(project) { validatedProjectJSON(project); return project; }
 async function atomicWrite(file, data, backup = false, options = {}) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.${crypto.randomUUID()}.tmp`;
@@ -278,11 +279,10 @@ class DocumentStore {
     const bytes = await readLimited(target); const project = validateProject(JSON.parse(bytes.toString('utf8')));
     return this.replace(project, path.resolve(target), hash(bytes));
   }
-  async persist(project, target = this.currentPath, overwrite = false) {
-    validateProject(project);
+  async persist(project, target = this.currentPath, overwrite = false, serialized = validatedProjectJSON(project)) {
     if (this.project && project.id !== this.project.id) throw new Error('This save belongs to a document that is no longer open. Its earlier recovery is preserved.');
     if (target != null && (typeof target !== 'string' || !path.isAbsolute(target) || !target.toLowerCase().endsWith('.wraiter'))) throw new Error('Native documents must use an absolute .wraiter path.');
-    const serialized = JSON.stringify(project, null, 2); const fingerprint = hash(serialized);
+    const fingerprint = hash(serialized);
     await this.writeRecovery(project, this.currentPath, this.expectedHash);
     if (target) {
       let actual = null;
@@ -374,4 +374,4 @@ function cleanResult(text, mode, words = 35, request = {}) {
   result = (original.match(/^\s*/)?.[0] || '') + result + (original.match(/\s*$/)?.[0] || '');
   return result;
 }
-module.exports = { hash, validateProject, validateRequest, atomicWrite, readLimited, writeSnapshot, buildPrompt, cleanResult, contextBefore, DocumentStore, samePath, safeFilename, MAX_DOCUMENT_BYTES, DEFAULT_SUGGESTION_COUNTS, getSuggestionCounts, getSuggestionLimit };
+module.exports = { hash, validatedProjectJSON, validateProject, validateRequest, atomicWrite, readLimited, writeSnapshot, buildPrompt, cleanResult, contextBefore, DocumentStore, samePath, safeFilename, MAX_DOCUMENT_BYTES, DEFAULT_SUGGESTION_COUNTS, getSuggestionCounts, getSuggestionLimit };

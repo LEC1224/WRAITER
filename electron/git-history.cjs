@@ -3,7 +3,7 @@ const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { randomUUID } = require('node:crypto');
-const { hash, validateProject, atomicWrite, readLimited } = require('./core.cjs');
+const { hash, validatedProjectJSON, validateProject, atomicWrite, readLimited } = require('./core.cjs');
 
 const execute = promisify(execFile);
 // A private repository for each manuscript avoids touching the author's folders or Git identity.
@@ -93,17 +93,21 @@ class GitHistory {
     return directory;
   }
   record(project, label = 'Saved manuscript', explicit = false, options = {}) {
-    validateProject(project);
-    const snapshot = structuredClone(project);
-    const waiting = this.pending.get(snapshot.id);
-    if (waiting) { clearTimeout(waiting.timer); this.pending.delete(snapshot.id); }
+    const serialized = validatedProjectJSON(project);
+    return this.#recordSnapshot(project.id, serialized, label, explicit, options);
+  }
+  #recordSnapshot(id, serialized, label, explicit, options) {
+    const waiting = this.pending.get(id);
+    if (waiting) { clearTimeout(waiting.timer); this.pending.delete(id); }
+    let snapshot;
     const operation = this.serialize(async () => {
-      const directory = await this.initialize(snapshot.id);
+      const directory = await this.initialize(id);
+      snapshot = JSON.parse(serialized);
       const fingerprint = contentFingerprint(snapshot);
       const before = this.lastProjects.get(snapshot.id) || null;
       if (!explicit && this.lastHashes.get(snapshot.id) === fingerprint) return { committed: false };
       if (options.automatic && !shouldCheckpoint(before, snapshot)) return { committed: false, belowThreshold: true };
-      await atomicWrite(path.join(directory, 'manuscript.json'), JSON.stringify(snapshot, null, 2) + '\n');
+      await atomicWrite(path.join(directory, 'manuscript.json'), serialized + '\n');
       // This companion is deliberately readable in ordinary git diff/log tools.
       const plain = [snapshot.title, ...snapshot.chapters.flatMap(chapter => ['\n# ' + chapter.title, textOf(chapter.content)])].join('\n') + '\n';
       await atomicWrite(path.join(directory, 'manuscript.txt'), plain);
@@ -119,23 +123,24 @@ class GitHistory {
       return result;
     });
   }
-  schedule(project) {
-    validateProject(project);
-    const previous = this.pending.get(project.id);
+  schedule(project, serialized = validatedProjectJSON(project)) {
+    // The validated JSON is immutable. Typing again before the debounce ends
+    // just replaces it; no editor-sized clone or parse runs on the save path.
+    const id = project.id, previous = this.pending.get(id);
     if (previous) clearTimeout(previous.timer);
     const started = previous?.started || Date.now();
-    const item = { project: structuredClone(project), started, timer: null };
+    const record = () => this.#recordSnapshot(id, serialized, 'Automatic checkpoint', false, { automatic: true });
+    const item = { record, started, timer: null };
     const delay = Math.min(this.debounce, Math.max(0, 120000 - (Date.now() - started)));
-    item.timer = setTimeout(() => { this.pending.delete(project.id); this.record(item.project, 'Automatic checkpoint', false, { automatic: true }).catch(() => {}); }, delay);
+    item.timer = setTimeout(() => record().catch(() => {}), delay);
     item.timer.unref?.();
-    this.pending.set(project.id, item);
+    this.pending.set(id, item);
   }
   async flush(id) {
     const items = [...this.pending.entries()].filter(([key]) => !id || key === id);
-    for (const [key, item] of items) {
-      clearTimeout(item.timer); this.pending.delete(key);
-      await this.record(item.project, 'Automatic checkpoint', false, { automatic: true }).catch(() => {});
-    }
+    // Take every pending snapshot before yielding. A new save during the
+    // flush must remain queued, even when it belongs to a later tab.
+    await Promise.all(items.map(([, item]) => item.record().catch(() => {})));
     await this.queue;
   }
   async list(id) {

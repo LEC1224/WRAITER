@@ -3,7 +3,7 @@ const { Diagnostics, installDiagnostics } = require('./diagnostics.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { hash, atomicWrite, readLimited, validateProject, validateRequest, DocumentStore, samePath, safeFilename } = require('./core.cjs');
+const { hash, atomicWrite, readLimited, validatedProjectJSON, validateProject, validateRequest, DocumentStore, samePath, safeFilename } = require('./core.cjs');
 const providers = require('./providers.cjs');
 const { defaults, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, mergeSettings } = require('./preferences.cjs');
 const { GitHistory } = require('./git-history.cjs');
@@ -144,14 +144,18 @@ async function openPath(target) {
   }
   return result;
 }
-async function persistDocument(project, payload, events, options, files = documentFiles) {
-  validateProject(project);
+async function persistDocument(project, payload, events, { files = documentFiles, saveOptions, automaticCheckpoint = false } = {}) {
+  // Each IPC call owns a fresh snapshot. Validate it before touching the
+  // journal, then use those exact bytes throughout this save and checkpoint.
+  const serialized = validatedProjectJSON(project);
   if (events?.length) await editJournal.append(project.id, events);
   if (project.historySequence != null) {
     const history = await editJournal.read(project.id);
     if (!Number.isSafeInteger(project.historySequence) || project.historySequence < 0 || project.historySequence > history.totalEvents) throw new Error('The editing history must be saved before its document snapshot.');
   }
-  return files.persist(project, payload, options);
+  const result = await files.persist(project, payload, saveOptions, serialized);
+  if (automaticCheckpoint) gitHistory.schedule(project, serialized);
+  return result;
 }
 function updateMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys, prefs.recent, prefs, reviewMenuState)));
@@ -315,7 +319,7 @@ app.whenReady().then(async () => {
   handle('recent:clear', () => serial(async () => { const next = { ...prefs, recent: [] }; await atomicWrite(file('settings.json'), JSON.stringify(next)); prefs = next; updateMenu(); return []; }));
   handle('autosave', (_e, project, payload, events, tabId) => serial(async () => {
     const files = tabId ? workspace.documentEntry(tabId, project?.id).files : documentFiles;
-    const result = await persistDocument(project, payload, events, undefined, files); gitHistory.schedule(project); return result;
+    return persistDocument(project, payload, events, { files, automaticCheckpoint: true });
   }));
   handle('chat:persist', (_e, projectId, chat) => serial(() => workspace.persistChat(projectId, chat)));
   handle('history:load', (_e, projectId) => serial(() => editJournal.read(projectId)));
@@ -347,7 +351,7 @@ app.whenReady().then(async () => {
       if (choice.response === 1) return { chooseCopy: true };
       options = { ...options, reviewed: true };
     }
-    const result = await persistDocument(project, payload, events, options);
+    const result = await persistDocument(project, payload, events, { saveOptions: options });
     if (result.path) await rememberPath(result.path);
     await gitHistory.record(project, 'Saved document'); return result;
   }));
@@ -660,7 +664,7 @@ app.whenReady().then(async () => {
     if (closing) return true;
     if (closeFinishing) return false;
     closeFinishing = true; clearTimeout(closeTimer);
-    try { if (project) await serial(async () => { await persistDocument(project, payload, events); gitHistory.schedule(project); }); else await writeQueue; }
+    try { if (project) await serial(() => persistDocument(project, payload, events, { automaticCheckpoint: true })); else await writeQueue; }
     catch (error) {
       const result = await dialog.showMessageBox(win, { type: 'warning', message: 'The latest save needs attention', detail: error.message, buttons: ['Keep writing', 'Close anyway'], defaultId: 0, cancelId: 0 });
       if (result.response === 0) { closePending = false; closeFinishing = false; return false; }
