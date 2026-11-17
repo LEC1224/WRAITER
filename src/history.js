@@ -165,7 +165,7 @@ function validateEntry(entry) {
   } else throw new HistoryMismatchError('An editing journal entry uses an unsupported operation.');
 }
 
-function replayEvent(journal, event, loading = false) {
+function replayEvent(journal, event, loading = false, cursorEntry = null) {
   if (!event || event.version !== 1 || event.sequence !== journal.sequence + 1 || !['edit', 'undo', 'redo'].includes(event.kind)) throw new HistoryMismatchError('The editing journal contains a missing or invalid event.');
   if (event.beforeFingerprint !== journal.headFingerprint) throw new HistoryMismatchError('The editing journal has an inconsistent document sequence.');
   if (event.kind === 'edit') {
@@ -182,13 +182,10 @@ function replayEvent(journal, event, loading = false) {
     return { ...journal, events: [...journal.events, event], sequence: event.sequence, entries: [...journal.entries, entry], activeIds, cursor: activeIds.length, headFingerprint: event.afterFingerprint };
   }
   const index = event.kind === 'undo' ? journal.cursor - 1 : journal.cursor;
-  const entry = loading ? journal._lookup.get(journal.activeIds[index]) : journal.entries.find(item => item.id === journal.activeIds[index]);
-  if (!entry || event.entryId !== entry.id || event.afterFingerprint !== (event.kind === 'undo' ? entry.beforeFingerprint : entry.afterFingerprint)) throw new HistoryMismatchError('An editing journal undo or redo event is invalid.');
-  if (loading) {
-    journal.events.push(event); journal.sequence = event.sequence; journal.cursor += event.kind === 'undo' ? -1 : 1; journal.headFingerprint = event.afterFingerprint;
-    return journal;
-  }
-  return { ...journal, events: [...journal.events, event], sequence: event.sequence, cursor: journal.cursor + (event.kind === 'undo' ? -1 : 1), headFingerprint: event.afterFingerprint };
+  const entry = cursorEntry || journal._lookup.get(journal.activeIds[index]);
+  if (!entry || entry.id !== journal.activeIds[index] || event.entryId !== entry.id || event.afterFingerprint !== (event.kind === 'undo' ? entry.beforeFingerprint : entry.afterFingerprint)) throw new HistoryMismatchError('An editing journal undo or redo event is invalid.');
+  journal.events.push(event); journal.sequence = event.sequence; journal.cursor += event.kind === 'undo' ? -1 : 1; journal.headFingerprint = event.afterFingerprint;
+  return journal;
 }
 
 function beginReplay(project, initial) {
@@ -379,14 +376,16 @@ function applyPatches(project, patches, direction) {
   return target;
 }
 
-function applyEntry(project, entry, direction, schema) {
+function applyEntry(project, entry, direction, schema, replayDocument) {
   const expectedProject = direction === 'undo' ? entry.afterFingerprint : entry.beforeFingerprint;
   if (projectFingerprint(project, expectedProject) !== expectedProject) throw new HistoryMismatchError('The document does not match the requested editing history entry.');
   let next, selection = null;
   if (entry.kind === 'steps') {
     const chapter = project.chapters.find(item => item.id === entry.chapterId);
     if (!chapter || !schema) throw new HistoryMismatchError('This chapter is unavailable for undo or redo.');
-    let doc = schema.nodeFromJSON(chapter.content);
+    // Consecutive steps in an undo group or a recovered tail usually touch
+    // the same chapter. A project-level change invalidates this by identity.
+    let doc = replayDocument.content === chapter.content ? replayDocument.doc : schema.nodeFromJSON(chapter.content);
     const expectedDoc = direction === 'undo' ? entry.afterDocFingerprint : entry.beforeDocFingerprint;
     if (matchingFingerprint(doc, expectedDoc) !== expectedDoc) throw new HistoryMismatchError('The chapter has changed outside its editing history.');
     for (const json of direction === 'undo' ? entry.inverse : entry.forward) {
@@ -397,7 +396,9 @@ function applyEntry(project, entry, direction, schema) {
     doc.check();
     selection = clone(direction === 'undo' ? entry.selectionBefore : entry.selectionAfter);
     if (selection) { try { Selection.fromJSON(doc, selection); } catch { selection = null; } }
-    next = { ...project, chapters: project.chapters.map(item => item.id === entry.chapterId ? { ...item, content: doc.toJSON() } : item) };
+    const content = associateHistoryContent(doc.toJSON(), doc);
+    replayDocument.content = content; replayDocument.doc = doc;
+    next = { ...project, chapters: project.chapters.map(item => item.id === entry.chapterId ? { ...item, content } : item) };
   } else {
     next = applyPatches(project, entry.patches, direction);
     selection = clone(direction === 'undo' ? entry.selectionBefore : entry.selectionAfter);
@@ -417,18 +418,25 @@ export function applyHistory(project, journal, direction, schema) {
   verifyCurrent(journal, project);
   const entryId = journal.activeIds[direction === 'undo' ? journal.cursor - 1 : journal.cursor];
   if (!entryId) return null;
-  const lookup = new Map(journal.entries.map(item => [item.id, item]));
-  const entry = lookup.get(entryId);
+  let chronological = journal.entries.findLastIndex(item => item.id === entryId);
+  const entry = journal.entries[chronological];
   if (!entry) throw new HistoryMismatchError('The requested editing history entry is missing.');
   const groupId = entry.groupId || entry.id;
-  let next = project, updated = journal, selection = null, lastEntry = entry;
-  while (true) {
+  const stride = direction === 'undo' ? -1 : 1, replayDocument = {};
+  // Cursor moves only append events. Retain one private copy for the entire
+  // group so a failed step cannot alter the caller's published journal.
+  const updated = { ...journal, events: journal.events.slice() };
+  let next = project, selection = null, lastEntry = entry;
+  while (chronological >= 0 && chronological < journal.entries.length) {
     const nextId = updated.activeIds[direction === 'undo' ? updated.cursor - 1 : updated.cursor];
-    const member = lookup.get(nextId);
-    if (!member || (member.groupId || member.id) !== groupId) break;
-    const result = applyEntry(next, member, direction, schema);
+    if (!nextId) break;
+    const member = journal.entries[chronological];
+    chronological += stride;
+    if (member.id !== nextId) continue; // Skip edits left on a former branch.
+    if ((member.groupId || member.id) !== groupId) break;
+    const result = applyEntry(next, member, direction, schema, replayDocument);
     const event = { version: 1, kind: direction, sequence: updated.sequence + 1, timestamp: new Date().toISOString(), entryId: member.id, beforeFingerprint: updated.headFingerprint, afterFingerprint: result.afterFingerprint };
-    updated = replayEvent(updated, event);
+    replayEvent(updated, event, true, member);
     next = result.project; selection = result.selection; lastEntry = member;
   }
   next.historySequence = updated.sequence;
@@ -442,6 +450,7 @@ function historyReplay(project, totalEvents, recoverySequence, schema, validateS
   const checkpoint = recoverySequence == null || recoverySequence === 0 ? 1 : recoverySequence;
   if (totalEvents && (!Number.isSafeInteger(checkpoint) || checkpoint < 1 || checkpoint > totalEvents)) throw new HistoryMismatchError('The document recovery checkpoint is missing from the editing journal.');
   let journal, next = project;
+  const replayDocument = {};
   return {
     append(event) {
       if (!journal) journal = beginReplay(project, event);
@@ -453,7 +462,7 @@ function historyReplay(project, totalEvents, recoverySequence, schema, validateS
         }
         if (journal.sequence > checkpoint) {
           const entry = event.kind === 'edit' ? event.entry : journal._lookup.get(event.entryId);
-          next = applyEntry(next, entry, event.kind === 'undo' ? 'undo' : 'redo', schema).project;
+          next = applyEntry(next, entry, event.kind === 'undo' ? 'undo' : 'redo', schema, replayDocument).project;
         }
       }
       if (journal.sequence === checkpoint) verifyCurrent(journal, project);

@@ -103,6 +103,22 @@ test('typing is undone a word at a time and grouped timeline rows survive restar
   assert.equal(contents(project)[0], 'Alpha hello, world');
 });
 
+test('a later failure in a grouped undo preserves the published cursor, events and text', () => {
+  let project = manuscript(), journal = createHistory(project);
+  ({ project, journal } = typeAtCaret(project, journal, 'word'));
+  assert.equal(new Set(journal.entries.map(entry => entry.groupId)).size, 1);
+  // Three valid reversals precede the damaged oldest step.
+  const damaged = structuredClone(journal);
+  damaged.entries[0].inverse[0].stepType = 'unknown-step';
+  const original = JSON.stringify({ project, journal: damaged });
+  assert.throws(() => applyHistory(project, damaged, 'undo', schema));
+  assert.equal(JSON.stringify({ project, journal: damaged }), original);
+  const undone = applyHistory(project, journal, 'undo', schema);
+  assert.equal(undone.journal.cursor, 0);
+  assert.equal(journal.cursor, 4);
+  assert.equal(journal.events.length, 5);
+});
+
 test('a new branch and caret move separate typing undo groups', () => {
   let project = manuscript(), journal = createHistory(project);
   ({ project, journal } = typeAtCaret(project, journal, 'foo'));
