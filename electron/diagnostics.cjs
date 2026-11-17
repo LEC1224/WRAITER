@@ -205,6 +205,14 @@ function installDiagnostics({ app, ipcMain, dialog, shell, log, processObject = 
     if (failure) throw new Error('The log folder could not be opened.');
     log.write('logging.folder-opened'); return true;
   });
+  let lastSlowTab = -Infinity;
+  ipcMain.on('diagnostics:slow-tab', (_event, outgoingMs, openingMs, paintMs) => {
+    if (![outgoingMs, openingMs, paintMs].every(ms => Number.isSafeInteger(ms) && ms >= 0 && ms <= 3600000)) return;
+    const durationMs = outgoingMs + openingMs + paintMs, now = performance.now();
+    if (durationMs < 1000 || now - lastSlowTab < 5000) return;
+    lastSlowTab = now;
+    log.write('workspace.slow-tab-switch', { durationMs, outgoingMs, openingMs, paintMs }, 'warn');
+  });
   let minute = 0, count = 0;
   ipcMain.on('diagnostics:surface', (_event, kind, name, opened) => {
     const current = Math.floor(Date.now() / 60000);

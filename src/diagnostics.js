@@ -1,5 +1,19 @@
 import { useEffect } from 'react';
 
+export function reportTabSwitch(started, opening, stillCurrent) {
+  const bridge = window.wraiter;
+  if (!bridge?.logSlowTab || document.hidden) return;
+  const installed = performance.now();
+  // A completed native IPC does not mean the restored editor has painted.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (document.hidden || !stillCurrent()) return;
+    const painted = performance.now();
+    if (painted - started >= 1000) {
+      bridge.logSlowTab(Math.round(opening - started), Math.round(installed - opening), Math.round(painted - installed));
+    }
+  }));
+}
+
 export function useLoggedSurface(kind, name) {
   useEffect(() => {
     if (!name) return;

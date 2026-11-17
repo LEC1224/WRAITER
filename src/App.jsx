@@ -21,7 +21,7 @@ import { reconcileCommentChapters } from './comments.js';
 import FormatPainter from './FormatPainter.jsx';
 import { captureFormatting, pasteFormatting } from './format-painter.js';
 import Settings from './Settings.jsx';
-import { useLoggedSurface, reportError } from './diagnostics.js';
+import { useLoggedSurface, reportError, reportTabSwitch } from './diagnostics.js';
 import { SetupWizard } from './Onboarding.jsx';
 import Privacy, { ReportAI } from './Privacy.jsx';
 import WritingWalkthrough, { useWritingWalkthrough } from './WritingWalkthrough.jsx';
@@ -621,6 +621,7 @@ export default function App() {
   function projectTransition(action, recoveryOnly = false, preserveChat = false, targetId = null) {
     if (transition.current || tabReordering.current) return;
     if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action, recoveryOnly, preserveChat, targetId));
+    const started = performance.now();
     setSwitching(true); setOpeningTab(targetId);
     // Block editor input immediately while saves and view state move to the
     // destination tab. Chat requests may continue against their captured project.
@@ -638,7 +639,9 @@ export default function App() {
         if (!recoveryOnly && locallySavedProjects.current.get(workspaceRef.current.activeId) !== projectRef.current) await saveLocal();
         await rememberTab();
         opening.current = true;
+        const openingStarted = performance.now();
         await action();
+        if (targetId) reportTabSwitch(started, openingStarted, () => workspaceRef.current.activeId === targetId && !transition.current);
       }
       catch (error) { notify(errorText(error)); }
       finally { opening.current = false; transition.current = null; setSwitching(false); setOpeningTab(null); document.querySelector('.workspace')?.removeAttribute('inert'); }

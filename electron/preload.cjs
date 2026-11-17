@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('wraiter', {
   reviewMenuState: state => ipcRenderer.send('review:state', state),
   diagnosticsStatus: invoke('diagnostics:status'), openLogFolder: invoke('diagnostics:open-folder'),
   logSurface: (kind, name, opened) => ipcRenderer.send('diagnostics:surface', kind, name, opened),
+  logSlowTab: (outgoingMs, openingMs, paintMs) => ipcRenderer.send('diagnostics:slow-tab', outgoingMs, openingMs, paintMs),
   reportError: (source, error) => ipcRenderer.send('diagnostics:error', source, error),
   externalFilesReady: invoke('external-files:ready'), nextExternalFile: invoke('external-files:next'), openExternalFile: invoke('external-files:open'), completeExternalFile: invoke('external-files:complete'),
   setupInstall: invoke('setup:install'), setupCancel: invoke('setup:cancel'), setupHelp: invoke('setup:help'), setupChoose: invoke('setup:choose'), setupClaudeLogin: invoke('setup:claude-login'), setupTest: invoke('setup:test'),
