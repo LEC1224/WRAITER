@@ -113,9 +113,10 @@ class EditJournal {
     }
     return { events, totalEvents };
   }
-  async append(projectId, supplied = []) {
+  async append(projectId, supplied = [], expectedSequence) {
     if (!Array.isArray(supplied)) throw new Error('Invalid editing history.');
     const index = await this.index(projectId), target = this.filename(projectId);
+    if (expectedSequence !== undefined && index.offsets.length !== expectedSequence) return null;
     const additions = [], offsets = [];
     let bytes = index.bytes, existingPage, pageStart;
     for (const event of supplied) {

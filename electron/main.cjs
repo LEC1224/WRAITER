@@ -14,6 +14,7 @@ const { ReferenceLibrary } = require('./references.cjs');
 const { droppedPath, externalLink } = require('./document-ux.cjs');
 const { DocumentFiles, FORMATS, formatOf } = require('./document-files.cjs');
 const { EditJournal } = require('./edit-journal.cjs');
+const { JournalAppendQueue } = require('./journal-append-queue.cjs');
 const { runWritingAgent } = require('./writing-agent.cjs');
 const { LocalModels } = require('./local-models.cjs');
 const { WorkspaceSession } = require('./workspace-session.cjs');
@@ -119,7 +120,13 @@ function queueCheckpointLabel({ id, before, after, revision, label, automatic = 
 }
 const file = name => path.join(app.getPath('userData'), name);
 const profileLayout = new WorkspaceLayout(app.getPath('userData'), error => diagnostics.error('workspace.layout', error));
-const serial = fn => { const result = writeQueue.then(async () => { try { return await fn(); } finally { await workspace?.checkpoint(); } }); writeQueue = result.catch(() => {}); return result; };
+const serial = fn => {
+  journalAppends.barrier();
+  const result = writeQueue.then(async () => { try { return await fn(); } finally { await workspace?.checkpoint(); } });
+  writeQueue = result.catch(() => {});
+  return result;
+};
+const journalAppends = new JournalAppendQueue(serial, (...args) => editJournal.append(...args));
 function syncWorkspace() { store = workspace.active.store; documentFiles = workspace.active.files; }
 const tryRead = async (name, fallback) => { try { return JSON.parse(await fs.readFile(file(name), 'utf8')); } catch (e) { if (e.code !== 'ENOENT') diagnostics.error('preferences.read-failed', e); return fallback; } };
 function publicPrefs() {
@@ -336,7 +343,7 @@ app.whenReady().then(async () => {
       throw error;
     }
   }));
-  handle('history:append', (_e, projectId, events) => serial(() => editJournal.append(projectId, events)));
+  handle('history:append', (_e, projectId, events) => journalAppends.append(projectId, events));
   handle('history:restart', (_e, project, initial, reason) => serial(async () => {
     validateProject(project);
     if (store.project && store.project.id !== project.id) throw new Error('This history belongs to another document.');
