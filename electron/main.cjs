@@ -323,6 +323,13 @@ app.whenReady().then(async () => {
   }));
   handle('chat:persist', (_e, projectId, chat) => serial(() => workspace.persistChat(projectId, chat)));
   handle('history:load', (_e, projectId) => serial(() => editJournal.read(projectId)));
+  handle('history:page', (_e, projectId, from, snapshot) => serial(async () => {
+    try { return await editJournal.readPage(projectId, from, snapshot); }
+    catch (error) {
+      if (error.code === 'CORRUPT_JOURNAL') return { corrupt: error.message };
+      throw error;
+    }
+  }));
   handle('history:append', (_e, projectId, events) => serial(() => editJournal.append(projectId, events)));
   handle('history:restart', (_e, project, initial, reason) => serial(async () => {
     validateProject(project);

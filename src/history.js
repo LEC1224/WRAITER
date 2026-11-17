@@ -191,14 +191,18 @@ function replayEvent(journal, event, loading = false) {
   return { ...journal, events: [...journal.events, event], sequence: event.sequence, cursor: journal.cursor + (event.kind === 'undo' ? -1 : 1), headFingerprint: event.afterFingerprint };
 }
 
+function beginReplay(project, initial) {
+  if (initial.version !== 1 || initial.kind !== 'init' || initial.sequence !== 1 || initial.projectId !== project.id || typeof initial.fingerprint !== 'string') throw new HistoryMismatchError('This editing journal belongs to a different manuscript or version.');
+  return { version: 1, projectId: project.id, events: [initial], sequence: 1, entries: [], activeIds: [], cursor: 0, headFingerprint: initial.fingerprint, _lookup: new Map() };
+}
+
 export function createHistory(project, saved = {}) {
   if (!project?.id || !Array.isArray(project.chapters)) throw new HistoryMismatchError('Editing history needs a valid manuscript.');
   if (saved.events !== undefined && !Array.isArray(saved.events)) throw new HistoryMismatchError('The saved editing journal is invalid.');
   const events = saved.events || [];
   const initial = events[0] || { version: 1, kind: 'init', sequence: 1, projectId: project.id, fingerprint: projectFingerprint(project), timestamp: new Date().toISOString() };
-  if (initial.version !== 1 || initial.kind !== 'init' || initial.sequence !== 1 || initial.projectId !== project.id || typeof initial.fingerprint !== 'string') throw new HistoryMismatchError('This editing journal belongs to a different manuscript or version.');
-  let journal = { version: 1, projectId: project.id, events: [clone(initial)], sequence: 1, entries: [], activeIds: [], cursor: 0, headFingerprint: initial.fingerprint, _lookup: new Map() };
-  for (const event of events.slice(1)) journal = replayEvent(journal, clone(event), true);
+  const journal = beginReplay(project, clone(initial));
+  for (let i = 1; i < events.length; i++) replayEvent(journal, clone(events[i]), true);
   delete journal._lookup;
   if (journal.headFingerprint !== projectFingerprint(project, journal.headFingerprint)) throw new HistoryMismatchError();
   return journal;
@@ -432,47 +436,106 @@ export function applyHistory(project, journal, direction, schema) {
   return { project: next, journal: updated, chapterId: next.chapters.some(chapter => chapter.id === chapterId) ? chapterId : next.chapters[0].id, selection, entry: lastEntry };
 }
 
-export function recoverHistoryProject(project, { events = [], recoverySequence = project.historySequence } = {}, schema) {
-  if (!events.length) {
-    const journal = createHistory(project);
-    return { project: { ...project, historySequence: journal.sequence }, journal, recoveredEvents: 0 };
-  }
-  const sequence = recoverySequence == null || recoverySequence === 0 ? 1 : recoverySequence;
-  if (!Number.isSafeInteger(sequence) || sequence < 1 || sequence > events.length) throw new HistoryMismatchError('The document recovery checkpoint is missing from the editing journal.');
-  let journal = createHistory(project, { events: events.slice(0, sequence) }), next = project;
-  for (const event of events.slice(sequence)) {
-    // Validate journal ordering and undo lineage before applying the saved edit.
-    const advanced = replayEvent(journal, clone(event));
-    const entry = event.kind === 'edit' ? event.entry : journal.entries.find(item => item.id === event.entryId);
-    const result = applyEntry(next, entry, event.kind === 'undo' ? 'undo' : 'redo', schema);
-    next = result.project; journal = advanced;
-  }
-  return { project: { ...next, historySequence: journal.sequence }, journal, recoveredEvents: events.length - sequence };
+// During restoration the journal has one owner. Append into its arrays and
+// lookup table, then publish the completed immutable journal to the editor.
+function historyReplay(project, totalEvents, recoverySequence, schema, validateSteps) {
+  const checkpoint = recoverySequence == null || recoverySequence === 0 ? 1 : recoverySequence;
+  if (totalEvents && (!Number.isSafeInteger(checkpoint) || checkpoint < 1 || checkpoint > totalEvents)) throw new HistoryMismatchError('The document recovery checkpoint is missing from the editing journal.');
+  let journal, next = project;
+  return {
+    append(event) {
+      if (!journal) journal = beginReplay(project, event);
+      else {
+        replayEvent(journal, event, true);
+        if (event.kind === 'edit' && validateSteps && schema && event.entry.kind === 'steps') {
+          for (const step of event.entry.forward) Step.fromJSON(schema, step);
+          for (const step of event.entry.inverse) Step.fromJSON(schema, step);
+        }
+        if (journal.sequence > checkpoint) {
+          const entry = event.kind === 'edit' ? event.entry : journal._lookup.get(event.entryId);
+          next = applyEntry(next, entry, event.kind === 'undo' ? 'undo' : 'redo', schema).project;
+        }
+      }
+      if (journal.sequence === checkpoint) verifyCurrent(journal, project);
+    },
+    finish() {
+      if ((journal?.sequence || 0) !== totalEvents) throw new HistoryMismatchError('The editing journal did not contain all of its saved records.');
+      if (!journal) journal = createHistory(project);
+      delete journal._lookup;
+      return { project: { ...next, historySequence: journal.sequence }, journal, recoveredEvents: Math.max(0, totalEvents - checkpoint) };
+    }
+  };
 }
 
-// A mismatch is a history problem, never a reason to hide an intact document.
-// The returned reset is only a proposal: the caller must preserve the old ledger
-// in the backend before publishing these new sequence numbers to that ledger.
-export function prepareHistoryLoad(project, saved = {}, schema) {
+export function recoverHistoryProject(project, { events = [], recoverySequence = project.historySequence } = {}, schema, validateSteps = false) {
+  const replay = historyReplay(project, events.length, recoverySequence, schema, validateSteps);
+  for (const event of events) replay.append(clone(event));
+  return replay.finish();
+}
+
+function missingHistory(project, totalEvents) {
+  if (!totalEvents && Number(project.historySequence) > 1) throw new HistoryMismatchError('The earlier editing journal is missing for this document.');
+}
+
+function loadedHistory(restored) { return { ...restored, requiresJournalReset: false, warning: '', reason: '' }; }
+
+// Propose a fresh baseline only. The caller preserves the old ledger before
+// publishing the new sequence or permitting another save against it.
+function historyLoadFailure(project, error, previousEventCount) {
   const baseline = createHistory(project);
+  return {
+    project: { ...project, historySequence: baseline.sequence }, journal: baseline,
+    recoveredEvents: 0, requiresJournalReset: true,
+    warning: 'The saved document was opened unchanged. Its earlier undo history could not be restored.',
+    reason: String(error?.message || error).slice(0, 2000),
+    previousSequence: project.historySequence ?? null, previousEventCount
+  };
+}
+
+export function prepareHistoryLoad(project, saved = {}, schema) {
   try {
     if (saved?.error || saved?.readError) throw new HistoryMismatchError(String(saved.error?.message || saved.error || saved.readError?.message || saved.readError));
     if (!saved || typeof saved !== 'object' || saved.events !== undefined && !Array.isArray(saved.events)) throw new HistoryMismatchError('The saved editing journal is unreadable.');
     const events = saved.events || [];
     if (saved.totalEvents !== undefined && (!Number.isSafeInteger(saved.totalEvents) || saved.totalEvents !== events.length)) throw new HistoryMismatchError('The editing journal did not contain all of its saved records.');
-    if (!events.length && Number(project.historySequence) > 1) throw new HistoryMismatchError('The earlier editing journal is missing for this document.');
-    const restored = recoverHistoryProject(project, { events, recoverySequence: saved.recoverySequence ?? project.historySequence }, schema);
-    if (schema) for (const entry of restored.journal.entries) if (entry.kind === 'steps') for (const step of [...entry.forward, ...entry.inverse]) Step.fromJSON(schema, step);
-    return { ...restored, requiresJournalReset: false, warning: '', reason: '' };
-  } catch (error) {
-    return {
-      project: { ...project, historySequence: baseline.sequence }, journal: baseline,
-      recoveredEvents: 0, requiresJournalReset: true,
-      warning: 'The saved document was opened unchanged. Its earlier undo history could not be restored.',
-      reason: String(error?.message || error).slice(0, 2000),
-      previousSequence: project.historySequence ?? null,
-      previousEventCount: Array.isArray(saved?.events) ? saved.events.length : null
-    };
+    missingHistory(project, events.length);
+    return loadedHistory(recoverHistoryProject(project, { events, recoverySequence: saved.recoverySequence ?? project.historySequence }, schema, true));
+  } catch (error) { return historyLoadFailure(project, error, Array.isArray(saved?.events) ? saved.events.length : null); }
+}
+
+// Each IPC reply contains serialized records for just one page. Parsing them
+// here gives the renderer sole ownership and lets it paint between replies.
+export async function loadDocumentHistory(project, api, schema) {
+  if (!api.loadEditHistoryPage) {
+    const saved = await api.loadEditHistory(project.id);
+    return { ...prepareHistoryLoad(project, saved, schema), totalEvents: saved?.totalEvents || 0 };
+  }
+  const read = async (from, snapshot) => {
+    try { return await api.loadEditHistoryPage(project.id, from, snapshot); }
+    catch {
+      // Sharing violations and other short-lived I/O failures deserve a retry.
+      // If the retry also fails, leave the saved undo lineage in place.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return api.loadEditHistoryPage(project.id, from, snapshot);
+    }
+  };
+  let page = await read(0), received = 0, replay;
+  const snapshot = { totalEvents: page?.totalEvents, generation: page?.generation };
+  for (;;) {
+    if (page?.corrupt) return { ...historyLoadFailure(project, page.corrupt, received || null), totalEvents: null };
+    if (!Number.isSafeInteger(page?.totalEvents) || page.totalEvents < 0 || typeof page.generation !== 'string' || page.generation !== snapshot.generation || page.totalEvents !== snapshot.totalEvents || !Number.isSafeInteger(page.next) || page.next > page.totalEvents || (received < page.totalEvents ? page.next <= received : page.next !== received) || typeof page.text !== 'string') throw new Error('The editing history changed during loading. Please try again.');
+    const lines = page.text.split('\n').filter(line => line.trim());
+    if (lines.length !== page.next - received) throw new Error('The editing journal page is incomplete. Please try again.');
+    try {
+      if (!replay) {
+        missingHistory(project, page.totalEvents);
+        replay = historyReplay(project, page.totalEvents, project.historySequence, schema, true);
+      }
+      for (const line of lines) replay.append(JSON.parse(line));
+      if (page.next === page.totalEvents) return { ...loadedHistory(replay.finish()), totalEvents: page.totalEvents };
+    } catch (error) { return { ...historyLoadFailure(project, error, page.totalEvents), totalEvents: page.totalEvents }; }
+    received = page.next;
+    page = await read(received, snapshot);
   }
 }
 

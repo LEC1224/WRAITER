@@ -37,7 +37,7 @@ import AssistantChanges from './AssistantChanges.jsx';
 import { assistantChangeSummary, assistantEditState, revertAssistantEntry } from './editorial-report.js';
 import { LAYOUTS } from './layouts.js';
 import { useWorkspaceLayout } from './useWorkspaceLayout.js';
-import { normalizeHistoryProject, prepareHistoryLoad, recordTransaction, recordProjectChange, applyHistory, historyStatus } from './history.js';
+import { normalizeHistoryProject, loadDocumentHistory, recordTransaction, recordProjectChange, applyHistory, historyStatus } from './history.js';
 import { applyAgentResult, rebaseAgentResult } from './agent-edits.js';
 import RephraseOptions from './RephraseOptions.jsx';
 import { insertPageBreak } from './pagination.js';
@@ -145,6 +145,7 @@ export default function App() {
   const locallySavedProjects = useRef(new Map());
   const pendingDocumentSaves = useRef(new WeakMap());
   const tourRef = useRef(null);
+  const [bootAttempt, setBootAttempt] = useState(0), [bootError, setBootError] = useState('');
   const [booted, setBooted] = useState(false), externalOpening = useRef(false), externalBlocked = useRef(true);
   const workspaceRef = useRef(workspace), tabCache = useRef(new Map()), warmTabs = useRef(new Map()), transition = useRef(null), namedSave = useRef(false), namedSaveCompletion = useRef(Promise.resolve()), restoreScroll = useRef(null), chatScrollRef = useRef(null);
   workspaceRef.current = workspace;
@@ -226,11 +227,9 @@ export default function App() {
       // Hydrate visible documents once at startup, before mouse interaction.
       // A click between resident panes must never load or replay a journal.
       for (const [id, resident] of paneSnapshots.current) {
-        const saved = await api.loadEditHistory(resident.project.id).catch(() => null);
-        if (!saved) continue;
-        const restored = prepareHistoryLoad(resident.project, saved, schema);
-        if (restored.requiresJournalReset) continue;
-        persistedHistory.current.set(resident.project.id, saved.totalEvents || 0);
+        const restored = await loadDocumentHistory(resident.project, api, schema).catch(() => null);
+        if (!restored || restored.requiresJournalReset) continue;
+        persistedHistory.current.set(resident.project.id, restored.totalEvents || 0);
         paneSnapshots.current.set(id, { ...resident, project: restored.project, history: restored.journal, saveState: 'saved' });
       }
       await installWorkspace(result);
@@ -240,8 +239,8 @@ export default function App() {
       if (!result.prefs.setupComplete) setModal({ type: 'setup' });
       else if (!result.prefs.tutorialComplete && !result.prefs.tutorialSession) setModal({ type: 'tutorial' });
       setBooted(true);
-    }).catch(error => notify(errorText(error)));
-  }, []);
+    }).catch(error => setBootError(errorText(error)));
+  }, [bootAttempt]);
 
   useEffect(() => {
     if (!booted || modal || switching || savingNamed || !api?.externalFilesReady) return;
@@ -275,9 +274,8 @@ export default function App() {
     if (events.length) api.appendEditHistory(next.projectId, events).then(result => persistedHistory.current.set(next.projectId, Math.max(result.sequence, persistedHistory.current.get(next.projectId) || 0))).catch(error => { setSaveError(errorText(error)); notify(errorText(error)); });
   }
   async function loadHistory(initial) {
+    const restored = await loadDocumentHistory(initial, api, schema);
     historyLoadError.current = '';
-    const saved = await api.loadEditHistory(initial.id).catch(error => ({ error: errorText(error) }));
-    const restored = prepareHistoryLoad(initial, saved, schema);
     if (restored.requiresJournalReset) {
       try {
         const result = await api.restartEditHistory(restored.project, restored.journal.events[0], restored.reason);
@@ -288,7 +286,7 @@ export default function App() {
         setSaveError(historyLoadError.current);
         setModal({ type: 'notice', title: 'Editing history needs attention', text: historyLoadError.current });
       }
-    } else persistedHistory.current.set(initial.id, saved.totalEvents || 0);
+    } else persistedHistory.current.set(initial.id, restored.totalEvents || 0);
     publishHistory(restored.journal);
     if (restored.recoveredEvents) notify(`Recovered ${restored.recoveredEvents} editing actions from the journal.`);
     return restored;
@@ -491,7 +489,6 @@ export default function App() {
     return persist ? api.rememberProjectView(view, capturePaneViews(id), id) : undefined;
   }
   async function installWorkspace(result, placement = null) {
-    setTracking(false); setActiveRevision(null); setTrackingIssue('');
     const nextWorkspace = result.workspace;
     let cached = tabCache.current.get(nextWorkspace.activeId);
     const warm = warmTabs.current.get(nextWorkspace.activeId);
@@ -506,8 +503,28 @@ export default function App() {
       warmTabs.current.delete(nextWorkspace.activeId); warmTabs.current.set(nextWorkspace.activeId, { project: next, history: warm.history });
     } else {
       next = normalizeProjectChats(normalizeHistoryProject(result.project || { ...newProject(), language: prefsRef.current.language }, schema));
-      history = await loadHistory(next); next = history.project;
+      try { history = await loadHistory(next); }
+      catch (error) {
+        const previous = workspaceRef.current.activeId;
+        // The main process selected the destination before we read its journal.
+        // Restore the previous selection before accepting edits or saves there.
+        if (projectRef.current && previous !== nextWorkspace.activeId && nextWorkspace.tabs.some(tab => tab.id === previous)) {
+          const old = projectRef.current;
+          const restored = await api.activateProject(previous, { projectId: old.id, historySequence: old.historySequence }).catch(() => null);
+          if (restored) {
+            workspaceRef.current = restored.workspace; setWorkspace(restored.workspace);
+            throw new Error(`Could not open “${next.title}”. ${errorText(error)} Try the tab again.`);
+          }
+        }
+        // At startup (or after closing the old tab) there is no safe editor to
+        // return to. Retry from the durable session without publishing a new init.
+        clearTimeout(autosaveTimer.current); projectRef.current = null; historyRef.current = null;
+        setProject(null); setBooted(false); setBootError(errorText(error));
+        throw error;
+      }
+      next = history.project;
     }
+    setTracking(false); setActiveRevision(null); setTrackingIssue('');
     cached = tabCache.current.get(nextWorkspace.activeId) || cached;
     next = normalizeProjectChats(next);
     if (cached?.messages?.length && !cached.chatId) next = adoptChatMessages(next, cached.messages);
@@ -1271,6 +1288,7 @@ export default function App() {
     setActiveRevision(null); notify(`${accept ? 'Accepted' : 'Rejected'} ${changes.length} ${changes.length === 1 ? 'edit' : 'edits'}. Ctrl+Z to undo.`);
   }
   function handleCommand(command) {
+    if (!projectRef.current) return;
     if (command === 'git-history-updated') { if (panel === 'history') loadGitHistory(); return; }
     if (command.startsWith('continuation-notice:')) {
       try {
@@ -1360,6 +1378,7 @@ export default function App() {
         await tourRef.current?.flush();
         await namedSaveCompletion.current;
         await transition.current;
+        if (!projectRef.current) { await pendingSave.current; await api.finishClose(); return; }
         clearTimeout(autosaveTimer.current); actionRef.current.dismiss();
         try { await actionRef.current.saveLocal(); } catch {}
         await pendingSave.current;
@@ -1590,7 +1609,7 @@ export default function App() {
   }, [modal?.type, !!project, switching]);
 
   if (!api) return <div className="boot-screen"><Feather /><h1>WRAITER is a desktop application.</h1><p>Launch WRAITER.exe to use local files and writing assistance.</p></div>;
-  if (!project) return <div className="boot-screen"><Feather size={38} /><h1>Opening WRAITER…</h1>{toast && <p>{toast}</p>}</div>;
+  if (!project) return <div className="boot-screen"><Feather size={38} /><h1>{bootError ? 'Could not open the workspace' : 'Opening WRAITER…'}</h1>{bootError ? <><p role="alert">{bootError}</p><button className="primary-button" onClick={() => { setBootError(''); setBootAttempt(value => value + 1); }}>Retry</button></> : toast && <p>{toast}</p>}</div>;
   const totalWords = projectWords(project), chapterWords = contentWordCount(chapter.content);
   const selectedWords = editor && !editor.isDestroyed ? wordCount(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')) : 0;
   const activeReferences = (project.references || []).filter(r => r.enabled !== false);

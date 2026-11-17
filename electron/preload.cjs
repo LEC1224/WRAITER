@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('wraiter', {
   activateProject: invoke('workspace:activate'), focusProject: invoke('workspace:focus'), closeProject: invoke('workspace:close'), rememberProjectView: invoke('workspace:view'), reloadProject: invoke('workspace:reload'),
   documentFileStatus: invoke('workspace:file-status'),
   autosave: invoke('autosave'), persistChat: invoke('chat:persist'), newProject: invoke('new-project'), exportFile: invoke('export'), exportClipboard: invoke('export:clipboard'), previewPDF: invoke('export:preview-pdf'),
-  bindNative: invoke('native:bind'), chooseSaveTarget: invoke('save:choose'), saveEncoded: invoke('save:encoded'), loadEditHistory: invoke('history:load'), appendEditHistory: invoke('history:append'), restartEditHistory: invoke('history:restart'), runAgent: invoke('agent:run'),
+  bindNative: invoke('native:bind'), chooseSaveTarget: invoke('save:choose'), saveEncoded: invoke('save:encoded'), loadEditHistory: invoke('history:load'), loadEditHistoryPage: invoke('history:page'), appendEditHistory: invoke('history:append'), restartEditHistory: invoke('history:restart'), runAgent: invoke('agent:run'),
   reference: invoke('reference'), image: invoke('image'), settings: invoke('settings'),
   reorderProjects: invoke('workspace:reorder'), openLink: invoke('link:open'),
   openDroppedDocument: file => ipcRenderer.invoke('drop:open', webUtils.getPathForFile(file)),
