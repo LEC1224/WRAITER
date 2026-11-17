@@ -1,12 +1,22 @@
 const fs = require('node:fs/promises');
+const { constants } = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { hash, atomicWrite, validateProject } = require('./core.cjs');
 
 const PAGE_BYTES = 512 * 1024;
 const PAGE_EVENTS = 1024;
-const newIndex = () => ({ offsets: [], bytes: 0, generation: randomUUID() });
+const APPEND_EXISTING = constants.O_APPEND | constants.O_WRONLY;
+const newIndex = () => ({ offsets: [], bytes: 0, signature: null, generation: randomUUID() });
 function records(text) { return text.split('\n').filter(line => line.trim()).map(line => JSON.parse(line)); }
+const changedJournal = () => Object.assign(new Error('The editing journal changed on disk. Please try again.'), { code: 'JOURNAL_CHANGED' });
+const signatureOf = stat => [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
+async function verifyPath(target, expected) {
+  let actual = null;
+  try { actual = signatureOf(await fs.stat(target, { bigint: true })); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (actual !== expected) throw changedJournal();
+}
 
 // Retain byte offsets, not a second object graph for the renderer's undo history.
 // Validate every record before publishing its count, including count-only saves.
@@ -23,12 +33,18 @@ async function indexFile(target) {
     index.offsets.push(start);
   }
   try {
+    index.signature = signatureOf(await handle.stat({ bigint: true }));
     for await (const chunk of handle.createReadStream({ highWaterMark: PAGE_BYTES, autoClose: false })) {
       let from = 0;
       for (let end = chunk.indexOf(10); end !== -1; end = chunk.indexOf(10, from)) {
         const tail = chunk.subarray(from, end);
         try { indexLine(fragments.length ? Buffer.concat([...fragments, tail]) : tail); }
-        catch { throw Object.assign(new Error('Editing history contains an unreadable record. The original journal was preserved.'), { code: 'CORRUPT_JOURNAL' }); }
+        catch {
+          // A sync client can replace the file or change its bytes while it
+          // is being indexed. Only report corruption from a stable file.
+          await verifyPath(target, index.signature);
+          throw Object.assign(new Error('Editing history contains an unreadable record. The original journal was preserved.'), { code: 'CORRUPT_JOURNAL' });
+        }
         fragments = []; from = end + 1; start = index.bytes + from;
       }
       if (from < chunk.length) fragments.push(chunk.subarray(from));
@@ -38,34 +54,44 @@ async function indexFile(target) {
       try { indexLine(Buffer.concat(fragments)); }
       catch { interrupted = true; }
     }
+    await verifyPath(target, index.signature);
   } finally { await handle.close(); }
   if (fragments.length) {
     // Preserve the exact interrupted file before dropping only its incomplete
     // final record. A valid final record without a newline merely needs a separator.
     if (interrupted) {
       const archive = `${target}.interrupted-${randomUUID()}`;
-      await fs.copyFile(target, archive, require('node:fs').constants.COPYFILE_EXCL);
+      await fs.copyFile(target, archive, constants.COPYFILE_EXCL);
       await syncFile(archive);
     }
-    const repair = await fs.open(target, interrupted ? 'r+' : 'a');
+    const repair = await fs.open(target, interrupted ? 'r+' : APPEND_EXISTING);
     try {
+      if (signatureOf(await repair.stat({ bigint: true })) !== index.signature) throw changedJournal();
       if (interrupted) { await repair.truncate(start); index.bytes = start; }
       else { await repair.writeFile('\n'); index.bytes++; }
       await repair.sync();
+      const repaired = await repair.stat({ bigint: true });
+      if (Number(repaired.size) !== index.bytes) throw changedJournal();
+      index.signature = signatureOf(repaired);
     } finally { await repair.close(); }
+    await verifyPath(target, index.signature);
   }
   return index;
 }
 
-async function readRange(target, from, to) {
-  const handle = await fs.open(target, 'r');
+async function readRange(target, from, to, expected) {
+  let handle;
+  try { handle = await fs.open(target, 'r'); }
+  catch (error) { if (error.code === 'ENOENT') throw changedJournal(); throw error; }
   try {
+    if (signatureOf(await handle.stat({ bigint: true })) !== expected) throw changedJournal();
     const buffer = Buffer.allocUnsafe(to - from);
     for (let offset = 0; offset < buffer.length;) {
       const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, from + offset);
-      if (!bytesRead) throw new Error('The editing journal changed while it was being read.');
+      if (!bytesRead) throw changedJournal();
       offset += bytesRead;
     }
+    await verifyPath(target, expected);
     return buffer.toString('utf8');
   } finally { await handle.close(); }
 }
@@ -78,7 +104,7 @@ async function syncFile(target) {
 class EditJournal {
   constructor(directory) { this.directory = path.join(directory, 'Edit history'); this.cache = new Map(); this.needsSync = new Set(); }
   filename(projectId) { return path.join(this.directory, `${hash(projectId)}.jsonl`); }
-  async index(projectId) {
+  async index(projectId, verify = true) {
     if (typeof projectId !== 'string' || !projectId || projectId.length > 200) throw new Error('Invalid history document.');
     if (this.needsSync.has(projectId)) {
       // A write can reach the filesystem and still fail its flush. A retry
@@ -86,22 +112,28 @@ class EditJournal {
       await syncFile(this.filename(projectId));
       this.needsSync.delete(projectId);
     }
-    if (!this.cache.has(projectId)) {
-      const pending = indexFile(this.filename(projectId));
-      this.cache.set(projectId, pending);
-      try { return await pending; }
-      catch (error) { if (this.cache.get(projectId) === pending) this.cache.delete(projectId); throw error; }
-    }
-    return this.cache.get(projectId);
+    const target = this.filename(projectId);
+    if (!this.cache.has(projectId)) this.cache.set(projectId, indexFile(target));
+    const pending = this.cache.get(projectId);
+    try {
+      const index = await pending;
+      if (verify) await verifyPath(target, index.signature);
+      return index;
+    } catch (error) { if (this.cache.get(projectId) === pending) this.cache.delete(projectId); throw error; }
   }
   async readPage(projectId, from = 0, snapshot) {
-    const index = await this.index(projectId);
+    const index = await this.index(projectId, false);
     const totalEvents = snapshot?.totalEvents ?? index.offsets.length;
     if ((snapshot && snapshot.generation !== index.generation) || !Number.isSafeInteger(totalEvents) || totalEvents < 0 || totalEvents > index.offsets.length || !Number.isSafeInteger(from) || from < 0 || from > totalEvents) throw new Error('The editing history changed during loading.');
     let next = from;
     while (next < totalEvents && next - from < PAGE_EVENTS && (next === from || (index.offsets[next + 1] ?? index.bytes) - index.offsets[from] <= PAGE_BYTES)) next++;
-    const text = next === from ? '' : await readRange(this.filename(projectId), index.offsets[from], index.offsets[next] ?? index.bytes);
-    return { text, next, totalEvents, generation: index.generation };
+    const target = this.filename(projectId);
+    try {
+      let text = '';
+      if (next === from) await verifyPath(target, index.signature);
+      else text = await readRange(target, index.offsets[from], index.offsets[next] ?? index.bytes, index.signature);
+      return { text, next, totalEvents, generation: index.generation };
+    } catch (error) { if (error.code === 'JOURNAL_CHANGED') this.cache.delete(projectId); throw error; }
   }
   async read(projectId, sequence = Infinity) {
     const index = await this.index(projectId), totalEvents = index.offsets.length;
@@ -115,7 +147,7 @@ class EditJournal {
   }
   async append(projectId, supplied = []) {
     if (!Array.isArray(supplied)) throw new Error('Invalid editing history.');
-    const index = await this.index(projectId), target = this.filename(projectId);
+    const index = await this.index(projectId, supplied.length === 0), target = this.filename(projectId);
     const additions = [], offsets = [];
     let bytes = index.bytes, existingPage, pageStart;
     for (const event of supplied) {
@@ -137,11 +169,28 @@ class EditJournal {
     }
     if (additions.length) {
       await fs.mkdir(this.directory, { recursive: true });
-      const handle = await fs.open(target, 'a');
+      // Open existing journals without O_CREAT so a concurrent removal cannot
+      // turn an old index into a newly created empty recovery file.
+      let handle;
+      try { handle = await fs.open(target, index.signature === null ? 'a' : APPEND_EXISTING); }
+      catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        this.cache.delete(projectId); throw changedJournal();
+      }
       try {
-        if ((await handle.stat()).size !== index.bytes) throw new Error('The editing journal changed before its next edit could be saved.');
+        const before = await handle.stat({ bigint: true });
+        if (index.signature === null ? before.size !== 0n : signatureOf(before) !== index.signature) throw changedJournal();
         await handle.writeFile(additions.join('\n') + '\n'); await handle.sync();
-      } catch (error) { this.cache.delete(projectId); this.needsSync.add(projectId); throw error; }
+        const saved = await handle.stat({ bigint: true });
+        if (Number(saved.size) !== bytes) throw changedJournal();
+        const signature = signatureOf(saved);
+        await verifyPath(target, signature);
+        index.signature = signature;
+      } catch (error) {
+        this.cache.delete(projectId);
+        if (error.code !== 'JOURNAL_CHANGED') this.needsSync.add(projectId);
+        throw error;
+      }
       finally { await handle.close(); }
       for (const offset of offsets) index.offsets.push(offset);
       index.bytes = bytes;
@@ -157,7 +206,7 @@ class EditJournal {
     await fs.mkdir(this.directory, { recursive: true });
     let archived = false;
     try {
-      await fs.copyFile(target, archive, require('node:fs').constants.COPYFILE_EXCL);
+      await fs.copyFile(target, archive, constants.COPYFILE_EXCL);
       const handle = await fs.open(archive, 'r+');
       try { await handle.sync(); } finally { await handle.close(); }
       archived = true;
