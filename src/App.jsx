@@ -137,6 +137,7 @@ function Modal({ title, subtitle, children, onClose, wide = false, className = '
 
 export default function App() {
   const [workspace, setWorkspace] = useState({ tabs: [], activeId: null }), [switching, setSwitching] = useState(false), [savingNamed, setSavingNamed] = useState(false);
+  const [openingTab, setOpeningTab] = useState(null);
   const [draggingTab, setDraggingTab] = useState(null);
   const paneActions = useRef({});
   const paneTextDrag = useRef(null);
@@ -346,15 +347,16 @@ export default function App() {
     return work;
   }, []);
   useEffect(() => {
-    if (!project || locallySavedProjects.current.get(workspaceRef.current.activeId) === project) return;
-    // Avoid a second parent render when these displayed values are unchanged.
-    if (saveState !== 'pending') setSaveState('pending');
-    clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(() => saveLocal().catch(() => {}), 650);
+    if (!project) return;
     if (sessionStart.current !== null) {
       const written = Math.max(0, projectWords(project) - sessionStart.current);
       if (written !== sessionWords) setSessionWords(written);
     }
+    if (locallySavedProjects.current.get(workspaceRef.current.activeId) === project) return;
+    // Avoid a second parent render when these displayed values are unchanged.
+    if (saveState !== 'pending') setSaveState('pending');
+    clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => saveLocal().catch(() => {}), 650);
     return () => clearTimeout(autosaveTimer.current);
   }, [project, saveLocal]);
 
@@ -483,15 +485,19 @@ export default function App() {
     // edit ledger again. Keep visible projects plus four recently hidden tabs.
     const id = workspaceRef.current.activeId, warm = warmTabs.current;
     warm.delete(id); warm.set(id, { project: projectRef.current, history: historyRef.current });
-    const visible = new Set(panesRef.current.map(pane => pane.id));
-    const hidden = [...warm.keys()].filter(key => !visible.has(key));
-    while (hidden.length > 4) warm.delete(hidden.shift());
     return persist ? api.rememberProjectView(view, capturePaneViews(id), id) : undefined;
   }
-  async function installWorkspace(result, placement = null) {
+  function trimWarmTabs(panes) {
+    const visible = new Set(panes.map(pane => pane.id));
+    const hidden = [...warmTabs.current.keys()].filter(id => !visible.has(id));
+    for (const id of hidden.slice(0, -4)) {
+      warmTabs.current.delete(id);
+      locallySavedProjects.current.delete(id);
+    }
+  }
+  async function installWorkspace(result, placement = null, warm = warmTabs.current.get(result.workspace.activeId)) {
     const nextWorkspace = result.workspace;
     let cached = tabCache.current.get(nextWorkspace.activeId);
-    const warm = warmTabs.current.get(nextWorkspace.activeId);
     let next, history;
     const warmMatch = warm?.project?.id && (result.cachedProject || warm.project.id === result.project?.id && warm.project.historySequence === result.project?.historySequence);
     if (warmMatch) {
@@ -534,7 +540,8 @@ export default function App() {
       cachedChatId = cached.chatId;
     }
     let cachedMessages = Array.isArray(cached?.messages) && cachedChatId === cached?.chatId ? cached.messages : (next.chats || []).find(chat => chat.id === cachedChatId)?.messages || [];
-    if (cachedChatId) next = withChatMessages(next, cachedChatId, cachedMessages);
+    const selectedChat = getActiveChat(next);
+    if (cachedChatId && (selectedChat?.id !== cachedChatId || selectedChat.messages !== cachedMessages)) next = withChatMessages(next, cachedChatId, cachedMessages);
     let cachedActivity = cached?.agentActivity || [], pendingError = '';
     if (cached?.pendingAgent) {
       const pendingAgent = cached.pendingAgent;
@@ -582,7 +589,7 @@ export default function App() {
     }
     let nextPanes = placement ? placePane(panesRef.current, nextWorkspace.activeId, placement.target, placement.side) : panesRef.current;
     nextPanes = reconcilePanes(nextPanes, nextWorkspace.tabs.map(tab => tab.id), nextWorkspace.activeId, previousId);
-    panesRef.current = nextPanes; setPanes(nextPanes);
+    panesRef.current = nextPanes; setPanes(nextPanes); trimWarmTabs(nextPanes);
     for (const id of paneSnapshots.current.keys()) if (!nextPanes.some(pane => pane.id === id)) paneSnapshots.current.delete(id);
     if (previousId !== nextWorkspace.activeId || !keepEditor) { editorRef.current = null; setEditor(null); }
     workspaceRef.current = nextWorkspace; setWorkspace(nextWorkspace);
@@ -593,26 +600,31 @@ export default function App() {
     setSaveError(''); setSaveState('saved'); setAiError(pendingError); setRenameId(null); rejected.current = []; lastRequest.current = null; sessionStart.current = cached?.sessionStart ?? projectWords(next);
     if (pendingError) notify(pendingError);
   }
-  function projectTransition(action, recoveryOnly = false, preserveChat = false) {
+  function projectTransition(action, recoveryOnly = false, preserveChat = false, targetId = null) {
     if (transition.current || tabReordering.current) return;
-    if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action, recoveryOnly));
-    setSwitching(true);
+    if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action, recoveryOnly, preserveChat, targetId));
+    setSwitching(true); setOpeningTab(targetId);
     // Block editor input immediately while saves and view state move to the
     // destination tab. Chat requests may continue against their captured project.
     document.querySelector('.workspace')?.setAttribute('inert', '');
     const work = (async () => {
       try { clearTimeout(autosaveTimer.current); if (!preserveChat || requestRef.current?.mode !== 'chat') await dismiss(); await pendingSave.current; if (!recoveryOnly && locallySavedProjects.current.get(workspaceRef.current.activeId) !== projectRef.current) await saveLocal(); await rememberTab(); opening.current = true; await action(); }
       catch (error) { notify(errorText(error)); }
-      finally { opening.current = false; transition.current = null; setSwitching(false); document.querySelector('.workspace')?.removeAttribute('inert'); }
+      finally { opening.current = false; transition.current = null; setSwitching(false); setOpeningTab(null); document.querySelector('.workspace')?.removeAttribute('inert'); }
     })();
     transition.current = work; return work;
   }
   function switchProject(id) {
     if (id === workspaceRef.current.activeId) return;
     if (focusVisiblePane(id)) return;
+    return projectTransition(() => activateStoredTab(id), false, true, id);
+  }
+  async function activateStoredTab(id, placement) {
+    // Negotiate the cache hit after saving the outgoing view. Hold the exact
+    // snapshot across IPC when the main process omits the manuscript payload.
     const warm = warmTabs.current.get(id);
     const identity = warm?.project ? { projectId: warm.project.id, historySequence: warm.project.historySequence } : undefined;
-    return projectTransition(async () => installWorkspace(await api.activateProject(id, identity)), false, true);
+    await installWorkspace(await api.activateProject(id, identity), placement, warm);
   }
   function resizePanes(index, sizes) {
     setPanes(previous => {
@@ -625,8 +637,7 @@ export default function App() {
     if (panesRef.current.some(pane => pane.id === id)) {
       const next = placePane(panesRef.current, id, target, side); panesRef.current = next; setPanes(next); return;
     }
-    const warm = warmTabs.current.get(id), identity = warm?.project ? { projectId: warm.project.id, historySequence: warm.project.historySequence } : undefined;
-    await projectTransition(async () => installWorkspace(await api.activateProject(id, identity), { target, side }), false, true);
+    await projectTransition(() => activateStoredTab(id, { target, side }), false, true, id);
   }
   function focusVisiblePane(id) {
     if (id === workspaceRef.current.activeId) return true;
@@ -682,7 +693,7 @@ export default function App() {
       await switchProject((panesRef.current[index + 1] || panesRef.current[index - 1]).id);
       if (workspaceRef.current.activeId === id) return;
     }
-    const next = normalizePanes(panesRef.current.filter(pane => pane.id !== id)); panesRef.current = next; setPanes(next); paneSnapshots.current.delete(id);
+    const next = normalizePanes(panesRef.current.filter(pane => pane.id !== id)); panesRef.current = next; setPanes(next); paneSnapshots.current.delete(id); trimWarmTabs(next);
   }
   function closeProject(id = workspaceRef.current.activeId) {
     if (tabReordering.current) return;
@@ -708,7 +719,7 @@ export default function App() {
     if (!ids.length) return;
     return projectTransition(async () => {
       let result, preserved = false;
-      for (const closing of ids) { result = await api.closeProject(closing); preserved ||= !!result.archivedPath; tabCache.current.delete(closing); warmTabs.current.delete(closing); }
+      for (const closing of ids) { result = await api.closeProject(closing); preserved ||= !!result.archivedPath; tabCache.current.delete(closing); warmTabs.current.delete(closing); locallySavedProjects.current.delete(closing); }
       await installWorkspace(result); if (preserved) notify('Drafts preserved in File → Open recent.');
     });
   }
@@ -1631,7 +1642,7 @@ export default function App() {
     : currentSource?.state === 'changed' ? 'This file changed outside WRAITER. Load the modified version to refresh it. Your current draft will be kept in Open recent.'
     : currentSource?.state === 'unavailable' ? currentSource.message : saveError;
   return <div onDropCapture={captureFileDrop} onDragOverCapture={captureFileHover} onDragLeave={event => { const reference = event.target.closest?.(".reference-panel"); if (reference && !reference.contains(event.relatedTarget)) reference.removeAttribute("data-file-drop"); }} className={`app ${focus ? 'focus-mode' : ''}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight, '--writing-measure': `${prefs.measure}px`, '--document-zoom': (prefs.zoom || 100) / 100 }}>
-    {!focus && <ProjectTabs tabs={workspace.tabs} activeId={workspace.activeId} panes={panes} project={project} path={path} saveState={saveState} request={requestRef.current} cache={tabCache.current} disabled={switching || savingNamed || reorderingTabs || !!modal} onActivate={switchProject} onClose={closeProject} onCycle={cycleProject} onMove={moveProjectTab} onNew={createNew} onDrag={setDraggingTab} />}
+    {!focus && <ProjectTabs tabs={workspace.tabs} openingId={openingTab} activeId={workspace.activeId} panes={panes} project={project} path={path} saveState={saveState} request={requestRef.current} cache={tabCache.current} disabled={switching || savingNamed || reorderingTabs || !!modal} onActivate={switchProject} onClose={closeProject} onCycle={cycleProject} onMove={moveProjectTab} onNew={createNew} onDrag={setDraggingTab} />}
     <div className="workspace" id="project-workspace" role="tabpanel" aria-labelledby={`project-tab-${workspace.activeId}`} inert={switching || (modal && modal.type !== 'tutorial') ? true : undefined}>
       {!focus && leftOpen && <aside className="sidebar">
         <div className="project-switcher"><div className="project-avatar"><BookOpen size={21} /></div><div className="project-switcher-text"><small>YOUR MANUSCRIPT</small><button className="project-title-button" onClick={() => setModal({ type: 'rename' })} title="Rename this manuscript.">{project.title}<PenLine size={12} /></button></div></div>
