@@ -64,16 +64,23 @@ function scenePrompt(project, group, facts) {
     user: 'Use the manuscript language. Split at pivotal beats: a new encounter, discovery, decision or change of place. When travel leads to a developed conversation, give the conversation its own title. Prefer the concrete interaction (who asks whom for what, or what someone learns) over the larger quest. Repeated edits to one beat belong together. Return JSON {"sections":[{"startsAt":"A","title":"Short present-tense actor and action","summary":"One sentence about what happens."}]}. For each section copy the letter marker of its first excerpt. The first section starts at A. Choose up to four sections in order. For a deletion, identify the scene in the removed passage.\nSCENE EVIDENCE\n' +
       JSON.stringify({ manuscript: project.title, language: project.language, versionCount: group.revisions.length, samples })
   };
-  return { starts, prompt };
+  const schema = { type: 'object', required: ['sections'], properties: {
+    sections: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'object', required: ['startsAt', 'title', 'summary'], properties: {
+      startsAt: { type: 'string', enum: [...starts.keys()] }, title: { type: 'string' }, summary: { type: 'string' }
+    } } }
+  } };
+  return { starts, prompt, schema };
 }
 
 function readSections(raw, count, starts) {
-  let result = JSON.parse(String(raw).trim().replace(/^\x60\x60\x60(?:json)?\s*/i, '').replace(/\s*\x60\x60\x60$/, ''));
-  if (typeof result.completion === 'string') result = JSON.parse(result.completion);
-  if (!Array.isArray(result.sections) || !result.sections.length || result.sections.length > 4) throw new Error('Invalid scene list.');
+  const parse = text => JSON.parse(String(text).trim().replace(/^\x60\x60\x60(?:json)?\s*/i, '').replace(/\s*\x60\x60\x60$/, ''));
+  let result = parse(raw);
+  if (typeof result?.completion === 'string') result = parse(result.completion);
+  const parts = Array.isArray(result) ? result : result?.sections || (result?.startsAt ? [result] : null);
+  if (!Array.isArray(parts) || !parts.length || parts.length > 4) throw new Error('Invalid scene list.');
   let previous = 0;
-  const sections = result.sections.map((section, i) => {
-    const start = starts.get(section.startsAt), title = clean(section.title, 100), summary = clean(section.summary, 320);
+  const sections = parts.map((section, i) => {
+    const start = starts.get(clean(section?.startsAt, 8).toUpperCase()), title = clean(section?.title, 100), summary = clean(section?.summary, 320);
     if (!Number.isInteger(start) || (!i && start !== 1) || start <= previous || start > count || !title || !summary ||
         /^(?:(?:changes|edits|revisions|updates|additions|writing)(?:\s+(?:in|to|for))?\s+(?:the\s+)?(?:chapter|draft|manuscript)|(?:revised|edited|updated|created|added|removed)(?:\s+(?:writing|text)\s+(?:in|to|from))?\s+chapter\b|(?:chapter\s+[\dIVX]+|writing checkpoints|saved manuscript version)[.!]?$)/i.test(title)) throw new Error('A scene needs a specific title and version range.');
     previous = start;
@@ -138,8 +145,16 @@ class StoryHistory {
       return withModel(async (settings, key, providers, signal) => {
         if (!settings) return { status: 'busy' };
         let sections;
-        const { prompt, starts } = scenePrompt(project, group, data.facts);
-        try { sections = readSections(await providers.generateStructured(settings, key, prompt, signal), group.revisions.length, starts); }
+        const { prompt, starts, schema } = scenePrompt(project, group, data.facts);
+        try {
+          const raw = await providers.generateStructured(settings, key, prompt, signal, schema);
+          try { sections = readSections(raw, group.revisions.length, starts); }
+          catch {
+            signal?.throwIfAborted();
+            const correction = '\nReturn just the JSON scene list. The first startsAt must be A. For later scenes copy one of these excerpt markers in order: ' + [...starts.keys()].join(', ') + '. Give each scene a concrete story title.';
+            sections = readSections(await providers.generateStructured(settings, key, { ...prompt, user: prompt.user + correction }, signal, schema), group.revisions.length, starts);
+          }
+        }
         catch { return { status: signal?.aborted ? 'busy' : 'unavailable' }; }
         await this.update(state, async cache => { cache.names[groupId] = sections; return true; });
         return { status: 'ready', sections };

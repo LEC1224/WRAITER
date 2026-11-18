@@ -42,6 +42,8 @@ test('AI partitions are grounded in the supplied markers and generic titles are 
   const names = [{ startsAt: 'A', title: 'Inez mends the sail', summary: 'She stitches the torn edge.' }, { startsAt: 'C', title: 'The ferry leaves', summary: 'The boat sets out.' }];
   const parse = parts => readSections(JSON.stringify({ completion: JSON.stringify({ sections: parts }) }), 15, starts);
   assert.deepEqual(parse(names).map(s => s.end), [8, 15]);
+  assert.deepEqual(readSections(JSON.stringify(names), 15, starts), parse(names));
+  assert.deepEqual(readSections(JSON.stringify({ completion: '```json\n' + JSON.stringify(names) + '\n```' }), 15, starts), parse(names));
   for (const invalid of [[names[1]], [{ ...names[0], title: 'Revisions to Chapter 3' }], [names[0], { ...names[1], startsAt: 'D' }], [names[0], names[0]]]) assert.throws(() => parse(invalid));
 });
 

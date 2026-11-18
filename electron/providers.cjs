@@ -148,11 +148,12 @@ async function runOllamaOnce(settings, prompt, request, signal, retry = false) {
   if (mode === 'raw' || (mode === 'auto' && guidedUnavailable.has(guidedKey))) return raw();
   try {
     const guided = mode === 'auto' || mode === 'guided';
-    const chatMessages = guided ? [{ ...messages[0], content: `${messages[0].content}\nReturn JSON with exactly one string field named completion containing ${request.mode === 'agent' || request.mode === 'checkpoint' || request.alternatives ? 'the requested JSON object serialized as a JSON string' : 'the requested prose'}, with no commentary.` }, messages[1]] : messages;
-    const data = await requestJSON(endpoint(settings.baseUrl, 'api/chat'), { method: 'POST', headers, body: JSON.stringify({ ...common, messages: chatMessages, options, ...(guided ? { format: COMPLETION_SCHEMA } : {}) }) }, signal);
+    const chatMessages = guided && !request.responseSchema ? [{ ...messages[0], content: `${messages[0].content}\nReturn JSON with exactly one string field named completion containing ${request.mode === 'agent' || request.mode === 'checkpoint' || request.alternatives ? 'the requested JSON object serialized as a JSON string' : 'the requested prose'}, with no commentary.` }, messages[1]] : messages;
+    const data = await requestJSON(endpoint(settings.baseUrl, 'api/chat'), { method: 'POST', headers, body: JSON.stringify({ ...common, messages: chatMessages, options, ...(guided ? { format: request.responseSchema || COMPLETION_SCHEMA } : {}) }) }, signal);
     if (data.done_reason === 'length' && request.mode !== 'continue') throw new Error('The model reached the output limit. Increase the token limit before accepting a partial revision.');
     if (!guided) return data.message?.content;
     let parsed; try { parsed = typeof data.message?.content === 'object' ? data.message.content : JSON.parse(data.message?.content); } catch { throw new GuidedError('This Ollama model did not return a structured completion. Try Auto or Raw mode.'); }
+    if (request.responseSchema && parsed && typeof parsed === 'object') return JSON.stringify(parsed);
     if (typeof parsed?.completion !== 'string' || !parsed.completion.trim()) throw new GuidedError('This Ollama model returned no structured completion. Try Auto or Raw mode.');
     guidedUnavailable.delete(guidedKey); return parsed.completion;
   } catch (error) {
@@ -245,8 +246,8 @@ async function generate(settings, key, request, signal, suppliedPrompt, onNotice
 }
 // Only the local writing-agent module supplies this prompt. Renderer IPC never
 // accepts arbitrary system instructions or machine-tool definitions.
-async function generateStructured(settings, key, prompt, signal) {
-  return generate(settings, key, { mode: 'agent', references: [], history: [] }, signal, prompt);
+async function generateStructured(settings, key, prompt, signal, responseSchema) {
+  return generate(settings, key, { mode: 'agent', references: [], history: [], responseSchema }, signal, prompt);
 }
 // The checkpoint prompt is built and bounded by checkpoint-summary.cjs, never by renderer IPC.
 async function generateCheckpoint(settings, key, prompt, signal) {
