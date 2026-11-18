@@ -86,7 +86,7 @@ export default function BranchMergeDialog({ Modal, target, item, tabId, destinat
     finally { setBusy(false); }
   }
   return <Modal title="Merge into current draft" wide onClose={() => { if (!busy) onClose(); }} className="branch-merge-dialog">
-    <div className="merge-endpoints"><span><small>Incoming version</small><strong>{item.title || item.message}</strong></span><GitMerge size={18}/><span><small>Current draft</small><strong>{destination || target.title}</strong></span></div>
+    <div className="merge-endpoints"><span><small>Incoming version</small><strong>{item.displayTitle || item.title || item.message}</strong></span><GitMerge size={18}/><span><small>Current draft</small><strong>{destination || target.title}</strong></span></div>
     <div className="history-tabs" role="tablist" aria-label="Merge method">
       {[['normal', 'Normal merge'], ['story', 'AI-assisted merge']].map(([key, title]) => <button key={key} role="tab" aria-selected={mode === key} disabled={busy || !context} onClick={() => { if (key !== mode) { stopAdvice(); setAdvising(false); setMode(key); setError(''); } }}>{title}</button>)}
     </div>

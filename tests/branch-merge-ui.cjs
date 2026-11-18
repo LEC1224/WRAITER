@@ -11,7 +11,7 @@ const chapter = (id, title, text, marks) => ({ id, title, content: { type: 'doc'
   const dir = path.join(root, 'test-output'); await fs.mkdir(dir, { recursive: true });
   const profile = await fs.mkdtemp(path.join(dir, 'branch-merge-ui-')), git = new GitHistory(profile);
   const base = { format: 'wraiter', version: 1, id: 'branch-merge-test', title: 'The crossing', notes: 'Early notes', references: [], snapshots: [], chapters: [chapter('departure', 'Departure', 'Mara left the village.'), chapter('return', 'Homecoming', 'Mara came home.')] };
-  for (let i = 0; i < 20; i++) await git.record({ ...base, notes: 'Draft ' + i }, 'Earlier version ' + i);
+  for (let i = 0; i < 20; i++) await git.record({ ...base, chapters: [chapter('departure', 'Departure', 'Mara counts the watchbells. She hears ' + i + ' chimes.'), base.chapters[1]] }, 'Automatic checkpoint');
   const shared = await git.record(base, 'Fork');
   const gate = chapter('gate', 'At the river gate', 'Mara used the brass key.', [{ type: 'italic' }]);
   const source = await git.record({ ...base, chapters: [base.chapters[0], gate, base.chapters[1]] }, 'Forgotten crossing');
@@ -26,10 +26,7 @@ const chapter = (id, title, text, marks) => ({ id, title, content: { type: 'doc'
     const prompt = JSON.parse(body).prompt || ''; requests.push(prompt);
     let result = { title: 'Combined writing', summary: 'Updated manuscript chapters.' };
     if (prompt.includes('STORY DATA\n')) result = { placements: [{ id: 'gate', kind: 'chapter', targetId: 'market', afterBlock: 0, reason: 'The purchase comes before the gate.', continuity: 'The key is iron when Mara buys it.', edits: [{ block: 0, before: 'brass', after: 'iron', reason: 'Match the key bought at the market.' }] }] };
-    else if (prompt.includes('Group consecutive')) {
-      const count = (prompt.match(/"number":\d+/g) || []).length;
-      result = { sections: [{ end: count, title: 'Revising the departure', summary: 'Developed the early draft.' }] };
-    }
+    else if (prompt.includes('SCENE EVIDENCE')) result = { sections: [{ startsAt: 'A', title: 'Mara counts the watchbells', summary: 'Mara listens to the bells in the village.' }] };
     res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ response: JSON.stringify(result) }));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -47,20 +44,24 @@ const chapter = (id, title, text, marks) => ({ id, title, content: { type: 'doc'
     await editor.waitFor();
     await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find(item => item.label.replace(/&/g, '') === 'View').submenu.items.find(item => item.label.replace(/&/g, '') === 'Revision history').click());
     await page.getByRole('tab', { name: /^Checkpoints/ }).click();
-    const tree = page.getByRole('dialog', { name: 'Complete version tree' });
+    const tree = page.getByRole('dialog', { name: 'History map' });
     const review = page.getByRole('dialog', { name: 'Merge into current draft' });
-    const openTree = () => page.getByRole('button', { name: /Open complete tree/ }).click();
-    const card = name => tree.locator('.checkpoint-graph-card').filter({ has: page.getByRole('button', { name, exact: true }) });
+    const openTree = () => page.getByRole('button', { name: /Open history map/ }).click();
+    const inspector = tree.getByRole('complementary', { name: 'Selected history' });
+    const search = tree.getByRole('searchbox', { name: 'Find a passage or version' });
+    const choose = async name => {
+      await search.fill(name); await tree.locator('.map-results button').filter({ has: page.getByText(name, { exact: true }) }).first().click();
+      await inspector.getByRole('heading', { name, exact: true }).waitFor();
+    };
     await openTree();
-    const grouped = tree.locator('[data-range]').first(); await grouped.scrollIntoViewIfNeeded();
-    await grouped.getByRole('button', { name: 'Revising the departure' }).waitFor();
-    const count = await tree.locator('.checkpoint-graph-card').count();
-    await grouped.getByRole('button', { name: 'Expand versions' }).click();
-    assert.ok(await tree.locator('.checkpoint-graph-card').count() > count);
-    await tree.getByRole('button', { name: 'Collapse groups' }).click();
-    await tree.getByRole('button', { name: 'Zoom in' }).click(); await tree.getByRole('button', { name: 'Zoom in' }).click();
-    assert.equal(await tree.locator('[data-range]').count(), 0);
-    const openMerge = name => card(name).getByRole('button', { name: 'Merge…' }).click();
+    await search.fill('Mara counts the watchbells');
+    const passage = tree.locator('.map-results button').filter({ has: page.getByText('Mara counts the watchbells', { exact: true }) }).filter({ hasText: /\d+ versions/ }).first();
+    await passage.click();
+    const saved = inspector.locator('.map-version-list button'); assert.ok(await saved.count() >= 4);
+    await saved.first().click();
+    await inspector.getByRole('button', { name: 'Back to passage' }).click();
+    await inspector.getByRole('heading', { name: 'Saved versions' }).waitFor();
+    const openMerge = async name => { await choose(name); await inspector.getByRole('button', { name: 'Merge into current draft' }).click(); };
     await page.evaluate(() => window.wraiter.settings({ enabled: false }));
     const before = await page.evaluate(() => window.wraiter.listGitHistory());
     await openMerge('Song branch');
@@ -96,9 +97,10 @@ const chapter = (id, title, text, marks) => ({ id, title, content: { type: 'doc'
     assert.equal(snapshot.chapters[2].content.content[0].content[0].marks[0].type, 'italic');
     assert.equal(snapshot.notes, live.notes);
     await openTree();
-    await tree.locator('.checkpoint-graph-card.current').filter({ hasText: 'Merge · Forgotten crossing' }).waitFor();
-    assert.equal(await tree.locator('path.merge-edge').count(), 2);
-    await tree.locator('.checkpoint-graph-card.current').getByRole('button', { name: 'Inspect edits' }).click();
+    await tree.getByRole('button', { name: 'Current draft', exact: true }).click();
+    await inspector.getByRole('heading', { name: 'Merge · Forgotten crossing' }).waitFor();
+    assert.equal(await tree.locator('.story-world path.merged').count(), 2);
+    await inspector.getByRole('button', { name: 'Inspect edits' }).click();
     await tree.getByText('1 individual edit · newest first').waitFor();
     await page.keyboard.press('Escape');
     await page.getByRole('tab', { name: /^Every edit/ }).click();

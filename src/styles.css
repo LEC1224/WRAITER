@@ -917,35 +917,6 @@ select.field-input { padding:5px 7px; }
 .checkpoint-footer .text-button { display:inline-flex; align-items:center; gap:3px; padding:2px 0; font-size:10px; }
 .checkpoint-node.current .checkpoint-footer > span { color:var(--accent); font-weight:600; }
 .checkpoint-preview { max-height:55vh; overflow:auto; margin-top:12px; padding:10px 12px; border:1px solid var(--line); background:var(--canvas); white-space:pre-wrap; overflow-wrap:anywhere; font:12px/1.7 "Segoe UI",sans-serif; }
-.modal.version-tree-modal { width:min(1180px,100%); height:min(820px,calc(100vh - 44px)); display:flex; flex-direction:column; overflow:hidden; }
-.version-tree-modal > .modal-heading { flex:0 0 auto; }
-.checkpoint-graph-view { display:flex; flex-direction:column; min-height:0; flex:1 1 auto; }
-.checkpoint-graph-toolbar { flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:14px; padding-bottom:12px; }
-.checkpoint-graph-toolbar > p { margin:0; max-width:390px; }
-.checkpoint-graph-tools { display:flex; align-items:center; gap:8px; }
-.checkpoint-graph-tools .history-search { margin:0; min-width:190px; }
-.checkpoint-graph-tools .secondary-button { white-space:nowrap; }
-.checkpoint-graph-scroll { position:relative; flex:1 1 auto; min-height:0; overflow:auto; border:1px solid var(--line); background:var(--workspace); scrollbar-gutter:stable; }
-.checkpoint-graph-canvas { position:relative; margin:0 auto; }
-.checkpoint-graph-lines { position:absolute; inset:0; overflow:visible; pointer-events:none; }
-.checkpoint-graph-lines path { fill:none; stroke:var(--line-strong); stroke-width:1.5; }
-.checkpoint-graph-lines path.current-path { stroke:var(--accent); stroke-width:2; }
-.checkpoint-graph-card { position:absolute; width:248px; height:128px; display:flex; flex-direction:column; padding:11px 12px 9px; border:1px solid var(--line-strong); border-radius:5px; background:var(--panel); box-shadow:0 2px 8px #00000012; transition:opacity 120ms ease; }
-.checkpoint-graph-card.current-path { border-color:var(--accent); }
-.checkpoint-graph-card.current { background:var(--accent-faint); box-shadow:0 0 0 2px var(--accent); }
-.checkpoint-graph-card.dimmed { opacity:.3; }
-.checkpoint-graph-card-heading { display:flex; align-items:flex-start; gap:6px; min-width:0; color:var(--accent); }
-.checkpoint-graph-card-heading button { min-width:0; padding:0; text-align:left; color:var(--text); }
-.checkpoint-graph-card-heading button:hover { color:var(--accent); }
-.checkpoint-graph-card-heading strong { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:12px; line-height:1.3; }
-.checkpoint-graph-card .checkpoint-meta { margin-left:19px; }
-.checkpoint-graph-card-summary { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin:6px 0 0 19px; color:var(--text); font-size:11px; line-height:1.35; }
-.checkpoint-graph-card-footer { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin-top:auto; font-size:10px; }
-.checkpoint-graph-card-footer span { color:var(--muted); margin-right:auto; }
-.checkpoint-graph-card.current .checkpoint-graph-card-footer span { color:var(--accent); font-weight:600; }
-.checkpoint-graph-card-footer .text-button { display:inline-flex; align-items:center; gap:3px; padding:0; font-size:10px; }
-@media (max-width:700px) { .checkpoint-graph-toolbar { align-items:stretch; flex-direction:column; } .checkpoint-graph-toolbar > p { max-width:none; } .checkpoint-graph-tools .history-search { flex:1; min-width:0; } }
-
 .export-settings .form-grid { margin-top:4px; }
 .export-settings .field-input { width:100%; }
 .export-reset { margin-right:auto; }

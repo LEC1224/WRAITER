@@ -15,6 +15,19 @@ function ChapterDiff({ chapter, previous }) {
   </details>;
 }
 
+export function CheckpointPreview({ chapter, passage }) {
+  const ref = React.useRef(null);
+  const lines = nodeText(chapter.content, '\n', true).split('\n');
+  const fact = passage?.excerpts?.find(f => !f.removed && f.chapter === chapter.title);
+  const contains = line => line?.replace(/\s+/g, ' ').includes(fact.quote);
+  const at = !fact ? -1 : contains(lines[fact.paragraph]) ? fact.paragraph : lines.findIndex(contains);
+  React.useLayoutEffect(() => {
+    const view = ref.current, mark = view.querySelector('mark');
+    view.scrollTop = mark ? view.scrollTop + mark.getBoundingClientRect().top - view.getBoundingClientRect().top - view.clientHeight / 3 : 0;
+  }, [chapter, at]);
+  return <pre className="checkpoint-preview" ref={ref}>{lines.map((line, i) => <React.Fragment key={i}>{i > 0 && '\n'}{i === at ? <mark>{line}</mark> : line}</React.Fragment>)}</pre>;
+}
+
 export default function CheckpointEdits({ item, journal, getRevision, onBack }) {
   const [data, setData] = useState(null), [error, setError] = useState(''), [limit, setLimit] = useState(40);
   useEffect(() => {
@@ -30,8 +43,8 @@ export default function CheckpointEdits({ item, journal, getRevision, onBack }) 
   const current = new Map(data?.after.chapters.map(chapter => [chapter.id, chapter]));
   const changed = data && !data.events?.length ? [...new Set([...current.keys(), ...prior.keys()])].filter(id => JSON.stringify(current.get(id)) !== JSON.stringify(prior.get(id))) : [];
   return <div className="checkpoint-inspect">
-    <button className="text-button" onClick={onBack}><ArrowLeft size={14}/> Back to tree</button>
-    <h3>{item.title || item.message}</h3>
+    <button className="text-button" onClick={onBack}><ArrowLeft size={14}/> Back to map</button>
+    <h3>{item.displayTitle || item.title || item.message}</h3>
     {error ? <p role="alert">{error}</p> : !data ? <p role="status">Loading edits…</p> : data.events?.length ? <>
       <p className="small-muted">{data.events.length} individual {data.events.length === 1 ? 'edit' : 'edits'} · newest first</p>
       {data.events.slice(0, limit).map(({ sequence, entry }) => <details key={sequence}><summary>{entry.label} · {entry.chapterTitle || 'Manuscript'} <small>{new Date(entry.timestamp).toLocaleTimeString()}</small></summary><EditDetails entry={entry}/></details>)}
