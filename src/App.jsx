@@ -953,12 +953,12 @@ export default function App() {
     try { await saveLocal(); if (!isCurrent()) return; const result = await api.listGitHistory(projectId); if (isCurrent()) setGitHistory(result); }
     catch (error) { if (isCurrent()) setGitHistory({ available: false, entries: [], error: errorText(error) }); }
   }
-  async function createSnapshot(label) {
+  async function createSnapshot(label, preserveRevision) {
     if (typeof label !== 'string') { setModal({ type: 'snapshot' }); return; }
     try {
       await pendingSave.current;
-      await api.commitGitSnapshot(projectRef.current, label || 'Version checkpoint');
-      await loadGitHistory(); setModal(null); notify('Version saved in Git history.'); return true;
+      await api.commitGitSnapshot(projectRef.current, label || 'Version checkpoint', preserveRevision);
+      await loadGitHistory(); setModal(null); notify('Version saved.'); return true;
     } catch (error) { notify(errorText(error)); return false; }
   }
   async function previewGitVersion(item, fromMap = false) {
@@ -999,7 +999,7 @@ export default function App() {
   }
   async function restoreGitVersion(revision) {
     try {
-      if (!await createSnapshot('Before restoring a version')) return;
+      if (!await createSnapshot('Before restoring a version', revision)) return;
       const previous = await api.getGitRevision(revision);
       await api.activateGitRevision(revision);
       historyMapView.current = null;
