@@ -92,7 +92,7 @@ export default function CheckpointGraph({ history, projectId, journal, onPreview
         {rows.map(row => {
           const { item, group } = row, merged = row.parentRevisions.length > 1;
           const Icon = group ? Layers : merged ? GitMerge : GitBranch;
-          const expand = () => { focusRevision.current = group.members[0].item.revision; setExpanded(value => new Set(value).add(focusRevision.current)); };
+          const expand = () => { const first = group.members[0].item.revision; focusRevision.current = first; setExpanded(value => new Set(value).add(first)); };
           return <article key={item.revision} data-range={group?.key} className={['checkpoint-graph-card', group && 'revision-group', row.current && 'current', row.onCurrentPath && 'current-path', needle && !matches(row) && 'dimmed'].filter(Boolean).join(' ')} style={{ left: LEFT + row.lane * COLUMN, top: TOP + row.row * ROW, width: CARD_WIDTH, height: CARD_HEIGHT }}>
             <div className="checkpoint-graph-card-heading"><Icon size={15}/><button onClick={group ? expand : () => onPreview(item)}><strong>{group?.title || item.title || item.message}</strong></button></div>
             <div className="checkpoint-meta"><Clock3 size={12}/>{group ? <span>{date(group.members[0].item.date)}{date(item.date) !== date(group.members[0].item.date) && ' – ' + date(item.date)}</span> : <time dateTime={item.date}>{new Date(item.date).toLocaleString()}</time>}</div>
