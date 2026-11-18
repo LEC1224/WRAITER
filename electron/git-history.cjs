@@ -19,6 +19,9 @@ function textOf(node) {
   if (node.type === 'hardBreak') return '\n';
   return (node.content || []).map(textOf).join(['doc', 'blockquote', 'listItem', 'bulletList', 'orderedList'].includes(node.type) ? '\n' : '');
 }
+function manuscriptText(project) {
+  return [project.title, ...project.chapters.flatMap(chapter => ['\n# ' + chapter.title, textOf(chapter.content)])].join('\n') + '\n';
+}
 function contentFingerprint(project) {
   const { updatedAt, snapshots, chats, activeChatId, historySequence, binding, fileBinding, nativeBinding, ...content } = project;
   return hash(JSON.stringify(content, (key, value) => key === 'pageBreakBefore' && value == null ? undefined : value));
@@ -68,9 +71,14 @@ class GitHistory {
     if (typeof id !== 'string' || !id || id.length > 200) throw new Error('Invalid manuscript identifier.');
     return path.join(this.directory, hash(id));
   }
-  async run(directory, args) {
+  async run(directory, args, input) {
     try {
-      const result = await execute(this.executable, ['-c', 'core.hooksPath=' + path.join(this.directory, 'disabled-hooks'), '-c', 'commit.gpgsign=false', ...args], { cwd: directory, env: gitEnvironment(this.directory), windowsHide: true, timeout: 45000, maxBuffer: 75 * 1024 * 1024, encoding: 'utf8' });
+      const work = execute(this.executable, ['-c', 'core.hooksPath=' + path.join(this.directory, 'disabled-hooks'), '-c', 'commit.gpgsign=false', ...args], { cwd: directory, env: gitEnvironment(this.directory), windowsHide: true, timeout: 45000, maxBuffer: 75 * 1024 * 1024, encoding: 'utf8' });
+      if (input !== undefined) {
+        work.child.stdin.on('error', () => {}); // The process error below reports a failed or interrupted Git command.
+        work.child.stdin.end(input);
+      }
+      const result = await work;
       return result.stdout;
     } catch (error) {
       if (error.code === 'ENOENT') throw new Error('Git is not installed or is unavailable on PATH. Saving and recovery still work.');
@@ -190,8 +198,7 @@ class GitHistory {
   }
   async stageSnapshot(directory, snapshot, serialized = validatedProjectJSON(snapshot)) {
     await atomicWrite(path.join(directory, 'manuscript.json'), serialized + '\n');
-    const plain = [snapshot.title, ...snapshot.chapters.flatMap(chapter => ['\n# ' + chapter.title, textOf(chapter.content)])].join('\n') + '\n';
-    await atomicWrite(path.join(directory, 'manuscript.txt'), plain);
+    await atomicWrite(path.join(directory, 'manuscript.txt'), manuscriptText(snapshot));
     await this.run(directory, ['add', '--', 'manuscript.json', 'manuscript.txt']);
   }
   async mergeContext(directory, sourceRevision) {
@@ -220,10 +227,10 @@ class GitHistory {
     if (!validRevision(headRevision) || !validRevision(revision) || typeof branch !== 'string' || !branch.startsWith('refs/heads/')) throw new Error('The pending merge record is unreadable.');
     const actual = (await this.run(directory, ['rev-parse', branch])).trim();
     if (actual !== headRevision && actual !== revision) throw new Error('The branch changed while completing its merge.');
-    if (actual !== revision && (confirmed || !event || await this.hasMergeEvent?.(id, event))) {
-      await this.run(directory, ['update-ref', branch, revision, headRevision]);
-    } else if (actual === headRevision) {
-      await this.run(directory, ['restore', '--source=HEAD', '--staged', '--worktree', '--', 'manuscript.json', 'manuscript.txt']);
+    if (actual !== revision && event && !confirmed && !this.hasMergeEvent) throw new Error('Open this manuscript in WRAITER to finish checking its merge against the editing journal.');
+    if (actual === revision || confirmed || !event || await this.hasMergeEvent(id, event)) {
+      if (actual !== revision) await this.run(directory, ['update-ref', branch, revision, headRevision]);
+      if ((await this.run(directory, ['symbolic-ref', 'HEAD'])).trim() === branch) await this.run(directory, ['restore', '--source=' + revision, '--staged', '--worktree', '--', 'manuscript.json', 'manuscript.txt']);
     }
     await fs.unlink(file);
     this.unfinishedMerges.delete(id);
@@ -237,27 +244,25 @@ class GitHistory {
       const context = await this.mergeContext(directory, expected.sourceRevision);
       if (['headRevision', 'branch', 'baseRevision'].some(key => context[key] !== expected[key])) throw new Error('The current path changed. Review the merge again.');
       const commit = async (snapshot, parents, message, json) => {
-        await this.stageSnapshot(directory, snapshot, json);
-        const tree = (await this.run(directory, ['write-tree'])).trim();
+        // Build detached objects. A crash during preparation cannot leave a
+        // partially staged file or dirty checkout on the author's current path.
+        const blob = async data => (await this.run(directory, ['hash-object', '-w', '--stdin'], data)).trim();
+        const manuscript = await blob((json || validatedProjectJSON(snapshot)) + '\n'), plain = await blob(manuscriptText(snapshot));
+        const tree = (await this.run(directory, ['mktree'], '100644 blob ' + manuscript + '\tmanuscript.json\n100644 blob ' + plain + '\tmanuscript.txt\n')).trim();
         return (await this.run(directory, [...gitIdentity, 'commit-tree', tree, ...parents.flatMap(parent => ['-p', parent]), '-m', message])).trim();
       };
-      let first = context.headRevision, marked = false;
-      try {
-        if (this.lastHashes.get(id) !== contentFingerprint(target)) first = await commit(target, [first], 'Draft before merge');
-        const revision = await commit(merged, [first, context.sourceRevision], label, serialized);
-        const marker = { branch: context.branch, headRevision: context.headRevision, revision, event: event && { sequence: event.sequence, id: event.entry.id } };
-        await atomicWrite(path.join(directory, '.git', 'wraiter-pending-merge.json'), JSON.stringify(marker));
-        marked = true; this.unfinishedMerges.add(id);
-        // The fsynced undo event is the decision point. After an interruption
-        // initialization finishes the same ref update or restores the old index.
-        if (event) await appendEvent(event);
-        await this.finishPendingMerge(id, directory, true);
-        this.lastProjects.set(id, merged); this.lastHashes.set(id, contentFingerprint(merged)); this.lastError = '';
-        return { revision, parentRevisions: [first, context.sourceRevision] };
-      } catch (error) {
-        if (!marked) await this.run(directory, ['restore', '--source=HEAD', '--staged', '--worktree', '--', 'manuscript.json', 'manuscript.txt']);
-        throw error;
-      }
+      let first = context.headRevision;
+      if (this.lastHashes.get(id) !== contentFingerprint(target)) first = await commit(target, [first], 'Draft before merge');
+      const revision = await commit(merged, [first, context.sourceRevision], label, serialized);
+      const marker = { branch: context.branch, headRevision: context.headRevision, revision, event: event && { sequence: event.sequence, id: event.entry.id } };
+      await atomicWrite(path.join(directory, '.git', 'wraiter-pending-merge.json'), JSON.stringify(marker));
+      this.unfinishedMerges.add(id);
+      // The fsynced undo event is the decision point. After an interruption
+      // initialization finishes the same ref update or restores the old index.
+      if (event) await appendEvent(event);
+      await this.finishPendingMerge(id, directory, true);
+      this.lastProjects.set(id, merged); this.lastHashes.set(id, contentFingerprint(merged)); this.lastError = '';
+      return { revision, parentRevisions: [first, context.sourceRevision] };
     });
   }
   // Selecting an older point creates a new named branch. The old branch tip
