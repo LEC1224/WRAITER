@@ -616,6 +616,26 @@ app.whenReady().then(async () => {
     const context = await gitHistory.prepareMerge(projectId, sourceRevision);
     return { ...context, targetFingerprint: contentFingerprint(target), targetSequence: target.historySequence };
   }));
+  handle('git:advise-merge', async (_e, tabId, projectId, expected, requestId) => {
+    if (!prefs.enabled) throw new Error('Enable AI writing assistance in Settings → Connections to suggest a merge.');
+    if (typeof requestId !== 'string' || !/^story-merge-[a-f0-9-]{36}$/.test(requestId)) throw new Error('Invalid merge request.');
+    const target = workspace.documentEntry(tabId, projectId).store.project;
+    if (target.historySequence !== expected.targetSequence || contentFingerprint(target) !== expected.targetFingerprint) throw new Error('The draft changed. Reopen the merge.');
+    const controller = new AbortController(); controller.kind = 'story-merge'; controller.requestId = requestId;
+    let finished; controller.finished = new Promise(resolve => { finished = resolve; });
+    const timeout = setTimeout(() => controller.abort(), 240000);
+    try {
+      await reserveForegroundRequest(requestId, controller, 'Finish the current AI request before suggesting a merge.');
+      const context = await gitHistory.prepareMerge(projectId, expected.sourceRevision);
+      if (context.headRevision !== expected.headRevision || context.branch !== expected.branch) throw new Error('The path changed. Reopen the merge.');
+      const { incomingWriting, suggestStoryPlacements } = await import('./story-merge.mjs');
+      const candidates = incomingWriting(context.base, target, context.source);
+      if (!candidates.length) throw new Error('This version has no new or revised passages to place. Use Normal merge for its other changes.');
+      const settings = resolveTask(prefs, 'chat'), key = await getKey(settings);
+      return await suggestStoryPlacements(target, candidates, prompt => providers.generateStructured(settings, key, prompt, controller.signal), controller.signal);
+    } finally { clearTimeout(timeout); if (activeRequests.get(requestId) === controller) activeRequests.delete(requestId); finished(); }
+  });
+  handle('git:cancel-advice', (_e, requestId) => cancelRequests(controller => controller.kind === 'story-merge' && controller.requestId === requestId));
   handle('git:apply-merge', (_e, tabId, context, project, event, title) => serial(async () => {
     validateProject(project);
     const targetStore = workspace.documentEntry(tabId, project.id).store, target = targetStore.project;

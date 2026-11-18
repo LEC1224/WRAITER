@@ -10,3 +10,12 @@
 .merge-result li { padding:4px 0; }
 .branch-merge-dialog summary { cursor:pointer; }
 .branch-merge-dialog .modal-footer small { margin-right:auto; color:var(--muted); }
+.story-placement { padding:0 0 12px; border-bottom:1px solid var(--line); }
+.story-placement h4 { margin:14px 0 3px; }
+.story-placement p { margin:5px 0 12px; }
+.story-position { display:flex; flex-wrap:wrap; gap:10px; }
+.story-position label { display:grid; gap:5px; font-size:12px; min-width:0; }
+.story-position input { max-width:80px; }
+.story-adaptation { display:flex; align-items:flex-start; gap:9px; margin:8px 0; padding:9px; background:var(--workspace); }
+.story-adaptation span { display:grid; gap:4px; overflow-wrap:anywhere; }
+.story-adaptation del { color:var(--muted); }
