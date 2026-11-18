@@ -1,0 +1,387 @@
+{"text":"My uncle have the only spare key.","edits":[{"start":9,"end":13,"replacement":"has"}],"category":"local-number-agreement","group":"C0001"}
+{"text":"My uncle has the only spare key.","edits":[],"category":"local-number-agreement","group":"C0001"}
+{"text":"“My uncle have the only spare key.”","edits":[],"category":"deliberate-voice","group":"C0001"}
+{"text":"The carpenter have a habit of humming.","edits":[{"start":14,"end":18,"replacement":"has"}],"category":"local-number-agreement","group":"C0002"}
+{"text":"The carpenter has a habit of humming.","edits":[],"category":"local-number-agreement","group":"C0002"}
+{"text":"“The carpenter have a habit of humming.”","edits":[],"category":"deliberate-voice","group":"C0002"}
+{"text":"The new clerk do not know the password.","edits":[{"start":14,"end":16,"replacement":"does"}],"category":"local-number-agreement","group":"C0003"}
+{"text":"The new clerk does not know the password.","edits":[],"category":"local-number-agreement","group":"C0003"}
+{"text":"“The new clerk do not know the password.”","edits":[],"category":"deliberate-voice","group":"C0003"}
+{"text":"A frightened traveler are standing by the hearth.","edits":[{"start":22,"end":25,"replacement":"is"}],"category":"local-number-agreement","group":"C0004"}
+{"text":"A frightened traveler is standing by the hearth.","edits":[],"category":"local-number-agreement","group":"C0004"}
+{"text":"“A frightened traveler are standing by the hearth.”","edits":[],"category":"deliberate-voice","group":"C0004"}
+{"text":"The young apprentice live at the end of the street.","edits":[{"start":21,"end":25,"replacement":"lives"}],"category":"local-number-agreement","group":"C0005"}
+{"text":"The young apprentice lives at the end of the street.","edits":[],"category":"local-number-agreement","group":"C0005"}
+{"text":"“The young apprentice live at the end of the street.”","edits":[],"category":"deliberate-voice","group":"C0005"}
+{"text":"This old bridge shake whenever a cart crosses.","edits":[{"start":16,"end":21,"replacement":"shakes"}],"category":"local-number-agreement","group":"C0006"}
+{"text":"This old bridge shakes whenever a cart crosses.","edits":[],"category":"local-number-agreement","group":"C0006"}
+{"text":"“This old bridge shake whenever a cart crosses.”","edits":[],"category":"deliberate-voice","group":"C0006"}
+{"text":"That narrow passage lead toward the kitchens.","edits":[{"start":20,"end":24,"replacement":"leads"}],"category":"local-number-agreement","group":"C0007"}
+{"text":"That narrow passage leads toward the kitchens.","edits":[],"category":"local-number-agreement","group":"C0007"}
+{"text":"“That narrow passage lead toward the kitchens.”","edits":[],"category":"deliberate-voice","group":"C0007"}
+{"text":"The tired soldier want a quiet place to rest.","edits":[{"start":18,"end":22,"replacement":"wants"}],"category":"local-number-agreement","group":"C0008"}
+{"text":"The tired soldier wants a quiet place to rest.","edits":[],"category":"local-number-agreement","group":"C0008"}
+{"text":"“The tired soldier want a quiet place to rest.”","edits":[],"category":"deliberate-voice","group":"C0008"}
+{"text":"The carved panel remain part of the old wall.","edits":[{"start":17,"end":23,"replacement":"remains"}],"category":"local-number-agreement","group":"C0009"}
+{"text":"The carved panel remains part of the old wall.","edits":[],"category":"local-number-agreement","group":"C0009"}
+{"text":"“The carved panel remain part of the old wall.”","edits":[],"category":"deliberate-voice","group":"C0009"}
+{"text":"His sister know nothing about the missing horse.","edits":[{"start":11,"end":15,"replacement":"knows"}],"category":"local-number-agreement","group":"C0010"}
+{"text":"His sister knows nothing about the missing horse.","edits":[],"category":"local-number-agreement","group":"C0010"}
+{"text":"“His sister know nothing about the missing horse.”","edits":[],"category":"deliberate-voice","group":"C0010"}
+{"text":"The ancient gate open only at dawn.","edits":[{"start":17,"end":21,"replacement":"opens"}],"category":"local-number-agreement","group":"C0011"}
+{"text":"The ancient gate opens only at dawn.","edits":[],"category":"local-number-agreement","group":"C0011"}
+{"text":"“The ancient gate open only at dawn.”","edits":[],"category":"deliberate-voice","group":"C0011"}
+{"text":"Our visitor hope to leave before sunrise.","edits":[{"start":12,"end":16,"replacement":"hopes"}],"category":"local-number-agreement","group":"C0012"}
+{"text":"Our visitor hopes to leave before sunrise.","edits":[],"category":"local-number-agreement","group":"C0012"}
+{"text":"“Our visitor hope to leave before sunrise.”","edits":[],"category":"deliberate-voice","group":"C0012"}
+{"text":"The prisoner tell the same tale each night.","edits":[{"start":13,"end":17,"replacement":"tells"}],"category":"local-number-agreement","group":"C0013"}
+{"text":"The prisoner tells the same tale each night.","edits":[],"category":"local-number-agreement","group":"C0013"}
+{"text":"“The prisoner tell the same tale each night.”","edits":[],"category":"deliberate-voice","group":"C0013"}
+{"text":"The guards leaves their posts at dusk.","edits":[{"start":11,"end":17,"replacement":"leave"}],"category":"local-number-agreement","group":"C0014"}
+{"text":"The guards leave their posts at dusk.","edits":[],"category":"local-number-agreement","group":"C0014"}
+{"text":"“The guards leaves their posts at dusk.”","edits":[],"category":"deliberate-voice","group":"C0014"}
+{"text":"These candles gives a strange blue light.","edits":[{"start":14,"end":19,"replacement":"give"}],"category":"local-number-agreement","group":"C0015"}
+{"text":"These candles give a strange blue light.","edits":[],"category":"local-number-agreement","group":"C0015"}
+{"text":"“These candles gives a strange blue light.”","edits":[],"category":"deliberate-voice","group":"C0015"}
+{"text":"My cousins has already gone home.","edits":[{"start":11,"end":14,"replacement":"have"}],"category":"local-number-agreement","group":"C0016"}
+{"text":"My cousins have already gone home.","edits":[],"category":"local-number-agreement","group":"C0016"}
+{"text":"“My cousins has already gone home.”","edits":[],"category":"deliberate-voice","group":"C0016"}
+{"text":"The soldiers is waiting for the signal.","edits":[{"start":13,"end":15,"replacement":"are"}],"category":"local-number-agreement","group":"C0017"}
+{"text":"The soldiers are waiting for the signal.","edits":[],"category":"local-number-agreement","group":"C0017"}
+{"text":"“The soldiers is waiting for the signal.”","edits":[],"category":"deliberate-voice","group":"C0017"}
+{"text":"The windows rattles whenever the wind rises.","edits":[{"start":12,"end":19,"replacement":"rattle"}],"category":"local-number-agreement","group":"C0018"}
+{"text":"The windows rattle whenever the wind rises.","edits":[],"category":"local-number-agreement","group":"C0018"}
+{"text":"“The windows rattles whenever the wind rises.”","edits":[],"category":"deliberate-voice","group":"C0018"}
+{"text":"The children knows what happened to the boat.","edits":[{"start":13,"end":18,"replacement":"know"}],"category":"local-number-agreement","group":"C0019"}
+{"text":"The children know what happened to the boat.","edits":[],"category":"local-number-agreement","group":"C0019"}
+{"text":"“The children knows what happened to the boat.”","edits":[],"category":"deliberate-voice","group":"C0019"}
+{"text":"The foxes sleeps under the broken steps.","edits":[{"start":10,"end":16,"replacement":"sleep"}],"category":"local-number-agreement","group":"C0020"}
+{"text":"The foxes sleep under the broken steps.","edits":[],"category":"local-number-agreement","group":"C0020"}
+{"text":"“The foxes sleeps under the broken steps.”","edits":[],"category":"deliberate-voice","group":"C0020"}
+{"text":"The lamps glows weakly in the mist.","edits":[{"start":10,"end":15,"replacement":"glow"}],"category":"local-number-agreement","group":"C0021"}
+{"text":"The lamps glow weakly in the mist.","edits":[],"category":"local-number-agreement","group":"C0021"}
+{"text":"“The lamps glows weakly in the mist.”","edits":[],"category":"deliberate-voice","group":"C0021"}
+{"text":"Their horses eats grass by the roadside.","edits":[{"start":13,"end":17,"replacement":"eat"}],"category":"local-number-agreement","group":"C0022"}
+{"text":"Their horses eat grass by the roadside.","edits":[],"category":"local-number-agreement","group":"C0022"}
+{"text":"“Their horses eats grass by the roadside.”","edits":[],"category":"deliberate-voice","group":"C0022"}
+{"text":"Those riders comes from the coast.","edits":[{"start":13,"end":18,"replacement":"come"}],"category":"local-number-agreement","group":"C0023"}
+{"text":"Those riders come from the coast.","edits":[],"category":"local-number-agreement","group":"C0023"}
+{"text":"“Those riders comes from the coast.”","edits":[],"category":"deliberate-voice","group":"C0023"}
+{"text":"The stairs rises steeply to the attic.","edits":[{"start":11,"end":16,"replacement":"rise"}],"category":"local-number-agreement","group":"C0024"}
+{"text":"The stairs rise steeply to the attic.","edits":[],"category":"local-number-agreement","group":"C0024"}
+{"text":"“The stairs rises steeply to the attic.”","edits":[],"category":"deliberate-voice","group":"C0024"}
+{"text":"The shadows moves when I turn my head.","edits":[{"start":12,"end":17,"replacement":"move"}],"category":"local-number-agreement","group":"C0025"}
+{"text":"The shadows move when I turn my head.","edits":[],"category":"local-number-agreement","group":"C0025"}
+{"text":"“The shadows moves when I turn my head.”","edits":[],"category":"deliberate-voice","group":"C0025"}
+{"text":"One of the sailors keep the watch tonight.","edits":[{"start":19,"end":23,"replacement":"keeps"}],"category":"local-number-agreement","group":"C0026"}
+{"text":"One of the sailors keeps the watch tonight.","edits":[],"category":"local-number-agreement","group":"C0026"}
+{"text":"“One of the sailors keep the watch tonight.”","edits":[],"category":"deliberate-voice","group":"C0026"}
+{"text":"One of the bottles are cracked at the neck.","edits":[{"start":19,"end":22,"replacement":"is"}],"category":"local-number-agreement","group":"C0027"}
+{"text":"One of the bottles is cracked at the neck.","edits":[],"category":"local-number-agreement","group":"C0027"}
+{"text":"“One of the bottles are cracked at the neck.”","edits":[],"category":"deliberate-voice","group":"C0027"}
+{"text":"Each of the children have a blanket.","edits":[{"start":21,"end":25,"replacement":"has"}],"category":"local-number-agreement","group":"C0028"}
+{"text":"Each of the children has a blanket.","edits":[],"category":"local-number-agreement","group":"C0028"}
+{"text":"“Each of the children have a blanket.”","edits":[],"category":"deliberate-voice","group":"C0028"}
+{"text":"Each of the windows offer a view of the square.","edits":[{"start":20,"end":25,"replacement":"offers"}],"category":"local-number-agreement","group":"C0029"}
+{"text":"Each of the windows offers a view of the square.","edits":[],"category":"local-number-agreement","group":"C0029"}
+{"text":"“Each of the windows offer a view of the square.”","edits":[],"category":"deliberate-voice","group":"C0029"}
+{"text":"One of us have been here before.","edits":[{"start":10,"end":14,"replacement":"has"}],"category":"local-number-agreement","group":"C0030"}
+{"text":"One of us has been here before.","edits":[],"category":"local-number-agreement","group":"C0030"}
+{"text":"“One of us have been here before.”","edits":[],"category":"deliberate-voice","group":"C0030"}
+{"text":"One of them were waiting by the fountain.","edits":[{"start":12,"end":16,"replacement":"was"}],"category":"local-number-agreement","group":"C0031"}
+{"text":"One of them was waiting by the fountain.","edits":[],"category":"local-number-agreement","group":"C0031"}
+{"text":"“One of them were waiting by the fountain.”","edits":[],"category":"deliberate-voice","group":"C0031"}
+{"text":"One of the dogs have a scar above its eye.","edits":[{"start":16,"end":20,"replacement":"has"}],"category":"local-number-agreement","group":"C0032"}
+{"text":"One of the dogs has a scar above its eye.","edits":[],"category":"local-number-agreement","group":"C0032"}
+{"text":"“One of the dogs have a scar above its eye.”","edits":[],"category":"deliberate-voice","group":"C0032"}
+{"text":"Inside were a small wooden box.","edits":[{"start":7,"end":11,"replacement":"was"}],"category":"local-number-agreement","group":"C0033"}
+{"text":"Inside was a small wooden box.","edits":[],"category":"local-number-agreement","group":"C0033"}
+{"text":"“Inside were a small wooden box.”","edits":[],"category":"deliberate-voice","group":"C0033"}
+{"text":"Outside are a hungry kitten.","edits":[{"start":8,"end":11,"replacement":"is"}],"category":"local-number-agreement","group":"C0034"}
+{"text":"Outside is a hungry kitten.","edits":[],"category":"local-number-agreement","group":"C0034"}
+{"text":"“Outside are a hungry kitten.”","edits":[],"category":"deliberate-voice","group":"C0034"}
+{"text":"Upstairs were a narrow room with a broken mirror.","edits":[{"start":9,"end":13,"replacement":"was"}],"category":"local-number-agreement","group":"C0035"}
+{"text":"Upstairs was a narrow room with a broken mirror.","edits":[],"category":"local-number-agreement","group":"C0035"}
+{"text":"“Upstairs were a narrow room with a broken mirror.”","edits":[],"category":"deliberate-voice","group":"C0035"}
+{"text":"Nearby are a ruined tower.","edits":[{"start":7,"end":10,"replacement":"is"}],"category":"local-number-agreement","group":"C0036"}
+{"text":"Nearby is a ruined tower.","edits":[],"category":"local-number-agreement","group":"C0036"}
+{"text":"“Nearby are a ruined tower.”","edits":[],"category":"deliberate-voice","group":"C0036"}
+{"text":"Those journal need new bindings.","edits":[{"start":6,"end":13,"replacement":"journals"}],"category":"demonstrative-number","group":"C0037"}
+{"text":"Those journals need new bindings.","edits":[],"category":"demonstrative-number","group":"C0037"}
+{"text":"“Those journal need new bindings.”","edits":[],"category":"deliberate-voice","group":"C0037"}
+{"text":"These bone were found in the garden.","edits":[{"start":6,"end":10,"replacement":"bones"}],"category":"demonstrative-number","group":"C0038"}
+{"text":"These bones were found in the garden.","edits":[],"category":"demonstrative-number","group":"C0038"}
+{"text":"“These bone were found in the garden.”","edits":[],"category":"deliberate-voice","group":"C0038"}
+{"text":"Those horse belong to the keeper.","edits":[{"start":6,"end":11,"replacement":"horses"}],"category":"demonstrative-number","group":"C0039"}
+{"text":"Those horses belong to the keeper.","edits":[],"category":"demonstrative-number","group":"C0039"}
+{"text":"“Those horse belong to the keeper.”","edits":[],"category":"deliberate-voice","group":"C0039"}
+{"text":"These small cup are for the children.","edits":[{"start":12,"end":15,"replacement":"cups"}],"category":"demonstrative-number","group":"C0040"}
+{"text":"These small cups are for the children.","edits":[],"category":"demonstrative-number","group":"C0040"}
+{"text":"“These small cup are for the children.”","edits":[],"category":"deliberate-voice","group":"C0040"}
+{"text":"Those old letter should be burned.","edits":[{"start":10,"end":16,"replacement":"letters"}],"category":"demonstrative-number","group":"C0041"}
+{"text":"Those old letters should be burned.","edits":[],"category":"demonstrative-number","group":"C0041"}
+{"text":"“Those old letter should be burned.”","edits":[],"category":"deliberate-voice","group":"C0041"}
+{"text":"These heavy box came from the cellar.","edits":[{"start":12,"end":15,"replacement":"boxes"}],"category":"demonstrative-number","group":"C0042"}
+{"text":"These heavy boxes came from the cellar.","edits":[],"category":"demonstrative-number","group":"C0042"}
+{"text":"“These heavy box came from the cellar.”","edits":[],"category":"deliberate-voice","group":"C0042"}
+{"text":"Those knife are still sharp.","edits":[{"start":6,"end":11,"replacement":"knives"}],"category":"demonstrative-number","group":"C0043"}
+{"text":"Those knives are still sharp.","edits":[],"category":"demonstrative-number","group":"C0043"}
+{"text":"“Those knife are still sharp.”","edits":[],"category":"deliberate-voice","group":"C0043"}
+{"text":"These figure were carved by hand.","edits":[{"start":6,"end":12,"replacement":"figures"}],"category":"demonstrative-number","group":"C0044"}
+{"text":"These figures were carved by hand.","edits":[],"category":"demonstrative-number","group":"C0044"}
+{"text":"“These figure were carved by hand.”","edits":[],"category":"deliberate-voice","group":"C0044"}
+{"text":"Those wolf are the last of their kind.","edits":[{"start":6,"end":10,"replacement":"wolves"}],"category":"demonstrative-number","group":"C0045"}
+{"text":"Those wolves are the last of their kind.","edits":[],"category":"demonstrative-number","group":"C0045"}
+{"text":"“Those wolf are the last of their kind.”","edits":[],"category":"deliberate-voice","group":"C0045"}
+{"text":"These boat will take us across the river.","edits":[{"start":6,"end":10,"replacement":"boats"}],"category":"demonstrative-number","group":"C0046"}
+{"text":"These boats will take us across the river.","edits":[],"category":"demonstrative-number","group":"C0046"}
+{"text":"“These boat will take us across the river.”","edits":[],"category":"deliberate-voice","group":"C0046"}
+{"text":"Him was sitting on the windowsill.","edits":[{"start":0,"end":3,"replacement":"He"}],"category":"subject-case","group":"C0047"}
+{"text":"He was sitting on the windowsill.","edits":[],"category":"subject-case","group":"C0047"}
+{"text":"“Him was sitting on the windowsill.”","edits":[],"category":"deliberate-voice","group":"C0047"}
+{"text":"Her had already found the key.","edits":[{"start":0,"end":3,"replacement":"She"}],"category":"subject-case","group":"C0048"}
+{"text":"She had already found the key.","edits":[],"category":"subject-case","group":"C0048"}
+{"text":"“Her had already found the key.”","edits":[],"category":"deliberate-voice","group":"C0048"}
+{"text":"Them were the last to arrive.","edits":[{"start":0,"end":4,"replacement":"They"}],"category":"subject-case","group":"C0049"}
+{"text":"They were the last to arrive.","edits":[],"category":"subject-case","group":"C0049"}
+{"text":"“Them were the last to arrive.”","edits":[],"category":"deliberate-voice","group":"C0049"}
+{"text":"Me was never told about the letter.","edits":[{"start":0,"end":2,"replacement":"I"}],"category":"subject-case","group":"C0050"}
+{"text":"I was never told about the letter.","edits":[],"category":"subject-case","group":"C0050"}
+{"text":"“Me was never told about the letter.”","edits":[],"category":"deliberate-voice","group":"C0050"}
+{"text":"Us have waited long enough.","edits":[{"start":0,"end":2,"replacement":"We"}],"category":"subject-case","group":"C0051"}
+{"text":"We have waited long enough.","edits":[],"category":"subject-case","group":"C0051"}
+{"text":"“Us have waited long enough.”","edits":[],"category":"deliberate-voice","group":"C0051"}
+{"text":"Her and I crossed the narrow bridge.","edits":[{"start":0,"end":3,"replacement":"She"}],"category":"subject-case","group":"C0052"}
+{"text":"She and I crossed the narrow bridge.","edits":[],"category":"subject-case","group":"C0052"}
+{"text":"“Her and I crossed the narrow bridge.”","edits":[],"category":"deliberate-voice","group":"C0052"}
+{"text":"Him and Rowan were waiting by the well.","edits":[{"start":0,"end":3,"replacement":"He"}],"category":"subject-case","group":"C0053"}
+{"text":"He and Rowan were waiting by the well.","edits":[],"category":"subject-case","group":"C0053"}
+{"text":"“Him and Rowan were waiting by the well.”","edits":[],"category":"deliberate-voice","group":"C0053"}
+{"text":"Me and the others had gone ahead.","edits":[{"start":0,"end":2,"replacement":"I"}],"category":"subject-case","group":"C0054"}
+{"text":"I and the others had gone ahead.","edits":[],"category":"subject-case","group":"C0054"}
+{"text":"“Me and the others had gone ahead.”","edits":[],"category":"deliberate-voice","group":"C0054"}
+{"text":"Her and Tomas walked beside the cart.","edits":[{"start":0,"end":3,"replacement":"She"}],"category":"subject-case","group":"C0055"}
+{"text":"She and Tomas walked beside the cart.","edits":[],"category":"subject-case","group":"C0055"}
+{"text":"“Her and Tomas walked beside the cart.”","edits":[],"category":"deliberate-voice","group":"C0055"}
+{"text":"Him had been afraid of the dark.","edits":[{"start":0,"end":3,"replacement":"He"}],"category":"subject-case","group":"C0056"}
+{"text":"He had been afraid of the dark.","edits":[],"category":"subject-case","group":"C0056"}
+{"text":"“Him had been afraid of the dark.”","edits":[],"category":"deliberate-voice","group":"C0056"}
+{"text":"Them and I knew the path.","edits":[{"start":0,"end":4,"replacement":"They"}],"category":"subject-case","group":"C0057"}
+{"text":"They and I knew the path.","edits":[],"category":"subject-case","group":"C0057"}
+{"text":"“Them and I knew the path.”","edits":[],"category":"deliberate-voice","group":"C0057"}
+{"text":"Her could see a light beyond the trees.","edits":[{"start":0,"end":3,"replacement":"She"}],"category":"subject-case","group":"C0058"}
+{"text":"She could see a light beyond the trees.","edits":[],"category":"subject-case","group":"C0058"}
+{"text":"“Her could see a light beyond the trees.”","edits":[],"category":"deliberate-voice","group":"C0058"}
+{"text":"Your ready to leave at last.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0059"}
+{"text":"You're ready to leave at last.","edits":[],"category":"contextual-homophone","group":"C0059"}
+{"text":"“Your ready to leave at last.”","edits":[],"category":"deliberate-voice","group":"C0059"}
+{"text":"Your afraid of the wrong thing.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0060"}
+{"text":"You're afraid of the wrong thing.","edits":[],"category":"contextual-homophone","group":"C0060"}
+{"text":"“Your afraid of the wrong thing.”","edits":[],"category":"deliberate-voice","group":"C0060"}
+{"text":"Your welcome to follow us.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0061"}
+{"text":"You're welcome to follow us.","edits":[],"category":"contextual-homophone","group":"C0061"}
+{"text":"“Your welcome to follow us.”","edits":[],"category":"deliberate-voice","group":"C0061"}
+{"text":"Your certain that the map is genuine.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0062"}
+{"text":"You're certain that the map is genuine.","edits":[],"category":"contextual-homophone","group":"C0062"}
+{"text":"“Your certain that the map is genuine.”","edits":[],"category":"deliberate-voice","group":"C0062"}
+{"text":"Your late for the meeting.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0063"}
+{"text":"You're late for the meeting.","edits":[],"category":"contextual-homophone","group":"C0063"}
+{"text":"“Your late for the meeting.”","edits":[],"category":"deliberate-voice","group":"C0063"}
+{"text":"Your safe here.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0064"}
+{"text":"You're safe here.","edits":[],"category":"contextual-homophone","group":"C0064"}
+{"text":"“Your safe here.”","edits":[],"category":"deliberate-voice","group":"C0064"}
+{"text":"Your lucky to have escaped.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0065"}
+{"text":"You're lucky to have escaped.","edits":[],"category":"contextual-homophone","group":"C0065"}
+{"text":"“Your lucky to have escaped.”","edits":[],"category":"deliberate-voice","group":"C0065"}
+{"text":"Your wrong about the tower.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0066"}
+{"text":"You're wrong about the tower.","edits":[],"category":"contextual-homophone","group":"C0066"}
+{"text":"“Your wrong about the tower.”","edits":[],"category":"deliberate-voice","group":"C0066"}
+{"text":"Your tired.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0067"}
+{"text":"You're tired.","edits":[],"category":"contextual-homophone","group":"C0067"}
+{"text":"“Your tired.”","edits":[],"category":"deliberate-voice","group":"C0067"}
+{"text":"Your sure that she is coming.","edits":[{"start":0,"end":4,"replacement":"You're"}],"category":"contextual-homophone","group":"C0068"}
+{"text":"You're sure that she is coming.","edits":[],"category":"contextual-homophone","group":"C0068"}
+{"text":"“Your sure that she is coming.”","edits":[],"category":"deliberate-voice","group":"C0068"}
+{"text":"The travelers packed there blankets before dawn.","edits":[{"start":21,"end":26,"replacement":"their"}],"category":"contextual-homophone","group":"C0069"}
+{"text":"The travelers packed their blankets before dawn.","edits":[],"category":"contextual-homophone","group":"C0069"}
+{"text":"“The travelers packed there blankets before dawn.”","edits":[],"category":"deliberate-voice","group":"C0069"}
+{"text":"The children lost there coats in the crowd.","edits":[{"start":18,"end":23,"replacement":"their"}],"category":"contextual-homophone","group":"C0070"}
+{"text":"The children lost their coats in the crowd.","edits":[],"category":"contextual-homophone","group":"C0070"}
+{"text":"“The children lost there coats in the crowd.”","edits":[],"category":"deliberate-voice","group":"C0070"}
+{"text":"The hunters followed there dogs into the thicket.","edits":[{"start":21,"end":26,"replacement":"their"}],"category":"contextual-homophone","group":"C0071"}
+{"text":"The hunters followed their dogs into the thicket.","edits":[],"category":"contextual-homophone","group":"C0071"}
+{"text":"“The hunters followed there dogs into the thicket.”","edits":[],"category":"deliberate-voice","group":"C0071"}
+{"text":"The riders tightened there saddle straps.","edits":[{"start":21,"end":26,"replacement":"their"}],"category":"contextual-homophone","group":"C0072"}
+{"text":"The riders tightened their saddle straps.","edits":[],"category":"contextual-homophone","group":"C0072"}
+{"text":"“The riders tightened there saddle straps.”","edits":[],"category":"deliberate-voice","group":"C0072"}
+{"text":"The guests brought there luggage into the hall.","edits":[{"start":19,"end":24,"replacement":"their"}],"category":"contextual-homophone","group":"C0073"}
+{"text":"The guests brought their luggage into the hall.","edits":[],"category":"contextual-homophone","group":"C0073"}
+{"text":"“The guests brought there luggage into the hall.”","edits":[],"category":"deliberate-voice","group":"C0073"}
+{"text":"The guards took there swords from the rack.","edits":[{"start":16,"end":21,"replacement":"their"}],"category":"contextual-homophone","group":"C0074"}
+{"text":"The guards took their swords from the rack.","edits":[],"category":"contextual-homophone","group":"C0074"}
+{"text":"“The guards took there swords from the rack.”","edits":[],"category":"deliberate-voice","group":"C0074"}
+{"text":"The messengers found there horses waiting outside.","edits":[{"start":21,"end":26,"replacement":"their"}],"category":"contextual-homophone","group":"C0075"}
+{"text":"The messengers found their horses waiting outside.","edits":[],"category":"contextual-homophone","group":"C0075"}
+{"text":"“The messengers found there horses waiting outside.”","edits":[],"category":"deliberate-voice","group":"C0075"}
+{"text":"The sailors gathered there ropes from the deck.","edits":[{"start":21,"end":26,"replacement":"their"}],"category":"contextual-homophone","group":"C0076"}
+{"text":"The sailors gathered their ropes from the deck.","edits":[],"category":"contextual-homophone","group":"C0076"}
+{"text":"“The sailors gathered there ropes from the deck.”","edits":[],"category":"deliberate-voice","group":"C0076"}
+{"text":"Leave the lantern over their.","edits":[{"start":23,"end":28,"replacement":"there"}],"category":"contextual-homophone","group":"C0077"}
+{"text":"Leave the lantern over there.","edits":[],"category":"contextual-homophone","group":"C0077"}
+{"text":"“Leave the lantern over their.”","edits":[],"category":"deliberate-voice","group":"C0077"}
+{"text":"The sound came from their.","edits":[{"start":20,"end":25,"replacement":"there"}],"category":"contextual-homophone","group":"C0078"}
+{"text":"The sound came from there.","edits":[],"category":"contextual-homophone","group":"C0078"}
+{"text":"“The sound came from their.”","edits":[],"category":"deliberate-voice","group":"C0078"}
+{"text":"He found nothing near their.","edits":[{"start":22,"end":27,"replacement":"there"}],"category":"contextual-homophone","group":"C0079"}
+{"text":"He found nothing near there.","edits":[],"category":"contextual-homophone","group":"C0079"}
+{"text":"“He found nothing near their.”","edits":[],"category":"deliberate-voice","group":"C0079"}
+{"text":"She pointed to the marks over their.","edits":[{"start":30,"end":35,"replacement":"there"}],"category":"contextual-homophone","group":"C0080"}
+{"text":"She pointed to the marks over there.","edits":[],"category":"contextual-homophone","group":"C0080"}
+{"text":"“She pointed to the marks over their.”","edits":[],"category":"deliberate-voice","group":"C0080"}
+{"text":"I would rather turn back then risk the bridge.","edits":[{"start":25,"end":29,"replacement":"than"}],"category":"contextual-homophone","group":"C0081"}
+{"text":"I would rather turn back than risk the bridge.","edits":[],"category":"contextual-homophone","group":"C0081"}
+{"text":"“I would rather turn back then risk the bridge.”","edits":[],"category":"deliberate-voice","group":"C0081"}
+{"text":"She would rather sleep then argue all night.","edits":[{"start":23,"end":27,"replacement":"than"}],"category":"contextual-homophone","group":"C0082"}
+{"text":"She would rather sleep than argue all night.","edits":[],"category":"contextual-homophone","group":"C0082"}
+{"text":"“She would rather sleep then argue all night.”","edits":[],"category":"deliberate-voice","group":"C0082"}
+{"text":"We would rather walk then wait for a cart.","edits":[{"start":21,"end":25,"replacement":"than"}],"category":"contextual-homophone","group":"C0083"}
+{"text":"We would rather walk than wait for a cart.","edits":[],"category":"contextual-homophone","group":"C0083"}
+{"text":"“We would rather walk then wait for a cart.”","edits":[],"category":"deliberate-voice","group":"C0083"}
+{"text":"He would rather tell the truth then betray her.","edits":[{"start":31,"end":35,"replacement":"than"}],"category":"contextual-homophone","group":"C0084"}
+{"text":"He would rather tell the truth than betray her.","edits":[],"category":"contextual-homophone","group":"C0084"}
+{"text":"“He would rather tell the truth then betray her.”","edits":[],"category":"deliberate-voice","group":"C0084"}
+{"text":"Rather take the long road then cross the marsh.","edits":[{"start":26,"end":30,"replacement":"than"}],"category":"contextual-homophone","group":"C0085"}
+{"text":"Rather take the long road than cross the marsh.","edits":[],"category":"contextual-homophone","group":"C0085"}
+{"text":"“Rather take the long road then cross the marsh.”","edits":[],"category":"deliberate-voice","group":"C0085"}
+{"text":"The keeper listened careful to the faint ticking.","edits":[{"start":20,"end":27,"replacement":"carefully"}],"category":"manner-form","group":"C0086"}
+{"text":"The keeper listened carefully to the faint ticking.","edits":[],"category":"manner-form","group":"C0086"}
+{"text":"“The keeper listened careful to the faint ticking.”","edits":[],"category":"deliberate-voice","group":"C0086"}
+{"text":"She measured the rope careful.","edits":[{"start":22,"end":29,"replacement":"carefully"}],"category":"manner-form","group":"C0087"}
+{"text":"She measured the rope carefully.","edits":[],"category":"manner-form","group":"C0087"}
+{"text":"“She measured the rope careful.”","edits":[],"category":"deliberate-voice","group":"C0087"}
+{"text":"He answered the stranger careful.","edits":[{"start":25,"end":32,"replacement":"carefully"}],"category":"manner-form","group":"C0088"}
+{"text":"He answered the stranger carefully.","edits":[],"category":"manner-form","group":"C0088"}
+{"text":"“He answered the stranger careful.”","edits":[],"category":"deliberate-voice","group":"C0088"}
+{"text":"The clerk checked the figures accurate.","edits":[{"start":30,"end":38,"replacement":"accurately"}],"category":"manner-form","group":"C0089"}
+{"text":"The clerk checked the figures accurately.","edits":[],"category":"manner-form","group":"C0089"}
+{"text":"“The clerk checked the figures accurate.”","edits":[],"category":"deliberate-voice","group":"C0089"}
+{"text":"She described the old harbor accurate.","edits":[{"start":29,"end":37,"replacement":"accurately"}],"category":"manner-form","group":"C0090"}
+{"text":"She described the old harbor accurately.","edits":[],"category":"manner-form","group":"C0090"}
+{"text":"“She described the old harbor accurate.”","edits":[],"category":"deliberate-voice","group":"C0090"}
+{"text":"He sang beautiful in the empty chapel.","edits":[{"start":8,"end":17,"replacement":"beautifully"}],"category":"manner-form","group":"C0091"}
+{"text":"He sang beautifully in the empty chapel.","edits":[],"category":"manner-form","group":"C0091"}
+{"text":"“He sang beautiful in the empty chapel.”","edits":[],"category":"deliberate-voice","group":"C0091"}
+{"text":"She wrote beautiful when her hands were warm.","edits":[{"start":10,"end":19,"replacement":"beautifully"}],"category":"manner-form","group":"C0092"}
+{"text":"She wrote beautifully when her hands were warm.","edits":[],"category":"manner-form","group":"C0092"}
+{"text":"“She wrote beautiful when her hands were warm.”","edits":[],"category":"deliberate-voice","group":"C0092"}
+{"text":"The old door closed sudden.","edits":[{"start":20,"end":26,"replacement":"suddenly"}],"category":"manner-form","group":"C0093"}
+{"text":"The old door closed suddenly.","edits":[],"category":"manner-form","group":"C0093"}
+{"text":"“The old door closed sudden.”","edits":[],"category":"deliberate-voice","group":"C0093"}
+{"text":"The lantern fell sudden from its hook.","edits":[{"start":17,"end":23,"replacement":"suddenly"}],"category":"manner-form","group":"C0094"}
+{"text":"The lantern fell suddenly from its hook.","edits":[],"category":"manner-form","group":"C0094"}
+{"text":"“The lantern fell sudden from its hook.”","edits":[],"category":"deliberate-voice","group":"C0094"}
+{"text":"The quiet child stopped sudden at the gate.","edits":[{"start":24,"end":30,"replacement":"suddenly"}],"category":"manner-form","group":"C0095"}
+{"text":"The quiet child stopped suddenly at the gate.","edits":[],"category":"manner-form","group":"C0095"}
+{"text":"“The quiet child stopped sudden at the gate.”","edits":[],"category":"deliberate-voice","group":"C0095"}
+{"text":"He turned sudden toward the steps.","edits":[{"start":10,"end":16,"replacement":"suddenly"}],"category":"manner-form","group":"C0096"}
+{"text":"He turned suddenly toward the steps.","edits":[],"category":"manner-form","group":"C0096"}
+{"text":"“He turned sudden toward the steps.”","edits":[],"category":"deliberate-voice","group":"C0096"}
+{"text":"She moved deliberate through the shadows.","edits":[{"start":10,"end":20,"replacement":"deliberately"}],"category":"manner-form","group":"C0097"}
+{"text":"She moved deliberately through the shadows.","edits":[],"category":"manner-form","group":"C0097"}
+{"text":"“She moved deliberate through the shadows.”","edits":[],"category":"deliberate-voice","group":"C0097"}
+{"text":"He counted the coins deliberate.","edits":[{"start":21,"end":31,"replacement":"deliberately"}],"category":"manner-form","group":"C0098"}
+{"text":"He counted the coins deliberately.","edits":[],"category":"manner-form","group":"C0098"}
+{"text":"“He counted the coins deliberate.”","edits":[],"category":"deliberate-voice","group":"C0098"}
+{"text":"The young apprentice opened the box accidental.","edits":[{"start":36,"end":46,"replacement":"accidentally"}],"category":"manner-form","group":"C0099"}
+{"text":"The young apprentice opened the box accidentally.","edits":[],"category":"manner-form","group":"C0099"}
+{"text":"“The young apprentice opened the box accidental.”","edits":[],"category":"deliberate-voice","group":"C0099"}
+{"text":"She touched the bell accidental.","edits":[{"start":21,"end":31,"replacement":"accidentally"}],"category":"manner-form","group":"C0100"}
+{"text":"She touched the bell accidentally.","edits":[],"category":"manner-form","group":"C0100"}
+{"text":"“She touched the bell accidental.”","edits":[],"category":"deliberate-voice","group":"C0100"}
+{"text":"The bell rung when the keeper pulled the rope.","edits":[{"start":9,"end":13,"replacement":"rang"}],"category":"finite-verb-form","group":"C0101"}
+{"text":"The bell rang when the keeper pulled the rope.","edits":[],"category":"finite-verb-form","group":"C0101"}
+{"text":"“The bell rung when the keeper pulled the rope.”","edits":[],"category":"deliberate-voice","group":"C0101"}
+{"text":"The alarm rung twice before anyone woke.","edits":[{"start":10,"end":14,"replacement":"rang"}],"category":"finite-verb-form","group":"C0102"}
+{"text":"The alarm rang twice before anyone woke.","edits":[],"category":"finite-verb-form","group":"C0102"}
+{"text":"“The alarm rung twice before anyone woke.”","edits":[],"category":"deliberate-voice","group":"C0102"}
+{"text":"The clock rung at midnight.","edits":[{"start":10,"end":14,"replacement":"rang"}],"category":"finite-verb-form","group":"C0103"}
+{"text":"The clock rang at midnight.","edits":[],"category":"finite-verb-form","group":"C0103"}
+{"text":"“The clock rung at midnight.”","edits":[],"category":"deliberate-voice","group":"C0103"}
+{"text":"He swum all the way across the lake.","edits":[{"start":3,"end":7,"replacement":"swam"}],"category":"finite-verb-form","group":"C0104"}
+{"text":"He swam all the way across the lake.","edits":[],"category":"finite-verb-form","group":"C0104"}
+{"text":"“He swum all the way across the lake.”","edits":[],"category":"deliberate-voice","group":"C0104"}
+{"text":"She sung beside the window until dawn.","edits":[{"start":4,"end":8,"replacement":"sang"}],"category":"finite-verb-form","group":"C0105"}
+{"text":"She sang beside the window until dawn.","edits":[],"category":"finite-verb-form","group":"C0105"}
+{"text":"“She sung beside the window until dawn.”","edits":[],"category":"deliberate-voice","group":"C0105"}
+{"text":"They begun before anyone gave the signal.","edits":[{"start":5,"end":10,"replacement":"began"}],"category":"finite-verb-form","group":"C0106"}
+{"text":"They began before anyone gave the signal.","edits":[],"category":"finite-verb-form","group":"C0106"}
+{"text":"“They begun before anyone gave the signal.”","edits":[],"category":"deliberate-voice","group":"C0106"}
+{"text":"I lay the letter on the shelf yesterday.","edits":[{"start":2,"end":5,"replacement":"laid"}],"category":"finite-verb-form","group":"C0107"}
+{"text":"I laid the letter on the shelf yesterday.","edits":[],"category":"finite-verb-form","group":"C0107"}
+{"text":"“I lay the letter on the shelf yesterday.”","edits":[],"category":"deliberate-voice","group":"C0107"}
+{"text":"She lay a sword on the altar last night.","edits":[{"start":4,"end":7,"replacement":"laid"}],"category":"finite-verb-form","group":"C0108"}
+{"text":"She laid a sword on the altar last night.","edits":[],"category":"finite-verb-form","group":"C0108"}
+{"text":"“She lay a sword on the altar last night.”","edits":[],"category":"deliberate-voice","group":"C0108"}
+{"text":"The keeper lay his hand on the gate two hours ago.","edits":[{"start":11,"end":14,"replacement":"laid"}],"category":"finite-verb-form","group":"C0109"}
+{"text":"The keeper laid his hand on the gate two hours ago.","edits":[],"category":"finite-verb-form","group":"C0109"}
+{"text":"“The keeper lay his hand on the gate two hours ago.”","edits":[],"category":"deliberate-voice","group":"C0109"}
+{"text":"He lay the blanket on the bed yesterday.","edits":[{"start":3,"end":6,"replacement":"laid"}],"category":"finite-verb-form","group":"C0110"}
+{"text":"He laid the blanket on the bed yesterday.","edits":[],"category":"finite-verb-form","group":"C0110"}
+{"text":"“He lay the blanket on the bed yesterday.”","edits":[],"category":"deliberate-voice","group":"C0110"}
+{"text":"Her red coat had disappeared.","edits":[],"category":"contextual-hard-negative","group":"C0111"}
+{"text":"Her painted shutters glowed in the sunlight.","edits":[],"category":"contextual-hard-negative","group":"C0112"}
+{"text":"Her worn boots were by the hearth.","edits":[],"category":"contextual-hard-negative","group":"C0113"}
+{"text":"Your right to remain silent is protected.","edits":[],"category":"contextual-hard-negative","group":"C0114"}
+{"text":"Your free will is your own.","edits":[],"category":"contextual-hard-negative","group":"C0115"}
+{"text":"Your early arrival surprised the captain.","edits":[],"category":"contextual-hard-negative","group":"C0116"}
+{"text":"Your welcome to the village was warm and heartfelt.","edits":[],"category":"contextual-hard-negative","group":"C0117"}
+{"text":"Your ready wit always amused him.","edits":[],"category":"contextual-hard-negative","group":"C0118"}
+{"text":"Your late father would have been proud.","edits":[],"category":"contextual-hard-negative","group":"C0119"}
+{"text":"Those day-to-day problems can wait.","edits":[],"category":"contextual-hard-negative","group":"C0120"}
+{"text":"Those horse blankets need washing.","edits":[],"category":"contextual-hard-negative","group":"C0121"}
+{"text":"These stone walls have stood for centuries.","edits":[],"category":"contextual-hard-negative","group":"C0122"}
+{"text":"Those old book covers were hand-painted.","edits":[],"category":"contextual-hard-negative","group":"C0123"}
+{"text":"Those who know the path should go first.","edits":[],"category":"contextual-hard-negative","group":"C0124"}
+{"text":"His answer to this sudden attack was calm.","edits":[],"category":"contextual-hard-negative","group":"C0125"}
+{"text":"She answered careful questions about the missing horse.","edits":[],"category":"contextual-hard-negative","group":"C0126"}
+{"text":"The boy sang beautiful songs for the guests.","edits":[],"category":"contextual-hard-negative","group":"C0127"}
+{"text":"The keeper opened sudden gaps in the wall.","edits":[],"category":"contextual-hard-negative","group":"C0128"}
+{"text":"She looked beautiful by candlelight.","edits":[],"category":"contextual-hard-negative","group":"C0129"}
+{"text":"The frightened horse stood still.","edits":[],"category":"contextual-hard-negative","group":"C0130"}
+{"text":"He spoke quiet and low, as his father always had.","edits":[],"category":"contextual-hard-negative","group":"C0131"}
+{"text":"He walked slow through the ashes.","edits":[],"category":"contextual-hard-negative","group":"C0132"}
+{"text":"She sang loud enough to wake the house.","edits":[],"category":"contextual-hard-negative","group":"C0133"}
+{"text":"The song sung yesterday still haunted her.","edits":[],"category":"contextual-hard-negative","group":"C0134"}
+{"text":"The bells rung by the children were made of bronze.","edits":[],"category":"contextual-hard-negative","group":"C0135"}
+{"text":"The words spoken at dawn were soon forgotten.","edits":[],"category":"contextual-hard-negative","group":"C0136"}
+{"text":"He had rung the bell twice.","edits":[],"category":"contextual-hard-negative","group":"C0137"}
+{"text":"The captain had the alarm rung.","edits":[],"category":"contextual-hard-negative","group":"C0138"}
+{"text":"Lay the blanket on the bed.","edits":[],"category":"contextual-hard-negative","group":"C0139"}
+{"text":"I lay the table every evening.","edits":[],"category":"contextual-hard-negative","group":"C0140"}
+{"text":"I lay the book on the desk whenever I visit.","edits":[],"category":"contextual-hard-negative","group":"C0141"}
+{"text":"If one of the doors were open, we could get out.","edits":[],"category":"contextual-hard-negative","group":"C0142"}
+{"text":"Neither of the doors were open.","edits":[],"category":"contextual-hard-negative","group":"C0143"}
+{"text":"The family have gone to the coast.","edits":[],"category":"contextual-hard-negative","group":"C0144"}
+{"text":"The crew were drinking in the tavern.","edits":[],"category":"contextual-hard-negative","group":"C0145"}
+{"text":"The fish is fresh.","edits":[],"category":"contextual-hard-negative","group":"C0146"}
+{"text":"The sheep was asleep.","edits":[],"category":"contextual-hard-negative","group":"C0147"}
+{"text":"The deer was near the fence.","edits":[],"category":"contextual-hard-negative","group":"C0148"}
+{"text":"My groom and my page sleep in the old wing.","edits":[],"category":"contextual-hard-negative","group":"C0149"}
+{"text":"She and her brother have never seen the sea.","edits":[],"category":"contextual-hard-negative","group":"C0150"}
+{"text":"His mother and his father live in the village.","edits":[],"category":"contextual-hard-negative","group":"C0151"}
+{"text":"The clerk read the letter aloud yesterday.","edits":[],"category":"contextual-hard-negative","group":"C0152"}
+{"text":"The White Rabbit read out the names.","edits":[],"category":"contextual-hard-negative","group":"C0153"}
+{"text":"Two corner seats were still empty.","edits":[],"category":"contextual-hard-negative","group":"C0154"}
+{"text":"Two dozen eggs sat on the table.","edits":[],"category":"contextual-hard-negative","group":"C0155"}
+{"text":"The three young ladies set off together.","edits":[],"category":"contextual-hard-negative","group":"C0156"}
+{"text":"The remaining five set off together.","edits":[],"category":"contextual-hard-negative","group":"C0157"}
+{"text":"Three fire-engines were parked in the square.","edits":[],"category":"contextual-hard-negative","group":"C0158"}
+{"text":"The meeting starts at eight o’clock this morning.","edits":[],"category":"contextual-hard-negative","group":"C0159"}
+{"text":"The door of my room swung slowly open.","edits":[],"category":"contextual-hard-negative","group":"C0160"}
+{"text":"Put the basket over their heads.","edits":[],"category":"contextual-hard-negative","group":"C0161"}
+{"text":"The stars shone through their branches.","edits":[],"category":"contextual-hard-negative","group":"C0162"}
+{"text":"He waited there all evening.","edits":[],"category":"contextual-hard-negative","group":"C0163"}
+{"text":"They lost there, but won the next match.","edits":[],"category":"contextual-hard-negative","group":"C0164"}
+{"text":"I would rather wait. Then we can leave together.","edits":[],"category":"contextual-hard-negative","group":"C0165"}
+{"text":"I would rather wait, then rush in when the bell rings.","edits":[],"category":"contextual-hard-negative","group":"C0166"}
+{"text":"The boy was rather pale, then suddenly flushed.","edits":[],"category":"contextual-hard-negative","group":"C0167"}

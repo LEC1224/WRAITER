@@ -1,0 +1,146 @@
+{"text": "I wondered where was the little inn.", "edits": [{"start": 17, "end": 35, "replacement": "the little inn was"}], "category": "indirect_question", "group": "Y0001"}
+{"text": "I wondered where the little inn was.", "edits": [], "category": "correct_indirect_question", "group": "Y0001"}
+{"text": "She asked where were the missing keys.", "edits": [{"start": 16, "end": 37, "replacement": "the missing keys were"}], "category": "indirect_question", "group": "Y0002"}
+{"text": "She asked where the missing keys were.", "edits": [], "category": "correct_indirect_question", "group": "Y0002"}
+{"text": "He wondered why was the door open.", "edits": [{"start": 16, "end": 28, "replacement": "the door was"}], "category": "indirect_question", "group": "Y0003"}
+{"text": "He wondered why the door was open.", "edits": [], "category": "correct_indirect_question", "group": "Y0003"}
+{"text": "They asked when was the next ferry.", "edits": [{"start": 16, "end": 34, "replacement": "the next ferry was"}], "category": "indirect_question", "group": "Y0004"}
+{"text": "They asked when the next ferry was.", "edits": [], "category": "correct_indirect_question", "group": "Y0004"}
+{"text": "Mara knew where was the old bridge.", "edits": [{"start": 16, "end": 34, "replacement": "the old bridge was"}], "category": "indirect_question", "group": "Y0005"}
+{"text": "Mara knew where the old bridge was.", "edits": [], "category": "correct_indirect_question", "group": "Y0005"}
+{"text": "I could not remember where were the horses.", "edits": [{"start": 27, "end": 42, "replacement": "the horses were"}], "category": "indirect_question", "group": "Y0006"}
+{"text": "I could not remember where the horses were.", "edits": [], "category": "correct_indirect_question", "group": "Y0006"}
+{"text": "The child asked why was the sky red.", "edits": [{"start": 20, "end": 31, "replacement": "the sky was"}], "category": "indirect_question", "group": "Y0007"}
+{"text": "The child asked why the sky was red.", "edits": [], "category": "correct_indirect_question", "group": "Y0007"}
+{"text": "She wondered how was the patient.", "edits": [{"start": 17, "end": 32, "replacement": "the patient was"}], "category": "indirect_question", "group": "Y0008"}
+{"text": "She wondered how the patient was.", "edits": [], "category": "correct_indirect_question", "group": "Y0008"}
+{"text": "He asked who was the stranger at the gate.", "edits": [{"start": 13, "end": 29, "replacement": "the stranger was"}], "category": "indirect_question", "group": "Y0009"}
+{"text": "He asked who the stranger was at the gate.", "edits": [], "category": "correct_indirect_question", "group": "Y0009"}
+{"text": "The captain wondered where were her sailors.", "edits": [{"start": 27, "end": 43, "replacement": "her sailors were"}], "category": "indirect_question", "group": "Y0010"}
+{"text": "The captain wondered where her sailors were.", "edits": [], "category": "correct_indirect_question", "group": "Y0010"}
+{"text": "I asked when was the feast.", "edits": [{"start": 13, "end": 26, "replacement": "the feast was"}], "category": "indirect_question", "group": "Y0011"}
+{"text": "I asked when the feast was.", "edits": [], "category": "correct_indirect_question", "group": "Y0011"}
+{"text": "They wondered why were the windows dark.", "edits": [{"start": 18, "end": 34, "replacement": "the windows were"}], "category": "indirect_question", "group": "Y0012"}
+{"text": "They wondered why the windows were dark.", "edits": [], "category": "correct_indirect_question", "group": "Y0012"}
+{"text": "She wanted to know where was the nearest well.", "edits": [{"start": 25, "end": 45, "replacement": "the nearest well was"}], "category": "indirect_question", "group": "Y0013"}
+{"text": "She wanted to know where the nearest well was.", "edits": [], "category": "correct_indirect_question", "group": "Y0013"}
+{"text": "He did not know how was his brother.", "edits": [{"start": 20, "end": 35, "replacement": "his brother was"}], "category": "indirect_question", "group": "Y0014"}
+{"text": "He did not know how his brother was.", "edits": [], "category": "correct_indirect_question", "group": "Y0014"}
+{"text": "She wondered whose was the coat on the chair.", "edits": [{"start": 19, "end": 31, "replacement": "the coat was"}], "category": "indirect_question", "group": "Y0015"}
+{"text": "She wondered whose the coat was on the chair.", "edits": [], "category": "correct_indirect_question", "group": "Y0015"}
+{"text": "I asked what was the name of the village.", "edits": [{"start": 13, "end": 25, "replacement": "the name was"}], "category": "indirect_question", "group": "Y0016"}
+{"text": "I asked what the name was of the village.", "edits": [], "category": "correct_indirect_question", "group": "Y0016"}
+{"text": "He wondered where was her silver ring.", "edits": [{"start": 18, "end": 37, "replacement": "her silver ring was"}], "category": "indirect_question", "group": "Y0017"}
+{"text": "He wondered where her silver ring was.", "edits": [], "category": "correct_indirect_question", "group": "Y0017"}
+{"text": "They asked why was the captain so quiet.", "edits": [{"start": 15, "end": 30, "replacement": "the captain was"}], "category": "indirect_question", "group": "Y0018"}
+{"text": "They asked why the captain was so quiet.", "edits": [], "category": "correct_indirect_question", "group": "Y0018"}
+{"text": "\"Where was the little inn?\" she asked.", "edits": [], "category": "indirect_question_negative", "group": "Y0019"}
+{"text": "\"Why were the windows dark?\" he wondered aloud.", "edits": [], "category": "indirect_question_negative", "group": "Y0020"}
+{"text": "Where was the captain when the bells rang?", "edits": [], "category": "indirect_question_negative", "group": "Y0021"}
+{"text": "The child asked who had opened the gate.", "edits": [], "category": "indirect_question_negative", "group": "Y0022"}
+{"text": "She wondered what made the horses restless.", "edits": [], "category": "indirect_question_negative", "group": "Y0023"}
+{"text": "He knew who was standing outside.", "edits": [], "category": "indirect_question_negative", "group": "Y0024"}
+{"text": "I asked which horse belonged to her.", "edits": [], "category": "indirect_question_negative", "group": "Y0025"}
+{"text": "They wondered what was hidden beneath the floor.", "edits": [], "category": "indirect_question_negative", "group": "Y0026"}
+{"text": "She asked who was knocking at the door.", "edits": [], "category": "indirect_question_negative", "group": "Y0027"}
+{"text": "He knew what was making the noise.", "edits": [], "category": "indirect_question_negative", "group": "Y0028"}
+{"text": "\"Who was the stranger?\" Mara asked.", "edits": [], "category": "indirect_question_negative", "group": "Y0029"}
+{"text": "They asked what had happened at the gate.", "edits": [], "category": "indirect_question_negative", "group": "Y0030"}
+{"text": "He wondered which road led to the harbor.", "edits": [], "category": "indirect_question_negative", "group": "Y0031"}
+{"text": "Who was the stranger at the gate?", "edits": [], "category": "indirect_question_negative", "group": "Y0032"}
+{"text": "She has opened the letter an hour ago.", "edits": [{"start": 4, "end": 14, "replacement": "opened"}], "category": "finished_time", "group": "Y0033"}
+{"text": "She opened the letter an hour ago.", "edits": [], "category": "correct_finished_time", "group": "Y0033"}
+{"text": "He has arrived two days ago.", "edits": [{"start": 3, "end": 14, "replacement": "arrived"}], "category": "finished_time", "group": "Y0034"}
+{"text": "He arrived two days ago.", "edits": [], "category": "correct_finished_time", "group": "Y0034"}
+{"text": "They have crossed the bridge three weeks ago.", "edits": [{"start": 5, "end": 17, "replacement": "crossed"}], "category": "finished_time", "group": "Y0035"}
+{"text": "They crossed the bridge three weeks ago.", "edits": [], "category": "correct_finished_time", "group": "Y0035"}
+{"text": "I have met her a year ago.", "edits": [{"start": 2, "end": 10, "replacement": "met"}], "category": "finished_time", "group": "Y0036"}
+{"text": "I met her a year ago.", "edits": [], "category": "correct_finished_time", "group": "Y0036"}
+{"text": "The captain has left ten minutes ago.", "edits": [{"start": 12, "end": 20, "replacement": "left"}], "category": "finished_time", "group": "Y0037"}
+{"text": "The captain left ten minutes ago.", "edits": [], "category": "correct_finished_time", "group": "Y0037"}
+{"text": "We have found the key several hours ago.", "edits": [{"start": 3, "end": 13, "replacement": "found"}], "category": "finished_time", "group": "Y0038"}
+{"text": "We found the key several hours ago.", "edits": [], "category": "correct_finished_time", "group": "Y0038"}
+{"text": "Mara has written to him a month ago.", "edits": [{"start": 5, "end": 16, "replacement": "wrote"}], "category": "finished_time", "group": "Y0039"}
+{"text": "Mara wrote to him a month ago.", "edits": [], "category": "correct_finished_time", "group": "Y0039"}
+{"text": "The storm has begun two hours ago.", "edits": [{"start": 10, "end": 19, "replacement": "began"}], "category": "finished_time", "group": "Y0040"}
+{"text": "The storm began two hours ago.", "edits": [], "category": "correct_finished_time", "group": "Y0040"}
+{"text": "The guests have gone home an hour ago.", "edits": [{"start": 11, "end": 20, "replacement": "went"}], "category": "finished_time", "group": "Y0041"}
+{"text": "The guests went home an hour ago.", "edits": [], "category": "correct_finished_time", "group": "Y0041"}
+{"text": "He has broken the cup a few minutes ago.", "edits": [{"start": 3, "end": 13, "replacement": "broke"}], "category": "finished_time", "group": "Y0042"}
+{"text": "He broke the cup a few minutes ago.", "edits": [], "category": "correct_finished_time", "group": "Y0042"}
+{"text": "She has seen the raven three days ago.", "edits": [{"start": 4, "end": 12, "replacement": "saw"}], "category": "finished_time", "group": "Y0043"}
+{"text": "She saw the raven three days ago.", "edits": [], "category": "correct_finished_time", "group": "Y0043"}
+{"text": "They have built the tower many years ago.", "edits": [{"start": 5, "end": 15, "replacement": "built"}], "category": "finished_time", "group": "Y0044"}
+{"text": "They built the tower many years ago.", "edits": [], "category": "correct_finished_time", "group": "Y0044"}
+{"text": "I have lost my ring a week ago.", "edits": [{"start": 2, "end": 11, "replacement": "lost"}], "category": "finished_time", "group": "Y0045"}
+{"text": "I lost my ring a week ago.", "edits": [], "category": "correct_finished_time", "group": "Y0045"}
+{"text": "The king has died six months ago.", "edits": [{"start": 9, "end": 17, "replacement": "died"}], "category": "finished_time", "group": "Y0046"}
+{"text": "The king died six months ago.", "edits": [], "category": "correct_finished_time", "group": "Y0046"}
+{"text": "The messenger has brought the news a moment ago.", "edits": [{"start": 14, "end": 25, "replacement": "brought"}], "category": "finished_time", "group": "Y0047"}
+{"text": "The messenger brought the news a moment ago.", "edits": [], "category": "correct_finished_time", "group": "Y0047"}
+{"text": "We have spoken to the keeper two days ago.", "edits": [{"start": 3, "end": 14, "replacement": "spoke"}], "category": "finished_time", "group": "Y0048"}
+{"text": "We spoke to the keeper two days ago.", "edits": [], "category": "correct_finished_time", "group": "Y0048"}
+{"text": "The child has fallen asleep an hour ago.", "edits": [{"start": 10, "end": 20, "replacement": "fell"}], "category": "finished_time", "group": "Y0049"}
+{"text": "The child fell asleep an hour ago.", "edits": [], "category": "correct_finished_time", "group": "Y0049"}
+{"text": "The soldiers have returned five minutes ago.", "edits": [{"start": 13, "end": 26, "replacement": "returned"}], "category": "finished_time", "group": "Y0050"}
+{"text": "The soldiers returned five minutes ago.", "edits": [], "category": "correct_finished_time", "group": "Y0050"}
+{"text": "The shop has been closed since two days ago.", "edits": [], "category": "finished_time_negative", "group": "Y0051"}
+{"text": "She has told me what happened two days ago.", "edits": [], "category": "finished_time_negative", "group": "Y0052"}
+{"text": "He has described the storm that struck a week ago.", "edits": [], "category": "finished_time_negative", "group": "Y0053"}
+{"text": "I have remembered the promise I made years ago.", "edits": [], "category": "finished_time_negative", "group": "Y0054"}
+{"text": "They have found the ring she lost a month ago.", "edits": [], "category": "finished_time_negative", "group": "Y0055"}
+{"text": "The guard has reported that the ship left two hours ago.", "edits": [], "category": "finished_time_negative", "group": "Y0056"}
+{"text": "She has been waiting since an hour ago.", "edits": [], "category": "finished_time_negative", "group": "Y0057"}
+{"text": "We have known each other since ten years ago.", "edits": [], "category": "finished_time_negative", "group": "Y0058"}
+{"text": "The bridge has stood since it was built centuries ago.", "edits": [], "category": "finished_time_negative", "group": "Y0059"}
+{"text": "I have often thought about the letter I received a year ago.", "edits": [], "category": "finished_time_negative", "group": "Y0060"}
+{"text": "They have crossed the bridge before.", "edits": [], "category": "finished_time_negative", "group": "Y0061"}
+{"text": "She has opened the letter already.", "edits": [], "category": "finished_time_negative", "group": "Y0062"}
+{"text": "We have waited for two hours.", "edits": [], "category": "finished_time_negative", "group": "Y0063"}
+{"text": "The letter arrived two days ago, and she has kept it ever since.", "edits": [], "category": "finished_time_negative", "group": "Y0064"}
+{"text": "It has been two days since the messenger left.", "edits": [], "category": "finished_time_negative", "group": "Y0065"}
+{"text": "The lamp, which it took me hours to repair, finally worked.", "edits": [], "category": "relative_negative", "group": "Y0084"}
+{"text": "The gate, which it took three people to open, was enormous.", "edits": [], "category": "relative_negative", "group": "Y0085"}
+{"text": "The chest, which it took all morning to find, was empty.", "edits": [], "category": "relative_negative", "group": "Y0086"}
+{"text": "The road, which it took us days to cross, was dangerous.", "edits": [], "category": "relative_negative", "group": "Y0087"}
+{"text": "She wondered which gate it uses.", "edits": [], "category": "relative_negative", "group": "Y0088"}
+{"text": "He asked which road it followed.", "edits": [], "category": "relative_negative", "group": "Y0089"}
+{"text": "I know which key it needs.", "edits": [], "category": "relative_negative", "group": "Y0090"}
+{"text": "The horse, which she had raised from a foal, followed her.", "edits": [], "category": "relative_negative", "group": "Y0091"}
+{"text": "The story, which it pleased the king to hear, was told again.", "edits": [], "category": "relative_negative", "group": "Y0092"}
+{"text": "The path, which it was difficult to follow, vanished among the trees.", "edits": [], "category": "relative_negative", "group": "Y0093"}
+{"text": "She chose the lamp which it was easiest to carry.", "edits": [], "category": "relative_negative", "group": "Y0094"}
+{"text": "The bird, which he had found in the snow, recovered.", "edits": [], "category": "relative_negative", "group": "Y0095"}
+{"text": "The wall, which it took years to build, still stands.", "edits": [], "category": "relative_negative", "group": "Y0096"}
+{"text": "The little boat, which it seemed might sink, reached the shore.", "edits": [], "category": "relative_negative", "group": "Y0097"}
+{"text": "The ship, which it arrived at dawn, carried the queen.", "edits": [{"start": 16, "end": 19, "replacement": ""}], "category": "resumptive_relative", "group": "Y0201"}
+{"text": "The ship, which arrived at dawn, carried the queen.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0201"}
+{"text": "The necklace, which it belonged to her mother, was missing.", "edits": [{"start": 20, "end": 23, "replacement": ""}], "category": "resumptive_relative", "group": "Y0202"}
+{"text": "The necklace, which belonged to her mother, was missing.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0202"}
+{"text": "The bridge, which it collapsed overnight, had been ancient.", "edits": [{"start": 18, "end": 21, "replacement": ""}], "category": "resumptive_relative", "group": "Y0203"}
+{"text": "The bridge, which collapsed overnight, had been ancient.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0203"}
+{"text": "The candle, which it disappeared from the shelf, was red.", "edits": [{"start": 18, "end": 21, "replacement": ""}], "category": "resumptive_relative", "group": "Y0204"}
+{"text": "The candle, which disappeared from the shelf, was red.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0204"}
+{"text": "The wolf, which it died in winter, had guarded the flock.", "edits": [{"start": 16, "end": 19, "replacement": ""}], "category": "resumptive_relative", "group": "Y0205"}
+{"text": "The wolf, which died in winter, had guarded the flock.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0205"}
+{"text": "The castle, which it existed long ago, left no trace.", "edits": [{"start": 18, "end": 21, "replacement": ""}], "category": "resumptive_relative", "group": "Y0206"}
+{"text": "The castle, which existed long ago, left no trace.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0206"}
+{"text": "The accident, which it happened at dawn, frightened everyone.", "edits": [{"start": 20, "end": 23, "replacement": ""}], "category": "resumptive_relative", "group": "Y0207"}
+{"text": "The accident, which happened at dawn, frightened everyone.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0207"}
+{"text": "The bird, which it vanished before sunrise, was silver.", "edits": [{"start": 16, "end": 19, "replacement": ""}], "category": "resumptive_relative", "group": "Y0208"}
+{"text": "The bird, which vanished before sunrise, was silver.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0208"}
+{"text": "The travelers, who they arrived at sunset, sought shelter.", "edits": [{"start": 19, "end": 24, "replacement": ""}], "category": "resumptive_relative", "group": "Y0209"}
+{"text": "The travelers, who arrived at sunset, sought shelter.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0209"}
+{"text": "The guards, who they disappeared overnight, left no tracks.", "edits": [{"start": 16, "end": 21, "replacement": ""}], "category": "resumptive_relative", "group": "Y0210"}
+{"text": "The guards, who disappeared overnight, left no tracks.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0210"}
+{"text": "The healer, who she arrived at dawn, examined the child.", "edits": [{"start": 16, "end": 20, "replacement": ""}], "category": "resumptive_relative", "group": "Y0211"}
+{"text": "The healer, who arrived at dawn, examined the child.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0211"}
+{"text": "The prince, who he vanished last winter, returned home.", "edits": [{"start": 1, "end": 4, "replacement": ""}], "category": "resumptive_relative", "group": "Y0212"}
+{"text": "Tprince, who he vanished last winter, returned home.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0212"}
+{"text": "The tower, which it suddenly collapsed, blocked the road.", "edits": [{"start": 17, "end": 20, "replacement": ""}], "category": "resumptive_relative", "group": "Y0213"}
+{"text": "The tower, which suddenly collapsed, blocked the road.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0213"}
+{"text": "The bells, which they eventually disappeared, were made of gold.", "edits": [{"start": 17, "end": 22, "replacement": ""}], "category": "resumptive_relative", "group": "Y0214"}
+{"text": "The bells, which eventually disappeared, were made of gold.", "edits": [], "category": "correct_resumptive_relative", "group": "Y0214"}
+{"text": "\"The ship, which it arrived at dawn, carried the queen,\" he said in his halting English.", "edits": [], "category": "dialogue_negative", "group": "Y0215"}
+{"text": "\"The healer, who she arrived at dawn, saved him,\" the child said.", "edits": [], "category": "dialogue_negative", "group": "Y0216"}
+{"text": "\"The guards, who they disappeared overnight, were frightened,\" he explained.", "edits": [], "category": "dialogue_negative", "group": "Y0217"}

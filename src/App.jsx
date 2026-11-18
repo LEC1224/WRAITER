@@ -1,9 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { version as appVersion } from '../package.json';
-import { Feather, Plus, Search, ChevronDown, ChevronRight, ArrowLeft, ArrowUp, ArrowDown, ArrowUpRight, Check, X, Minus, Maximize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, FileCheck2, Settings2, FileText, FolderOpen, Download, Save, Copy, MoreHorizontal, Bold, Italic, Underline, RemoveFormatting, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Quote, Image, Table2, Link2, Undo2, Redo2, Sparkles, WandSparkles, BookOpen, BookMarked, MessageSquare, Send, CircleStop, RotateCcw, CheckCheck, Sun, Moon, Contrast, Focus, Clock3, History, Trash2, FilePlus2, Keyboard, ShieldCheck, Circle, CheckCircle2, LoaderCircle, ExternalLink, SlidersHorizontal, Type, PenLine, GripVertical, Info, Eye, Laptop, ChevronUp, Target } from 'lucide-react';
-import ManuscriptEditor, { extensions } from './Editor.jsx';
+import { Feather, Plus, Search, ChevronDown, ChevronRight, ArrowLeft, ArrowUp, ArrowDown, ArrowUpRight, Check, X, Minus, Maximize2, PanelLeftClose, PanelLeftOpen, PanelRightClose, FileCheck2, Settings2, FileText, FolderOpen, Download, Save, Copy, MoreHorizontal, Bold, Italic, Underline, RemoveFormatting, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Quote, Image, Table2, Link2, Undo2, Redo2, Sparkles, WandSparkles, BookOpen, BookMarked, MessageSquare, Send, CircleStop, RotateCcw, CheckCheck, Sun, Moon, Contrast, Focus, Clock3, History, Trash2, FilePlus2, Keyboard, ShieldCheck, Circle, CheckCircle2, LoaderCircle, ExternalLink, SlidersHorizontal, PenLine, GripVertical, Info, Eye, Laptop, ChevronUp, Target } from 'lucide-react';
+import { extensions } from './Editor.jsx';
+import DocumentPane from './DocumentPane.jsx';
+import MultitaskWorkspace from './MultitaskWorkspace.jsx';
+import { normalizePanes, placePane, reconcilePanes } from './multitask.js';
+import { createPaneTextDrag } from './pane-text-drag.js';
 import { ghostKey, searchKey } from './extensions.js';
-import { newProject, uid, blankContent, nodeText, wordCount, contentWordCount, rememberContentWordCount, projectWords, snapshot } from './document.js';
+import { newProject, uid, blankContent, wordCount, contentWordCount, rememberContentWordCount, projectWords, snapshot } from './document.js';
 import { importDocument, exportPayload } from './io.js';
 import { revisionTransaction, proposalChangesStructure } from './revisions.js';
 import { closeHistory } from '@tiptap/pm/history';
@@ -16,7 +21,10 @@ import { reconcileCommentChapters } from './comments.js';
 import FormatPainter from './FormatPainter.jsx';
 import { captureFormatting, pasteFormatting } from './format-painter.js';
 import Settings from './Settings.jsx';
-import { useLoggedSurface, reportError } from './diagnostics.js';
+import CloudLibrary from './CloudLibrary.jsx';
+import MobileWritingBar from './MobileWritingBar.jsx';
+import WebWritingMenu from './WebWritingMenu.jsx';
+import { useLoggedSurface, reportError, reportTabSwitch } from './diagnostics.js';
 import { SetupWizard } from './Onboarding.jsx';
 import Privacy, { ReportAI } from './Privacy.jsx';
 import WritingWalkthrough, { useWritingWalkthrough } from './WritingWalkthrough.jsx';
@@ -25,17 +33,21 @@ import { DEFAULT_HOTKEYS, shortcutFromEvent, formatShortcut, appendedDuringReque
 import { LANGUAGES, languageName } from './languages.js';
 import FontPicker from './FontPicker.jsx';
 import HighlightPicker from './HighlightPicker.jsx';
+import ColourPicker from './ColourPicker.jsx';
 import ExportDialog from './ExportDialog.jsx';
 import HistoryPanel from './HistoryPanel.jsx';
 import CheckpointGraph from './CheckpointGraph.jsx';
+import { CheckpointPreview } from './CheckpointEdits.jsx';
+import BranchMergeDialog from './BranchMergeDialog.jsx';
 import AssistantChanges from './AssistantChanges.jsx';
 import { assistantChangeSummary, assistantEditState, revertAssistantEntry } from './editorial-report.js';
-import { LAYOUTS, documentLayout } from './layouts.js';
-import { normalizeHistoryProject, prepareHistoryLoad, recordTransaction, recordProjectChange, applyHistory, historyStatus } from './history.js';
+import { LAYOUTS } from './layouts.js';
+import { useWorkspaceLayout } from './useWorkspaceLayout.js';
+import { normalizeHistoryProject, loadDocumentHistory, recordTransaction, recordProjectChange, applyHistory, historyStatus } from './history.js';
 import { applyAgentResult, rebaseAgentResult } from './agent-edits.js';
 import RephraseOptions from './RephraseOptions.jsx';
 import { insertPageBreak } from './pagination.js';
-import { hasFileTransfer, transferFiles, imageSurfaceEvent, insertPickedImage, insertDroppedImages } from './image-import.js';
+import { hasFileTransfer, transferFiles, insertPickedImage, insertDroppedImages } from './image-import.js';
 import { selectedImage, applyImageProperties } from './images.js';
 import ImageProperties from './ImageProperties.jsx';
 import TableTools from './TableTools.jsx';
@@ -43,6 +55,7 @@ import NoteDialog from './NoteDialog.jsx';
 import PageSetupDialog from './PageSetupDialog.jsx';
 import { captureNoteTarget, captureNoteAt, applyNote, removeNote } from './notes.js';
 import ChapterOutline from './ChapterOutline.jsx';
+import { duplicateChapter, MAX_CHAPTERS } from './chapter-actions.js';
 import BookmarksPanel from './BookmarksPanel.jsx';
 import TemplatesDialog from './TemplatesDialog.jsx';
 import CaseMenu from './CaseMenu.jsx';
@@ -61,15 +74,18 @@ import Thesaurus from './Thesaurus.jsx';
 import LocalGrammarDialog from './LocalGrammarDialog.jsx';
 import useInlineGrammar from './useInlineGrammar.js';
 import AIGrammarHints from './AIGrammarHints.jsx';
-import { grammarHintForMenu, grammarMenuPreview } from './ai-grammar.js';
+import { grammarCorrectionTransaction, grammarHintForMenu, grammarMenuPreview } from './ai-grammar.js';
+import { grammarKey, localGrammarHintForMenu } from './local-grammar.js';
+import { addPersonalWord } from './offline-grammar-client.js';
 import StatisticsDialog from './StatisticsDialog.jsx';
 import NamedStyles from './NamedStyles.jsx';
 import TabStops from './TabStops.jsx';
-import { applyNamedStyle, clearNamedStyles, namedStyleCSS } from './named-styles.js';
+import { applyNamedStyle, clearNamedStyles } from './named-styles.js';
 import { applyProofreadingFixes } from './proofreading.js';
 import { MAX_CHATS, MAX_CHAT_MESSAGES, activeChat as getActiveChat, adoptChatMessages, chatTitle, normalizeProjectChats, persistedChat, withActiveChat, withChatMessage, withChatMessages, withNewChat } from './chats.js';
 
 const api = window.wraiter;
+const isWeb = api?.platform === 'web';
 const schema = getSchema(extensions);
 const DEFAULTS = { pageMode: 'continuous', showRowNumbers: false, showPageNumbers: false, showParagraphNumbers: false, theme: 'paper', font: 'Cambria', fontSize: 16, lineHeight: 1.5, measure: 720, zoom: 100, predictionWords: 35, contextWords: 2000, tokenCap: 512, temperature: 0.7, allowReasoning: false, ollamaMode: 'auto', goal: 500, spellcheck: true, language: 'en-US', nativeLanguage: '', provider: 'codex', baseUrl: '', model: '', enabled: false, continuous: false, hotkeys: DEFAULT_HOTKEYS };
 const providerNames = { local: 'Local models', ollama: 'Ollama', openai: 'OpenAI', compatible: 'Compatible API / xAI', anthropic: 'Claude API', codex: 'Codex', claude: 'Claude Code' };
@@ -130,14 +146,47 @@ function Modal({ title, subtitle, children, onClose, wide = false, className = '
 
 export default function App() {
   const [workspace, setWorkspace] = useState({ tabs: [], activeId: null }), [switching, setSwitching] = useState(false), [savingNamed, setSavingNamed] = useState(false);
+  const [pendingTabCommand, setPendingTabCommand] = useState(null), [openingTab, setOpeningTab] = useState(null);
+  const [draggingTab, setDraggingTab] = useState(null);
+  const paneActions = useRef({});
+  const paneTextDrag = useRef(null);
+  if (!paneTextDrag.current) paneTextDrag.current = createPaneTextDrag();
+  useEffect(() => () => paneTextDrag.current.clear(), []);
+  const locallySavedProjects = useRef(new Map());
+  const pendingDocumentSaves = useRef(new WeakMap());
   const tourRef = useRef(null);
+  const [bootAttempt, setBootAttempt] = useState(0), [bootError, setBootError] = useState('');
   const [booted, setBooted] = useState(false), externalOpening = useRef(false), externalBlocked = useRef(true);
   const workspaceRef = useRef(workspace), tabCache = useRef(new Map()), warmTabs = useRef(new Map()), transition = useRef(null), namedSave = useRef(false), namedSaveCompletion = useRef(Promise.resolve()), restoreScroll = useRef(null), chatScrollRef = useRef(null);
   workspaceRef.current = workspace;
   const [project, setProject] = useState(null), [prefs, setPrefs] = useState(DEFAULTS), [activeId, setActiveId] = useState(null);
   const [path, setPath] = useState(null), [saveState, setSaveState] = useState('saved'), [saveError, setSaveError] = useState('');
-  const [panel, setPanel] = useState(null), [leftOpen, setLeftOpen] = useState(true), [focus, setFocus] = useState(false);
+  const [sourceStatus, setSourceStatus] = useState(null);
+  // Sidebar selection belongs to the workspace; its contents follow the active
+  // document. Restoring a tab must not close or replace the chosen sidebar.
+  const { panel, setPanel, leftOpen, setLeftOpen, focus, setFocus, historyTab, setHistoryTab,
+    panes, setPanes, panesRef, paneSnapshots, paneEditors, restoreLayout, capturePaneViews } = useWorkspaceLayout(api, booted);
   const [modal, setModal] = useState(null), [menu, setMenu] = useState(false), [toast, setToast] = useState(''), [epoch, setEpoch] = useState(0);
+  const [mobileTools, setMobileTools] = useState(false);
+  const desktopPanels = useRef({ leftOpen: true, panel: null }), currentPanels = useRef({ leftOpen, panel });
+  currentPanels.current = { leftOpen, panel };
+  useEffect(() => {
+    if (!isWeb) return;
+    const mobile = window.matchMedia('(max-width: 760px)');
+    const compact = () => {
+      if (mobile.matches) {
+        // Mobile drawers temporarily replace desktop panels. Keep the writer's
+        // desktop choices so resizing back restores open and closed panels.
+        desktopPanels.current = currentPanels.current;
+        setLeftOpen(false); setPanel(null);
+      } else {
+        setLeftOpen(desktopPanels.current.leftOpen); setPanel(desktopPanels.current.panel);
+      }
+      setMobileTools(false);
+    };
+    mobile.addEventListener('change', compact);
+    return () => mobile.removeEventListener('change', compact);
+  }, []);
   externalBlocked.current = !booted || Boolean(modal);
   const [editor, setEditor] = useState(null), [, refreshToolbar] = useState(0);
   const [tracking, setTracking] = useState(false), [activeRevision, setActiveRevision] = useState(null), [trackingIssue, setTrackingIssue] = useState('');
@@ -157,9 +206,10 @@ export default function App() {
   const projectRef = useRef(project), editorRef = useRef(editor), prefsRef = useRef(prefs), requestRef = useRef(null), autosaveTimer = useRef(null), continuousTimer = useRef(null), rejected = useRef([]), lastRequest = useRef(null), pendingSave = useRef(Promise.resolve()), nativeEncodings = useRef(new WeakMap()), opening = useRef(false), cancellation = useRef(Promise.resolve());
   const sessionStart = useRef(null), [sessionWords, setSessionWords] = useState(0);
   const [fonts, setFonts] = useState(['Cambria', 'Calibri', 'Arial', 'Georgia', 'Times New Roman']), [gitHistory, setGitHistory] = useState({ available: true, entries: [] });
+  const gitHistoryRequest = useRef(0), historyMapView = useRef(null);
   const [localProgress, setLocalProgress] = useState(null);
   const [journal, setJournal] = useState(null), [binding, setBinding] = useState(null), [agentActivity, setAgentActivity] = useState([]);
-  const historyRef = useRef(null), bindingRef = useRef(null), persistedHistory = useRef(new Map()), restoreSelection = useRef(null), revealRestoredCaret = useRef(false), historyLoadError = useRef('');
+  const historyRef = useRef(null), bindingRef = useRef(null), persistedHistory = useRef(new Map()), submittedHistory = useRef(new Map()), restoreSelection = useRef(null), revealRestoredCaret = useRef(false), historyLoadError = useRef('');
   bindingRef.current = binding;
   const documentLanguage = project?.language || prefs.language;
   const proposalRef = useRef(null); proposalRef.current = proposal;
@@ -191,7 +241,7 @@ export default function App() {
   useEffect(() => { if (documentLanguage) api?.setDocumentLanguage(documentLanguage).catch(error => notify(errorText(error))); }, [documentLanguage]);
   useEffect(() => api?.onLocalProgress(setLocalProgress), []);
   useEffect(() => { api?.listFonts().then(setFonts).catch(() => {}); }, []);
-  useEffect(() => { if (panel === 'history' && project) loadGitHistory(); }, [panel, project?.id]);
+  useEffect(() => { if (panel === 'history' && project) loadGitHistory(); }, [panel, project?.id, workspace.activeId]);
   useEffect(() => { document.getElementById(`project-tab-${workspace.activeId}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [workspace.activeId, focus]);
   useEffect(() => {
     if (panel !== 'assist' || (!messages.length && !agentActivity.length && !busy)) return;
@@ -203,6 +253,15 @@ export default function App() {
     if (!api) return;
     api.boot().then(async result => {
       prefsRef.current = { ...DEFAULTS, ...result.prefs }; setPrefs(prefsRef.current);
+      await restoreLayout(result, project => normalizeHistoryProject(project, schema));
+      // Hydrate visible documents once at startup, before mouse interaction.
+      // A click between resident panes must never load or replay a journal.
+      for (const [id, resident] of paneSnapshots.current) {
+        const restored = await loadDocumentHistory(resident.project, api, schema).catch(() => null);
+        if (!restored || restored.requiresJournalReset) continue;
+        persistedHistory.current.set(resident.project.id, restored.totalEvents || 0);
+        paneSnapshots.current.set(id, { ...resident, project: restored.project, history: restored.journal, saveState: 'saved' });
+      }
       await installWorkspace(result);
       setRecents(result.prefs.recent || []);
       if (result.warning) notify(result.warning);
@@ -210,24 +269,61 @@ export default function App() {
       if (!result.prefs.setupComplete) setModal({ type: 'setup' });
       else if (!result.prefs.tutorialComplete && !result.prefs.tutorialSession) setModal({ type: 'tutorial' });
       setBooted(true);
-    }).catch(error => notify(errorText(error)));
-  }, []);
+    }).catch(error => setBootError(errorText(error)));
+  }, [bootAttempt]);
 
   useEffect(() => {
     if (!booted || modal || switching || savingNamed || !api?.externalFilesReady) return;
     api.externalFilesReady().then(() => actionRef.current.openExternalFiles()).catch(error => notify(errorText(error)));
   }, [booted, modal, switching, savingNamed]);
+  useEffect(() => {
+    if (!booted || !path || switching || savingNamed || !api?.documentFileStatus) return;
+    const tabId = workspace.activeId, projectId = projectRef.current?.id;
+    let cancelled = false, checking = false;
+    const check = async (force = false) => {
+      if (checking || document.hidden || transition.current || namedSave.current) return;
+      checking = true;
+      try {
+        const status = await api.documentFileStatus(tabId, projectId, force);
+        if (!cancelled) setSourceStatus({ ...status, tabId });
+      } catch { /* A closing or switching tab has no status to display. */ }
+      finally { checking = false; }
+    };
+    const focus = () => { void check(true); };
+    const timer = setInterval(() => { void check(); }, 5000);
+    window.addEventListener('focus', focus);
+    document.addEventListener('visibilitychange', focus);
+    void check(true);
+    return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', focus); document.removeEventListener('visibilitychange', focus); };
+  }, [booted, workspace.activeId, path, switching, savingNamed, saveError]);
 
   function publishHistory(next) {
     historyRef.current = next; setJournal(next);
     if (historyLoadError.current) return;
-    const events = next.events.slice(persistedHistory.current.get(next.projectId) || 0);
-    if (events.length) api.appendEditHistory(next.projectId, events).then(result => persistedHistory.current.set(next.projectId, Math.max(result.sequence, persistedHistory.current.get(next.projectId) || 0))).catch(error => { setSaveError(errorText(error)); notify(errorText(error)); });
+    const id = next.projectId, durable = persistedHistory.current.get(id) || 0;
+    const writing = submittedHistory.current.get(id) || { through: durable };
+    const from = Math.max(durable, writing.through);
+    if (from >= next.events.length) return;
+    // Submit every keystroke immediately. Earlier IPC calls already carry
+    // their own events, even if the disk has not acknowledged those writes.
+    writing.through = next.events.length; submittedHistory.current.set(id, writing);
+    api.appendEditHistory(id, next.events.slice(from)).then(result => {
+      if (submittedHistory.current.get(id) !== writing) return;
+      persistedHistory.current.set(id, Math.max(result.sequence, persistedHistory.current.get(id) || 0));
+      if (result.sequence >= writing.through) submittedHistory.current.delete(id);
+    }).catch(error => {
+      if (submittedHistory.current.get(id) !== writing) return;
+      // The next edit or snapshot resends from the last confirmed sequence.
+      // Ignore late callbacks from this failed batch or a replaced lineage.
+      submittedHistory.current.delete(id);
+      if (projectRef.current?.id === id) setSaveError(errorText(error));
+      notify(errorText(error));
+    });
   }
   async function loadHistory(initial) {
+    const restored = await loadDocumentHistory(initial, api, schema);
+    submittedHistory.current.delete(initial.id);
     historyLoadError.current = '';
-    const saved = await api.loadEditHistory(initial.id).catch(error => ({ error: errorText(error) }));
-    const restored = prepareHistoryLoad(initial, saved, schema);
     if (restored.requiresJournalReset) {
       try {
         const result = await api.restartEditHistory(restored.project, restored.journal.events[0], restored.reason);
@@ -238,14 +334,14 @@ export default function App() {
         setSaveError(historyLoadError.current);
         setModal({ type: 'notice', title: 'Editing history needs attention', text: historyLoadError.current });
       }
-    } else persistedHistory.current.set(initial.id, saved.totalEvents || 0);
+    } else persistedHistory.current.set(initial.id, restored.totalEvents || 0);
     publishHistory(restored.journal);
     if (restored.recoveredEvents) notify(`Recovered ${restored.recoveredEvents} editing actions from the journal.`);
     return restored;
   }
-  async function encodeNative(captured, format = bindingRef.current?.format) {
+  async function encodeNative(captured, format = bindingRef.current?.format, capturedBinding = bindingRef.current) {
     if (!format || format === 'wraiter') return null;
-    const fidelity = bindingRef.current?.format === format ? bindingRef.current?.fidelity : undefined;
+    const fidelity = capturedBinding?.format === format ? capturedBinding?.fidelity : undefined;
     const key = JSON.stringify([format, fidelity || null]);
     let cached = nativeEncodings.current.get(captured);
     if (!cached) { cached = new Map(); nativeEncodings.current.set(captured, cached); }
@@ -255,12 +351,12 @@ export default function App() {
     }
     return cached.get(key);
   }
-  async function encodeForSave(captured, format, journal) {
-    try { return await encodeNative(captured, format); }
+  async function encodeForSave(captured, format, journal, capturedBinding = bindingRef.current, tabId = workspaceRef.current.activeId) {
+    try { return await encodeNative(captured, format, capturedBinding); }
     catch (error) {
       // A codec failure must still protect the complete draft and its journal.
       // A null native payload stages recovery without replacing the source.
-      await api.autosave(captured, null, journal?.events.slice(persistedHistory.current.get(captured.id) || 0) || []);
+      await api.autosave(captured, null, journal?.events.slice(persistedHistory.current.get(captured.id) || 0) || [], tabId);
       throw error;
     }
   }
@@ -269,28 +365,46 @@ export default function App() {
     clearTimeout(autosaveTimer.current);
     if (!projectRef.current || opening.current) return;
     if (historyLoadError.current) { setSaveState('error'); setSaveError(historyLoadError.current); throw new Error(historyLoadError.current); }
-    const captured = projectRef.current;
-    const history = historyRef.current, format = bindingRef.current?.format;
+    const captured = projectRef.current, tabId = workspaceRef.current.activeId;
+    if (pendingDocumentSaves.current.has(captured)) return pendingDocumentSaves.current.get(captured);
+    if (locallySavedProjects.current.get(tabId) === captured) return;
+    const history = historyRef.current, capturedBinding = bindingRef.current, format = capturedBinding?.format;
     setSaveState('saving');
-    const work = pendingSave.current.then(async () => api.autosave(captured, await encodeForSave(captured, format, history), history?.events.slice(persistedHistory.current.get(captured.id) || 0) || [])).then(result => {
-      if (projectRef.current === captured) { setSaveState(result.recoveryOnly ? 'recovery' : 'saved'); setSaveError(result.needsReview ? 'Edits are safe in recovery. Use Save to review this file’s format compatibility.' : ''); }
-      setPath(result.path);
-      if ('binding' in result) { bindingRef.current = result.binding; setBinding(result.binding); }
+    const work = pendingSave.current.then(async () => api.autosave(captured, await encodeForSave(captured, format, history, capturedBinding, tabId), history?.events.slice(persistedHistory.current.get(captured.id) || 0) || [], tabId)).then(result => {
+      locallySavedProjects.current.set(tabId, captured);
+      const state = result.recoveryOnly ? 'recovery' : 'saved', error = result.needsReview ? 'Edits are safe in recovery. Use Save to review this file’s format compatibility.' : '';
+      const resident = paneSnapshots.current.get(tabId);
+      if (resident) paneSnapshots.current.set(tabId, { ...resident, path: result.path, ...('binding' in result ? { binding: result.binding } : {}), ...(resident.project === captured ? { saveState: state, saveError: error } : {}) });
+      if (workspaceRef.current.activeId === tabId) {
+        if (projectRef.current === captured) { setSaveState(state); setSaveError(error); }
+        setPath(result.path);
+        if ('binding' in result) { bindingRef.current = result.binding; setBinding(result.binding); }
+      }
       return result;
-    }).catch(error => { setSaveState('error'); setSaveError(errorText(error)); throw error; });
+    }).catch(error => {
+      const detail = errorText(error), resident = paneSnapshots.current.get(tabId);
+      if (resident) paneSnapshots.current.set(tabId, { ...resident, saveState: 'error', saveError: detail });
+      if (workspaceRef.current.activeId === tabId) { setSaveState('error'); setSaveError(detail); }
+      else notify(`Could not save “${captured.title}”: ${detail}`);
+      throw error;
+    });
+    pendingDocumentSaves.current.set(captured, work);
+    work.finally(() => pendingDocumentSaves.current.delete(captured)).catch(() => {});
     pendingSave.current = work.catch(() => {});
     return work;
   }, []);
+  useEffect(() => isWeb ? api.registerSave?.(() => saveLocal()) : undefined, [saveLocal]);
   useEffect(() => {
     if (!project) return;
-    // Avoid a second parent render when these displayed values are unchanged.
-    if (saveState !== 'pending') setSaveState('pending');
-    clearTimeout(autosaveTimer.current);
-    autosaveTimer.current = setTimeout(() => saveLocal().catch(() => {}), 650);
     if (sessionStart.current !== null) {
       const written = Math.max(0, projectWords(project) - sessionStart.current);
       if (written !== sessionWords) setSessionWords(written);
     }
+    if (locallySavedProjects.current.get(workspaceRef.current.activeId) === project) return;
+    // Avoid a second parent render when these displayed values are unchanged.
+    if (saveState !== 'pending') setSaveState('pending');
+    clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => saveLocal().catch(() => {}), 650);
     return () => clearTimeout(autosaveTimer.current);
   }, [project, saveLocal]);
 
@@ -330,7 +444,7 @@ export default function App() {
     cacheTab(workspaceRef.current.activeId, { projectId: created.project.id, chatId: created.chat.id, chat: created.chat, messages: [], agentActivity: [], unread: false });
   }
   async function updatePrefs(update) {
-    const anchor = 'zoom' in update && update.zoom !== prefsRef.current.zoom ? captureReadingAnchor(document.querySelector('.writing-scroll')) : null;
+    const anchor = 'zoom' in update && update.zoom !== prefsRef.current.zoom ? captureReadingAnchor(editorRef.current?.view.dom.closest('.writing-scroll')) : null;
     try { const next = await api.settings(update); prefsRef.current = next; setPrefs(next); if (anchor) { await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); restoreReadingAnchor(anchor); } return next; }
     catch (error) { notify(errorText(error)); throw error; }
   }
@@ -376,6 +490,7 @@ export default function App() {
       pendingSave.current = work.catch(() => {});
       const result = await work;
       if (result?.chooseCopy) { namedSave.current = false; await saveNamed(true); return; }
+      if (isWeb && result?.workspace && result?.project) await installWorkspace(result);
       if (result) { setPath(result.path); setBinding(result.binding); bindingRef.current = result.binding; setSaveState('saved'); setSaveError(''); notify(copy ? 'Document saved as a new file.' : 'Document saved.'); tourRef.current?.emit('saved'); }
     }
     catch (error) { setSaveState('error'); setSaveError(errorText(error)); notify(errorText(error)); }
@@ -404,26 +519,34 @@ export default function App() {
     tabCache.current.set(id, { ...previous, chatId, chat: cachedChat, messages: nextMessages });
     return nextMessages;
   }
-  async function rememberTab() {
+  function rememberTab(persist = true) {
     if (!workspaceRef.current.activeId || !projectRef.current) return;
     const current = editorRef.current;
     const cached = tabCache.current.get(workspaceRef.current.activeId) || {};
-    const view = { chapterId: activeId, selection: current && !current.isDestroyed ? { from: current.state.selection.from, to: current.state.selection.to } : undefined, scrollTop: document.querySelector('.writing-scroll')?.scrollTop || 0 };
+    const view = { chapterId: activeId, selection: current && !current.isDestroyed ? { from: current.state.selection.from, to: current.state.selection.to } : undefined, scrollTop: current?.view.dom.closest('.writing-scroll')?.scrollTop || 0 };
+    paneSnapshots.current.set(workspaceRef.current.activeId, { project: projectRef.current, chapterId: activeId, epoch, tracking, history: historyRef.current, path, binding: bindingRef.current, saveState, saveError, historyError: historyLoadError.current });
     const selected = getActiveChat(projectRef.current);
-    tabCache.current.set(workspaceRef.current.activeId, { ...cached, projectId: projectRef.current.id, view, chatId: selected?.id || null, chat: selected, messages, instruction, panel, query, replacement, searchOpen, searchScope, searchOptions, activeSearchId, activeCommentId, sessionStart: sessionStart.current, agentActivity });
+    // Consecutive file opens can share a callback from an earlier render. Read
+    // the conversation from the current project instead of stale UI messages.
+    tabCache.current.set(workspaceRef.current.activeId, { ...cached, projectId: projectRef.current.id, view, chatId: selected?.id || null, chat: selected, messages: selected?.messages || [], instruction, query, replacement, searchOpen, searchScope, searchOptions, activeSearchId, activeCommentId, sessionStart: sessionStart.current, agentActivity });
     // Keep a small LRU of fully parsed manuscripts and journals. Switching back
     // to a recent novel should not normalize every chapter or replay its entire
-    // edit ledger again. Four warm projects bounds memory for tab-heavy users.
+    // edit ledger again. Keep visible projects plus four recently hidden tabs.
     const id = workspaceRef.current.activeId, warm = warmTabs.current;
     warm.delete(id); warm.set(id, { project: projectRef.current, history: historyRef.current });
-    while (warm.size > 4) warm.delete(warm.keys().next().value);
-    await api.rememberProjectView(view);
+    return persist ? api.rememberProjectView(view, capturePaneViews(id), id) : undefined;
   }
-  async function installWorkspace(result) {
-    setTracking(false); setActiveRevision(null); setTrackingIssue('');
+  function trimWarmTabs(panes) {
+    const visible = new Set(panes.map(pane => pane.id));
+    const hidden = [...warmTabs.current.keys()].filter(id => !visible.has(id));
+    for (const id of hidden.slice(0, -4)) {
+      warmTabs.current.delete(id);
+      locallySavedProjects.current.delete(id);
+    }
+  }
+  async function installWorkspace(result, placement = null, warm = warmTabs.current.get(result.workspace.activeId)) {
     const nextWorkspace = result.workspace;
     let cached = tabCache.current.get(nextWorkspace.activeId);
-    const warm = warmTabs.current.get(nextWorkspace.activeId);
     let next, history;
     const warmMatch = warm?.project?.id && (result.cachedProject || warm.project.id === result.project?.id && warm.project.historySequence === result.project?.historySequence);
     if (warmMatch) {
@@ -435,8 +558,28 @@ export default function App() {
       warmTabs.current.delete(nextWorkspace.activeId); warmTabs.current.set(nextWorkspace.activeId, { project: next, history: warm.history });
     } else {
       next = normalizeProjectChats(normalizeHistoryProject(result.project || { ...newProject(), language: prefsRef.current.language }, schema));
-      history = await loadHistory(next); next = history.project;
+      try { history = await loadHistory(next); }
+      catch (error) {
+        const previous = workspaceRef.current.activeId;
+        // The main process selected the destination before we read its journal.
+        // Restore the previous selection before accepting edits or saves there.
+        if (projectRef.current && previous !== nextWorkspace.activeId && nextWorkspace.tabs.some(tab => tab.id === previous)) {
+          const old = projectRef.current;
+          const restored = await api.activateProject(previous, { projectId: old.id, historySequence: old.historySequence }).catch(() => null);
+          if (restored) {
+            workspaceRef.current = restored.workspace; setWorkspace(restored.workspace);
+            throw new Error(`Could not open “${next.title}”. ${errorText(error)} Try the tab again.`);
+          }
+        }
+        // At startup (or after closing the old tab) there is no safe editor to
+        // return to. Retry from the durable session without publishing a new init.
+        clearTimeout(autosaveTimer.current); projectRef.current = null; historyRef.current = null;
+        setProject(null); setBooted(false); setBootError(errorText(error));
+        throw error;
+      }
+      next = history.project;
     }
+    setTracking(false); setActiveRevision(null); setTrackingIssue('');
     cached = tabCache.current.get(nextWorkspace.activeId) || cached;
     next = normalizeProjectChats(next);
     if (cached?.messages?.length && !cached.chatId) next = adoptChatMessages(next, cached.messages);
@@ -446,7 +589,8 @@ export default function App() {
       cachedChatId = cached.chatId;
     }
     let cachedMessages = Array.isArray(cached?.messages) && cachedChatId === cached?.chatId ? cached.messages : (next.chats || []).find(chat => chat.id === cachedChatId)?.messages || [];
-    if (cachedChatId) next = withChatMessages(next, cachedChatId, cachedMessages);
+    const selectedChat = getActiveChat(next);
+    if (cachedChatId && (selectedChat?.id !== cachedChatId || selectedChat.messages !== cachedMessages)) next = withChatMessages(next, cachedChatId, cachedMessages);
     let cachedActivity = cached?.agentActivity || [], pendingError = '';
     if (cached?.pendingAgent) {
       const pendingAgent = cached.pendingAgent;
@@ -480,38 +624,145 @@ export default function App() {
     }
     const view = cached?.view || nextWorkspace.tabs.find(tab => tab.id === nextWorkspace.activeId)?.view || {};
     const chapterId = next.chapters.some(chapter => chapter.id === view.chapterId) ? view.chapterId : next.chapters[0].id;
-    restoreSelection.current = view.selection ? { type: 'text', anchor: view.selection.from, head: view.selection.to } : null;
-    restoreScroll.current = view.scrollTop || 0;
+    const resident = paneSnapshots.current.get(nextWorkspace.activeId), residentEditor = paneEditors.current.get(nextWorkspace.activeId);
+    const keepEditor = resident && residentEditor && !residentEditor.isDestroyed && resident.chapterId === chapterId && resident.project.chapters.find(item => item.id === chapterId)?.content === next.chapters.find(item => item.id === chapterId)?.content;
+    restoreSelection.current = !keepEditor && view.selection ? { type: 'text', anchor: view.selection.from, head: view.selection.to } : null;
+    restoreScroll.current = keepEditor || !Number.isFinite(view.scrollTop) ? null : view.scrollTop;
+    const previousId = workspaceRef.current.activeId;
+    if (previousId !== nextWorkspace.activeId || projectRef.current?.id !== next.id) {
+      // Never expose the previous document's checkpoint actions while the new
+      // history loads, or let a late response overwrite the focused context.
+      gitHistoryRequest.current++;
+      setGitHistory({ available: true, entries: [], loading: true });
+      setCommentFocus(0);
+    }
+    let nextPanes = placement ? placePane(panesRef.current, nextWorkspace.activeId, placement.target, placement.side) : panesRef.current;
+    nextPanes = reconcilePanes(nextPanes, nextWorkspace.tabs.map(tab => tab.id), nextWorkspace.activeId, previousId);
+    panesRef.current = nextPanes; setPanes(nextPanes); trimWarmTabs(nextPanes);
+    for (const id of paneSnapshots.current.keys()) if (!nextPanes.some(pane => pane.id === id)) paneSnapshots.current.delete(id);
+    if (previousId !== nextWorkspace.activeId || !keepEditor) { editorRef.current = null; setEditor(null); }
     workspaceRef.current = nextWorkspace; setWorkspace(nextWorkspace);
-    projectRef.current = next; setProject(next); setPath(result.path); bindingRef.current = result.binding; setBinding(result.binding); setActiveId(chapterId); setEpoch(x => x + 1);
-    setMessages(cachedMessages); setInstruction(cached?.instruction || ''); setPanel(cached?.panel || null); setQuery(cached?.query || ''); setReplacement(cached?.replacement || ''); setSearchOpen(cached?.searchOpen || false); setSearchScope(cached?.searchScope || 'manuscript'); setSearchOptions(cached?.searchOptions || { caseSensitive: false, wholeWord: false }); setActiveSearchId(cached?.activeSearchId || null); setActiveCommentId(cached?.activeCommentId || null); setAgentActivity(cachedActivity);
+    projectRef.current = next; setProject(next); setPath(result.path); bindingRef.current = result.binding; setBinding(result.binding); setActiveId(chapterId); setEpoch(x => keepEditor ? resident.epoch : x + 1);
+    if (keepEditor) setTracking(resident.tracking);
+    setMessages(cachedMessages); setInstruction(cached?.instruction || ''); setQuery(cached?.query || ''); setReplacement(cached?.replacement || ''); setSearchOpen(cached?.searchOpen || false); setSearchScope(cached?.searchScope || 'manuscript'); setSearchOptions(cached?.searchOptions || { caseSensitive: false, wholeWord: false }); setActiveSearchId(cached?.activeSearchId || null); setActiveCommentId(cached?.activeCommentId || null); setAgentActivity(cachedActivity);
     setBusy(requestRef.current?.mode === 'chat' ? requestRef.current.tabId === nextWorkspace.activeId ? 'chat' : 'background-chat' : null);
     setSaveError(''); setSaveState('saved'); setAiError(pendingError); setRenameId(null); rejected.current = []; lastRequest.current = null; sessionStart.current = cached?.sessionStart ?? projectWords(next);
     if (pendingError) notify(pendingError);
   }
-  function projectTransition(action, recoveryOnly = false, preserveChat = false) {
+  function projectTransition(action, recoveryOnly = false, preserveChat = false, targetId = null) {
     if (transition.current || tabReordering.current) return;
-    if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action, recoveryOnly));
-    setSwitching(true);
+    if (namedSave.current) return namedSaveCompletion.current.then(() => projectTransition(action, recoveryOnly, preserveChat, targetId));
+    const started = performance.now();
+    setSwitching(true); setOpeningTab(targetId);
     // Block editor input immediately while saves and view state move to the
     // destination tab. Chat requests may continue against their captured project.
     document.querySelector('.workspace')?.setAttribute('inert', '');
     const work = (async () => {
-      try { clearTimeout(autosaveTimer.current); if (!preserveChat || requestRef.current?.mode !== 'chat') await dismiss(); if (!recoveryOnly) await saveLocal(); await pendingSave.current; await rememberTab(); opening.current = true; await action(); }
+      try {
+        clearTimeout(autosaveTimer.current);
+        if (!preserveChat || requestRef.current?.mode !== 'chat') {
+          const cancelled = dismiss();
+          // An existing tab can open as soon as its outgoing document is safe.
+          // The provider retains its slot until its cancellation settles.
+          if (!targetId) await cancelled;
+        }
+        await pendingSave.current;
+        if (!recoveryOnly && locallySavedProjects.current.get(workspaceRef.current.activeId) !== projectRef.current) await saveLocal();
+        await rememberTab();
+        opening.current = true;
+        const openingStarted = performance.now();
+        await action();
+        if (targetId) reportTabSwitch(started, openingStarted, () => workspaceRef.current.activeId === targetId && !transition.current);
+      }
       catch (error) { notify(errorText(error)); }
-      finally { opening.current = false; transition.current = null; setSwitching(false); document.querySelector('.workspace')?.removeAttribute('inert'); }
+      finally { opening.current = false; transition.current = null; setSwitching(false); setOpeningTab(null); document.querySelector('.workspace')?.removeAttribute('inert'); }
     })();
     transition.current = work; return work;
   }
   function switchProject(id) {
     if (id === workspaceRef.current.activeId) return;
+    if (focusVisiblePane(id)) return;
+    return projectTransition(() => activateStoredTab(id), false, true, id);
+  }
+  async function activateStoredTab(id, placement) {
+    // Negotiate the cache hit after saving the outgoing view. Hold the exact
+    // snapshot across IPC when the main process omits the manuscript payload.
     const warm = warmTabs.current.get(id);
     const identity = warm?.project ? { projectId: warm.project.id, historySequence: warm.project.historySequence } : undefined;
-    return projectTransition(async () => installWorkspace(await api.activateProject(id, identity)), false, true);
+    await installWorkspace(await api.activateProject(id, identity), placement, warm);
+  }
+  function resizePanes(index, sizes) {
+    setPanes(previous => {
+      const next = normalizePanes(previous.map((pane, i) => i === index || i === index + 1 ? { ...pane, size: sizes[i - index] } : pane));
+      panesRef.current = next; return next;
+    });
+  }
+  async function multitaskProject(id, target = workspaceRef.current.activeId, side = 'right') {
+    if (id === target || transition.current || namedSave.current || tabReordering.current || !workspaceRef.current.tabs.some(tab => tab.id === id)) return;
+    if (panesRef.current.some(pane => pane.id === id)) {
+      const next = placePane(panesRef.current, id, target, side); panesRef.current = next; setPanes(next); return;
+    }
+    await projectTransition(() => activateStoredTab(id, { target, side }), false, true, id);
+  }
+  function focusVisiblePane(id) {
+    if (id === workspaceRef.current.activeId) return true;
+    const resident = paneSnapshots.current.get(id), current = paneEditors.current.get(id), cached = tabCache.current.get(id) || {};
+    if (!api.focusProject || transition.current || namedSave.current || tabReordering.current || modal || !resident?.history || !current || current.isDestroyed || cached.pendingAgent) return false;
+    const leaving = workspaceRef.current.activeId;
+    // Queue persistence using captured document/binding identities. Nothing in
+    // the native mouse gesture waits for disk, IPC, encoding or history replay.
+    rememberTab().catch(error => notify(errorText(error)));
+    if (locallySavedProjects.current.get(leaving) !== projectRef.current) saveLocal().catch(() => {});
+    else clearTimeout(autosaveTimer.current);
+    if (requestRef.current?.mode !== 'chat') dismiss();
+    let next = resident.project;
+    if (cached.chatId && cached.messages && (next.activeChatId !== cached.chatId || getActiveChat(next)?.messages !== cached.messages)) next = withChatMessages(next, cached.chatId, cached.messages);
+    const nextWorkspace = { ...workspaceRef.current, activeId: id };
+    flushSync(() => {
+      workspaceRef.current = nextWorkspace; setWorkspace(nextWorkspace);
+      projectRef.current = next; setProject(next);
+      historyRef.current = resident.history; setJournal(resident.history); historyLoadError.current = resident.historyError || '';
+      bindingRef.current = resident.binding; setBinding(resident.binding); setPath(resident.path);
+      restoreSelection.current = null; restoreScroll.current = null;
+      setActiveId(resident.chapterId); setEpoch(resident.epoch); setTracking(resident.tracking);
+      current.storage.wraiterContext = { projectId: next.id, chapterId: resident.chapterId };
+      editorRef.current = current; setEditor(current);
+      setSaveState(resident.saveState || 'saved'); setSaveError(resident.saveError || '');
+      setMessages(cached.messages || getActiveChat(next)?.messages || []); setInstruction(cached.instruction || '');
+      setQuery(cached.query || ''); setReplacement(cached.replacement || ''); setSearchOpen(cached.searchOpen || false); setSearchScope(cached.searchScope || 'manuscript'); setSearchOptions(cached.searchOptions || { caseSensitive: false, wholeWord: false }); setActiveSearchId(cached.activeSearchId || null);
+      setActiveCommentId(cached.activeCommentId || null); setCommentFocus(0); setAgentActivity(cached.agentActivity || []);
+      setActiveRevision(null); setTrackingIssue(''); setRenameId(null); setAiError(''); setProposal(null); setGhost(null);
+      setBusy(requestRef.current?.mode === 'chat' ? requestRef.current.tabId === id ? 'chat' : 'background-chat' : null);
+      gitHistoryRequest.current++; setGitHistory({ available: true, entries: [], loading: true });
+      sessionStart.current = cached.sessionStart ?? projectWords(next); rejected.current = []; lastRequest.current = null;
+    });
+    api.focusProject(id).catch(error => notify(errorText(error)));
+    return workspaceRef.current.activeId !== leaving;
+  }
+  function activatePane(id, pointer) {
+    if (focusVisiblePane(id)) return true;
+    if (transition.current || namedSave.current || modal) return false;
+    // A repaired journal or pending assistant edit can still require a full
+    // replacement. Ordinary visible-pane focus always takes the resident path.
+    Promise.resolve(switchProject(id)).then(() => {
+      if (workspaceRef.current.activeId !== id) return;
+      const current = paneEditors.current.get(id);
+      if (current && !current.isDestroyed && pointer?.target?.closest('.manuscript')) current.view.focus();
+    });
+    return false;
+  }
+  async function removePane(id) {
+    if (panesRef.current.length < 2 || transition.current || namedSave.current) return;
+    if (id === workspaceRef.current.activeId) {
+      const index = panesRef.current.findIndex(pane => pane.id === id);
+      await switchProject((panesRef.current[index + 1] || panesRef.current[index - 1]).id);
+      if (workspaceRef.current.activeId === id) return;
+    }
+    const next = normalizePanes(panesRef.current.filter(pane => pane.id !== id)); panesRef.current = next; setPanes(next); paneSnapshots.current.delete(id); trimWarmTabs(next);
   }
   function closeProject(id = workspaceRef.current.activeId) {
     if (tabReordering.current) return;
-    return projectTransition(async () => { const result = await api.closeProject(id); tabCache.current.delete(id); warmTabs.current.delete(id); await installWorkspace(result); if (result.archivedPath) notify('Draft preserved in File → Open recent.'); });
+    return projectTransition(async () => { const result = await api.closeProject(id); tabCache.current.delete(id); warmTabs.current.delete(id); locallySavedProjects.current.delete(id); await installWorkspace(result); if (result.archivedPath) notify('Draft preserved in File → Open recent.'); });
   }
   async function moveProjectTab(id, target, after) {
     if (transition.current || namedSave.current || tabReordering.current) return;
@@ -522,16 +773,31 @@ export default function App() {
     catch (error) { notify(errorText(error)); }
     finally { tabReordering.current = false; setReorderingTabs(false); }
   }
-  function tabMenuAction(command, id) {
+  async function tabMenuAction(command, id) {
     const current = workspaceRef.current, index = current.tabs.findIndex(tab => tab.id === id);
-    if (index < 0 || tabReordering.current || namedSave.current || document.querySelector('[role="dialog"]')) return;
+    if (index < 0 || transition.current || tabReordering.current || namedSave.current || document.querySelector('[role="dialog"]')) return;
+    if (command === 'tab-multitask-left' || command === 'tab-multitask-right') { await multitaskProject(id, current.activeId, command.endsWith('left') ? 'left' : 'right'); return; }
+    if (command === 'tab-multitask-remove') { await removePane(id); return; }
+    const documentCommand = { 'tab-save': 'save', 'tab-save-as': 'save-copy', 'tab-export': 'export', 'tab-print': 'print', 'tab-history': 'history' }[command];
+    if (documentCommand) {
+      await switchProject(id);
+      if (workspaceRef.current.activeId === id) setPendingTabCommand({ id, command: documentCommand });
+      return;
+    }
+    if (['tab-reveal', 'tab-copy-path', 'tab-copy-name'].includes(command)) {
+      api.tabFileAction(id, command.slice(4)).then(() => {
+        const message = { 'tab-copy-path': 'File path copied.', 'tab-copy-name': 'File name copied.' }[command];
+        if (message) notify(message);
+      }).catch(error => notify(errorText(error)));
+      return;
+    }
     if (command === 'tab-close') { closeProject(id); return; }
     if (['tab-left', 'tab-right'].includes(command)) { const right = command === 'tab-right', target = current.tabs[index + (right ? 1 : -1)]; if (target) moveProjectTab(id, target.id, right); return; }
     const ids = command === 'tab-close-others' ? current.tabs.filter(tab => tab.id !== id).map(tab => tab.id) : command === 'tab-close-right' ? current.tabs.slice(index + 1).map(tab => tab.id) : [];
     if (!ids.length) return;
     return projectTransition(async () => {
       let result, preserved = false;
-      for (const closing of ids) { result = await api.closeProject(closing); preserved ||= !!result.archivedPath; tabCache.current.delete(closing); warmTabs.current.delete(closing); }
+      for (const closing of ids) { result = await api.closeProject(closing); preserved ||= !!result.archivedPath; tabCache.current.delete(closing); warmTabs.current.delete(closing); locallySavedProjects.current.delete(closing); }
       await installWorkspace(result); if (preserved) notify('Drafts preserved in File → Open recent.');
     });
   }
@@ -619,19 +885,25 @@ export default function App() {
     } catch (error) { notify(errorText(error)); }
     finally { externalOpening.current = false; }
   }
-  function reloadDocument() {
+  function reloadDocument(locate = false) {
+    if (!path || !api.reloadProject) return;
+    setMenu(false);
     return projectTransition(async () => {
       const previousId = workspaceRef.current.activeId, captured = projectRef.current;
-      let result = await api.reloadProject(captured, historyRef.current?.events.slice(persistedHistory.current.get(captured.id) || 0) || []);
+      let result = await api.reloadProject(captured, historyRef.current?.events.slice(persistedHistory.current.get(captured.id) || 0) || [], { locate });
+      if (!result) return;
       let warning;
       if (result.import) {
         const imported = await importDocument(result, extensions); warning = imported.warning;
-        const reloaded = { ...imported.project, chats: captured.chats || [], activeChatId: captured.activeChatId || null };
+        const reloaded = { ...imported.project, notes: captured.notes || '', style: captured.style || '', references: captured.references || [], chats: captured.chats || [], activeChatId: captured.activeChatId || null };
         result = await api.bindNative(normalizeHistoryProject(reloaded, schema), { openToken: result.openToken, fidelity: imported.fidelity || { requiresReview: !!warning, warnings: warning ? [warning] : [] } });
       }
       tabCache.current.delete(previousId);
+      warmTabs.current.delete(previousId);
+      locallySavedProjects.current.delete(previousId);
       await installWorkspace(result);
-      notify('Modified version loaded. Your previous draft is available in File → Open recent.');
+      setSourceStatus(null);
+      notify('File refreshed. Your previous draft is available in File → Open recent.');
       if (warning) setModal({ type: 'notice', title: 'Document compatibility', text: warning });
     }, true);
   }
@@ -659,6 +931,46 @@ export default function App() {
     tourRef.current?.emit('chapter-created', { chapterId: next.id });
   }
   function editChapter(id, update) { updateProject({ chapters: projectRef.current.chapters.map(c => c.id === id ? { ...c, ...update } : c) }); }
+  function chapterActionsBlocked() {
+    return !projectRef.current || !!(requestRef.current || transition.current || namedSave.current);
+  }
+  function chapterTarget(chapterId) {
+    return { chapterId, projectId: projectRef.current.id, tabId: workspaceRef.current.activeId };
+  }
+  function isCurrentChapterTarget(target) {
+    const current = projectRef.current;
+    return current?.id === target.projectId && workspaceRef.current.activeId === target.tabId &&
+      current.chapters.some(item => item.id === target.chapterId);
+  }
+  function renameOutlineChapter(id, title) {
+    if (chapterActionsBlocked()) return;
+    const current = projectRef.current, item = current.chapters.find(chapter => chapter.id === id);
+    if (!item || item.title === title) return;
+    try {
+      const chapters = current.chapters.map(chapter => chapter === item ? { ...chapter, title } : chapter);
+      commitProjectBatch({ ...current, chapters }, 'Rename chapter');
+    } catch (error) { notify(errorText(error)); }
+  }
+  function openChapterDelete(id) {
+    const current = projectRef.current, item = current?.chapters.find(chapter => chapter.id === id);
+    if (!item || current.chapters.length < 2 || chapterActionsBlocked() || externalBlocked.current) return;
+    setModal({ type: 'delete-chapter', ...chapterTarget(id), title: item.title });
+  }
+  function confirmChapterDelete() {
+    setModal(null);
+    if (chapterActionsBlocked() || !isCurrentChapterTarget(modal)) return;
+    const current = projectRef.current, index = current.chapters.findIndex(item => item.id === modal.chapterId);
+    if (current.chapters.length < 2) return;
+    const chapters = current.chapters.filter(item => item.id !== modal.chapterId);
+    const replacement = activeId === modal.chapterId ? chapters[Math.min(index, chapters.length - 1)] : null;
+    try {
+      const snapshots = [snapshot(current, 'Before deleting a chapter'), ...(current.snapshots || [])].slice(0, 20);
+      const selection = replacement && Selection.atStart(schema.nodeFromJSON(replacement.content)).toJSON();
+      commitProjectBatch({ ...current, chapters, snapshots }, 'Delete chapter', replacement?.id ?? activeId, selection);
+      if (replacement) setActiveSearchId(null);
+      setRenameId(null);
+    } catch (error) { notify(errorText(error)); }
+  }
   function divideChapter() {
     const current = editorRef.current;
     if (!current || current.isDestroyed || !current.isEditable || requestRef.current || transition.current || namedSave.current) return;
@@ -677,36 +989,67 @@ export default function App() {
   }
   function moveChapter(id, target, after) { if (requestRef.current || transition.current || namedSave.current) return; const current = projectRef.current, chapters = moveItem(current.chapters, id, target, after); if (chapters !== current.chapters) updateProject({ chapters }, 'Reorder chapters'); }
   async function loadGitHistory() {
-    const projectId = projectRef.current?.id;
-    try { await saveLocal(); if (projectRef.current?.id !== projectId) return; const result = await api.listGitHistory(); if (projectRef.current?.id === projectId) setGitHistory(result); }
-    catch (error) { if (projectRef.current?.id === projectId) setGitHistory({ available: false, entries: [], error: errorText(error) }); }
+    const projectId = projectRef.current?.id, tabId = workspaceRef.current.activeId, request = ++gitHistoryRequest.current;
+    const isCurrent = () => request === gitHistoryRequest.current && projectRef.current?.id === projectId && workspaceRef.current.activeId === tabId;
+    setGitHistory(previous => previous.entries.length || previous.loading ? previous : { ...previous, loading: true });
+    try { await saveLocal(); if (!isCurrent()) return; const result = await api.listGitHistory(projectId); if (isCurrent()) setGitHistory(result); }
+    catch (error) { if (isCurrent()) setGitHistory({ available: false, entries: [], error: errorText(error) }); }
   }
-  async function createSnapshot(label) {
+  async function createSnapshot(label, preserveRevision) {
     if (typeof label !== 'string') { setModal({ type: 'snapshot' }); return; }
     try {
       await pendingSave.current;
-      await api.commitGitSnapshot(projectRef.current, label || 'Version checkpoint');
-      await loadGitHistory(); setModal(null); notify('Version saved in Git history.'); return true;
+      await api.commitGitSnapshot(projectRef.current, label || 'Version checkpoint', preserveRevision);
+      await loadGitHistory(); setModal(null); notify('Version saved.'); return true;
     } catch (error) { notify(errorText(error)); return false; }
   }
-  async function previewGitVersion(item) {
+  async function previewGitVersion(item, fromMap = false) {
     try {
       const version = await api.getGitRevision(item.revision);
       if (version.id !== projectRef.current?.id) return;
-      const chapter = version.chapters.find(chapter => chapter.id === item.chapterId || chapter.title === item.location) || version.chapters[0];
-      setModal({ type: 'git-preview', item, version, chapterId: chapter.id });
+      const chapter = version.chapters.find(chapter => chapter.title === item.passage?.excerpts?.[0]?.chapter) || version.chapters.find(chapter => chapter.id === item.chapterId || chapter.title === item.location) || version.chapters[0];
+      setModal({ type: 'git-preview', item, version, chapterId: chapter.id, fromMap });
     } catch (error) { notify(errorText(error)); }
+  }
+  async function prepareBranchMerge(target, tabId, revision) {
+    await saveLocal();
+    if (projectRef.current !== target || workspaceRef.current.activeId !== tabId || historyLoadError.current) throw new Error('The manuscript changed. Reopen the merge.');
+    const context = await api.prepareGitMerge(tabId, target.id, revision);
+    return { ...context, base: normalizeHistoryProject(context.base, schema), source: normalizeHistoryProject(context.source, schema) };
+  }
+  async function applyBranchMerge(review, context, candidate) {
+    const { target, tabId, item } = review;
+    if (target !== projectRef.current || tabId !== workspaceRef.current.activeId || chapterActionsBlocked() || historyLoadError.current) throw new Error('The current draft changed. Review the merge again.');
+    namedSave.current = true; setSavingNamed(true);
+    let finished; namedSaveCompletion.current = new Promise(resolve => { finished = resolve; });
+    try {
+      const normalized = reconcileCommentChapters(normalizeHistoryProject(candidate, schema), schema);
+      for (const chapter of normalized.chapters) schema.nodeFromJSON(chapter.content).check();
+      const chapterId = normalized.chapters.some(chapter => chapter.id === activeId) ? activeId : normalized.chapters[0].id;
+      const title = item.displayTitle || item.title || item.message, previous = historyRef.current;
+      const history = recordProjectChange(previous, target, normalized, { label: 'Merge · ' + title, chapterId: activeId, chapterIdAfter: chapterId });
+      const next = { ...normalized, historySequence: history.sequence, updatedAt: new Date().toISOString() };
+      const { base, source, ...expected } = context;
+      await api.applyGitMerge(tabId, expected, next, history === previous ? null : history.events.at(-1), title);
+      historyMapView.current = null;
+      persistedHistory.current.set(next.id, history.sequence);
+      projectRef.current = next; publishHistory(history); setProject(next); setActiveId(chapterId); setEpoch(value => value + 1);
+      try { await saveLocal(); await loadGitHistory(); notify('Merged into the current draft.'); }
+      catch (error) { notify('Merge recorded in history. ' + errorText(error)); }
+      setModal(null);
+    } finally { namedSave.current = false; setSavingNamed(false); finished(); }
   }
   async function restoreGitVersion(revision) {
     try {
-      if (!await createSnapshot('Before restoring a version')) return;
+      if (!await createSnapshot('Before restoring a version', revision)) return;
       const previous = await api.getGitRevision(revision);
       await api.activateGitRevision(revision);
+      historyMapView.current = null;
       const restored = { ...previous, id: projectRef.current.id, comments: structuredClone(previous.comments || []), chats: projectRef.current.chats || [], activeChatId: projectRef.current.activeChatId || null, updatedAt: new Date().toISOString(), historySequence: historyRef.current.sequence };
       const selectedChapter = previous.chapters.find(chapter => chapter.id === (modal?.chapterId || modal?.item?.chapterId) || chapter.title === modal?.item?.location) || previous.chapters[0];
       dismiss(); updateProject(restored, `Restore checkpoint ${revision.slice(0, 8)}`); setActiveId(selectedChapter.id); setEpoch(value => value + 1); setModal(null);
       await saveLocal();
-      setGitHistory(await api.listGitHistory());
+      await loadGitHistory();
       notify('Version restored. New edits will continue on a path from this checkpoint.');
     } catch (error) { notify(errorText(error)); }
   }
@@ -848,7 +1191,7 @@ export default function App() {
     if (!settings.enabled) { setModal({ type: 'settings', tab: 'connections' }); return; }
     if (!current || requestRef.current) return;
     await dismiss(); setAiError('');
-    if (current.isDestroyed || editorRef.current !== current || requestRef.current) return;
+    if (transition.current || current.isDestroyed || editorRef.current !== current || requestRef.current) return;
     const { from, to } = current.state.selection;
     if (['correct', 'rewrite'].includes(mode) && from === to) { notify('Select a word, sentence, or passage first.'); return; }
     const selected = current.state.doc.textBetween(from, to, '\n', '\n');
@@ -899,8 +1242,9 @@ export default function App() {
     if (tracking) { notify('Turn off text tracking before using the writing assistant.'); return; }
     if (!text.trim() || requestRef.current) return;
     if (!prefsRef.current.enabled) { setModal({ type: 'settings', tab: 'connections' }); return; }
+    const tabIdWhenAsked = workspaceRef.current.activeId;
     await dismiss(); setAiError('');
-    if (requestRef.current) return;
+    if (transition.current || workspaceRef.current.activeId !== tabIdWhenAsked || requestRef.current) return;
     let baseline = normalizeProjectChats(projectRef.current);
     let selected = getActiveChat(baseline);
     if (!selected) {
@@ -995,6 +1339,15 @@ export default function App() {
   const actionRef = useRef();
   actionRef.current = { askAI, acceptGhost, dismiss, rejectSuggestion, saveNamed, saveLocal, command: handleCommand, updatePrefs, travelHistory, encodeNative, chooseOption, rememberTab, openExternalFiles, prepareEditorMenu, runEditorMenuAction };
   useEffect(() => {
+    if (!pendingTabCommand || switching || transition.current) return;
+    if (workspace.activeId !== pendingTabCommand.id || namedSave.current || document.querySelector('[role="dialog"]')) { setPendingTabCommand(null); return; }
+    // Wait for the destination editor and fresh render closures before using
+    // its path, binding, selection and history in the existing document actions.
+    if (!editor || editor.isDestroyed || editor.storage.wraiterContext?.projectId !== project?.id) return;
+    setPendingTabCommand(null);
+    actionRef.current.command(pendingTabCommand.command);
+  }, [pendingTabCommand, switching, workspace.activeId, editor, project?.id]);
+  useEffect(() => {
     if (!api) return;
     const stopRequest = api.onEditorMenu(request => actionRef.current.prepareEditorMenu(request));
     const stopAction = api.onEditorMenuAction(action => actionRef.current.runEditorMenuAction(action));
@@ -1064,6 +1417,8 @@ export default function App() {
     setActiveRevision(null); notify(`${accept ? 'Accepted' : 'Rejected'} ${changes.length} ${changes.length === 1 ? 'edit' : 'edits'}. Ctrl+Z to undo.`);
   }
   function handleCommand(command) {
+    if (!projectRef.current) return;
+    if (isWeb && command === 'privacy') { api.openLink(new URL('/privacy.html', location.origin).href).catch(error => notify(errorText(error))); return; }
     if (command === 'git-history-updated') { if (panel === 'history') loadGitHistory(); return; }
     if (command.startsWith('continuation-notice:')) {
       try {
@@ -1095,7 +1450,7 @@ export default function App() {
     if (command.startsWith('edit-note:')) { showNote(null, Number(command.slice(10))); return; }
     if (command === 'tracking-blocked') { trackingBlocked(); return; }
     if (command.startsWith('comment:')) { setActiveCommentId(command.slice(8)); showComments(); return; }
-    if (document.querySelector('[role="dialog"]') && (command.startsWith('open-recent:') || ['new', 'open', 'close-tab', 'next-tab', 'previous-tab', 'save', 'save-copy', 'export', 'proofread', 'statistics'].includes(command))) return;
+    if (document.querySelector('[role="dialog"]') && (command.startsWith('open-recent:') || ['new', 'open', 'close-tab', 'next-tab', 'previous-tab', 'save', 'save-copy', 'refresh-file', 'locate-file', 'export', 'proofread', 'statistics'].includes(command))) return;
     if (command.startsWith('open-recent:')) { openDocument(command.slice(12)); return; }
     if (['setup', 'tutorial', 'about', 'privacy', 'report-ai'].includes(command)) { setModal({ type: command }); return; }
     if (command === 'proofreading-connection') { setModal({ type: 'settings', tab: 'connections', task: 'proofread' }); return; }
@@ -1109,7 +1464,7 @@ export default function App() {
       'insert-footnote': () => showNote('footnote'), 'insert-endnote': () => showNote('endnote'),
       'document-notes': () => setModal({ type: 'document-notes' }), 'paragraph-layout': showParagraphLayout,
       'insert-tab': () => { if (current && !current.isDestroyed) { const { from, to } = current.state.selection; const tr = tracking ? suggestText(current.state, from, to, '\t') : current.state.tr.insertText('\t', from, to); if (tr) { current.view.dispatch(tr); current.commands.focus(); } else trackingBlocked(); } },
-      new: createNew, open: () => openDocument(), save: () => saveNamed(), 'save-copy': () => saveNamed(true), export: () => openExport(), print: () => openExport('print'),
+      new: createNew, open: () => openDocument(), save: () => saveNamed(), 'save-copy': () => saveNamed(true), 'refresh-file': () => reloadDocument(), 'locate-file': () => reloadDocument(true), export: () => openExport(), print: () => openExport('print'),
       'close-tab': () => closeProject(), 'next-tab': () => cycleProject(1), 'previous-tab': () => cycleProject(-1),
       'zoom-in': () => stepDocumentZoom(1), 'zoom-out': () => stepDocumentZoom(-1), 'zoom-reset': () => setDocumentZoom(100),
       'edit-link': editLink, 'open-link': () => { const href = current?.getAttributes('link').href; if (href) api.openLink(href).catch(error => notify(errorText(error))); }, 'remove-link': () => editorCommand(chain => chain.extendMarkRange('link').unsetLink()),
@@ -1153,6 +1508,7 @@ export default function App() {
         await tourRef.current?.flush();
         await namedSaveCompletion.current;
         await transition.current;
+        if (!projectRef.current) { await pendingSave.current; await api.finishClose(); return; }
         clearTimeout(autosaveTimer.current); actionRef.current.dismiss();
         try { await actionRef.current.saveLocal(); } catch {}
         await pendingSave.current;
@@ -1243,7 +1599,7 @@ export default function App() {
     const next = { ...nextProject, historySequence: history.sequence, updatedAt: new Date().toISOString() };
     const documentChanged = chapterId !== activeId || before.chapters.find(item => item.id === activeId)?.content !== next.chapters.find(item => item.id === activeId)?.content;
     dismiss(); projectRef.current = next; publishHistory(history); setProject(next);
-    if (documentChanged) { restoreSelection.current = selectionAfter; restoreScroll.current = chapterId !== activeId ? 0 : document.querySelector('.writing-scroll')?.scrollTop ?? null; setActiveId(chapterId); setEpoch(value => value + 1); }
+    if (documentChanged) { restoreSelection.current = selectionAfter; restoreScroll.current = chapterId !== activeId ? 0 : editorRef.current?.view.dom.closest('.writing-scroll')?.scrollTop ?? null; setActiveId(chapterId); setEpoch(value => value + 1); }
   }
   function replaceSearchResults(results, value, preview = false) {
     try {
@@ -1263,16 +1619,29 @@ export default function App() {
     if (add) setCommentFocus(value => value + 1);
   }
   function navigateComment(comment, range) { setActiveCommentId(comment.id); navigatePassage(comment.chapterId, range); }
-  function prepareEditorMenu(request) {
+  async function prepareEditorMenu(request) {
     editorMenuRef.current = null;
     const current = editorRef.current, keyboard = request.source === 'keyboard';
     const target = keyboard ? document.activeElement : document.elementFromPoint(request.x, request.y);
+    const chapterId = target?.closest('[data-chapter-id]')?.dataset.chapterId, manuscript = projectRef.current;
+    if (!externalBlocked.current && manuscript?.chapters.some(item => item.id === chapterId)) {
+      editorMenuRef.current = { id: request.id, outlineChapter: chapterTarget(chapterId) };
+      return { chapter: true, blocked: chapterActionsBlocked(), canDelete: manuscript.chapters.length > 1, canDuplicate: manuscript.chapters.length < MAX_CHAPTERS };
+    }
     const tab = target?.closest('[data-project-tab]'), tabs = workspaceRef.current.tabs, tabIndex = tabs.findIndex(item => item.id === tab?.dataset.projectTab);
-    if (tabIndex >= 0 && !document.querySelector('[role="dialog"]')) { editorMenuRef.current = { id: request.id, tabId: tabs[tabIndex].id }; return { tab: true, tabId: tabs[tabIndex].id, canMoveLeft: tabIndex > 0, canMoveRight: tabIndex < tabs.length - 1, canCloseOthers: tabs.length > 1, blocked: !!transition.current || namedSave.current || tabReordering.current }; }
+    if (tabIndex >= 0 && !document.querySelector('[role="dialog"]')) { editorMenuRef.current = { id: request.id, tabId: tabs[tabIndex].id }; return { tab: true, tabId: tabs[tabIndex].id, hasFile: !!(tabs[tabIndex].id === workspaceRef.current.activeId ? path : tabs[tabIndex].path), canMoveLeft: tabIndex > 0, canMoveRight: tabIndex < tabs.length - 1, canCloseOthers: tabs.length > 1, canMultitask: tabs[tabIndex].id !== workspaceRef.current.activeId, inMultitask: panesRef.current.length > 1 && panesRef.current.some(pane => pane.id === tabs[tabIndex].id), blocked: !!transition.current || namedSave.current || tabReordering.current }; }
+    const targetPane = target?.closest('[data-pane-id]')?.dataset.paneId;
+    if (targetPane && targetPane !== workspaceRef.current.activeId && !transition.current && !namedSave.current && !document.querySelector('[role="dialog"]')) {
+      await switchProject(targetPane);
+      if (workspaceRef.current.activeId !== targetPane) return null;
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      return actionRef.current.prepareEditorMenu(request);
+    }
     if (!current || current.isDestroyed || !current.isEditable || target?.closest('.manuscript') !== current.view.dom || transition.current || savingNamed || document.querySelector('[role="dialog"]')) return null;
     if (current.storage.wraiterContext?.projectId !== projectRef.current?.id || current.storage.wraiterContext?.chapterId !== activeId) return null;
     clearTimeout(continuousTimer.current);
     const grammarId = target.closest('[data-ai-grammar-id]')?.dataset.aiGrammarId;
+    const localGrammarId = target.closest('[data-local-grammar-id]')?.dataset.localGrammarId;
     // Preserve a selection when clicking inside it. A click elsewhere moves the
     // cursor before any menu action, including the native clipboard roles.
     if (!keyboard) {
@@ -1286,18 +1655,54 @@ export default function App() {
     const selection = current.state.selection, undo = historyStatus(historyRef.current), shape = captureFormatting(current.state, docStyle), suggestion = ghostKey.getState(current.state);
     const clickedLink = target.closest('a[href]'), linkPosition = clickedLink && !keyboard ? current.view.posAtCoords({ left: request.x, top: request.y })?.pos : null;
     const grammarHint = aiGrammarRef.current?.available && !requestRef.current ? grammarHintForMenu(current.state, grammarId, keyboard) : null;
-    editorMenuRef.current = { id: request.id, editor: current, projectId: projectRef.current.id, chapterId: activeId, doc: current.state.doc, selection: selection.toJSON(), linkPosition, linkHref: clickedLink?.getAttribute('href'), grammarHint };
-    return { editor: true, ...(grammarHint && { grammarHint: grammarMenuPreview(grammarHint) }), hasImage: !!selectedImage(current), hasLink: !!clickedLink || current.isActive('link'), hasSelection: !selection.empty, hasTextSelection: !selection.empty && !!current.state.doc.textBetween(selection.from, selection.to, '\n', '\n').trim(), blocked: !!requestRef.current, canUndo: undo.canUndo, canRedo: undo.canRedo, canCopyFormatting: !!shape, canPasteFormatting: !!shape && !!formatting, canSplitChapter: !!chapterSplitPlan(current.state), aiEnabled: prefsRef.current.enabled, hasSuggestion: !!suggestion?.text && suggestion.kind !== 'loading' };
+    const localHint = !requestRef.current ? localGrammarHintForMenu(current.state, localGrammarId, keyboard) : null;
+    const localReplacements = localHint ? (localHint.alternatives || (typeof localHint.replacement === 'string' ? [localHint.replacement] : [])) : [];
+    const localMenu = localHint && { category: localHint.category, previews: localReplacements.map(replacement => grammarMenuPreview({ ...localHint, replacement })), canAdd: localHint.category === 'spelling' && /^\p{L}+(?:[’'-]\p{L}+)*$/u.test(localHint.original) && localHint.original.length <= 100 };
+    editorMenuRef.current = { id: request.id, editor: current, projectId: projectRef.current.id, chapterId: activeId, doc: current.state.doc, selection: selection.toJSON(), linkPosition, linkHref: clickedLink?.getAttribute('href'), grammarHint, localHint, localReplacements };
+    return { editor: true, ...(grammarHint && { grammarHint: grammarMenuPreview(grammarHint) }), ...(localMenu && { localHint: localMenu }), hasImage: !!selectedImage(current), hasLink: !!clickedLink || current.isActive('link'), hasSelection: !selection.empty, hasTextSelection: !selection.empty && !!current.state.doc.textBetween(selection.from, selection.to, '\n', '\n').trim(), blocked: !!requestRef.current, canUndo: undo.canUndo, canRedo: undo.canRedo, canCopyFormatting: !!shape, canPasteFormatting: !!shape && !!formatting, canSplitChapter: !!chapterSplitPlan(current.state), aiEnabled: prefsRef.current.enabled, hasSuggestion: !!suggestion?.text && suggestion.kind !== 'loading' };
   }
   function runEditorMenuAction(action) {
     const context = editorMenuRef.current, current = editorRef.current;
     if (!context || context.id !== action?.id) return;
     editorMenuRef.current = null;
-    if (context.tabId) { if (['tab-close', 'tab-close-others', 'tab-close-right', 'tab-left', 'tab-right'].includes(action.command)) tabMenuAction(action.command, context.tabId); return; }
+    if (context.outlineChapter) {
+      if (chapterActionsBlocked() || externalBlocked.current) return;
+      if (!isCurrentChapterTarget(context.outlineChapter)) { notify('The chapter is no longer available.'); return; }
+      const { chapterId } = context.outlineChapter;
+      if (action.command === 'chapter-rename') setRenameId(chapterId);
+      else if (action.command === 'chapter-delete') openChapterDelete(chapterId);
+      else if (action.command === 'chapter-duplicate') {
+        try {
+          const manuscript = projectRef.current, chapters = duplicateChapter(manuscript.chapters, chapterId, schema);
+          if (chapters !== manuscript.chapters) commitProjectBatch({ ...manuscript, chapters }, 'Duplicate chapter');
+        } catch (error) { notify(errorText(error)); }
+      }
+      return;
+    }
+    if (context.tabId) { if (['tab-multitask-left', 'tab-multitask-right', 'tab-multitask-remove', 'tab-save', 'tab-save-as', 'tab-export', 'tab-print', 'tab-history', 'tab-reveal', 'tab-copy-path', 'tab-copy-name', 'tab-close', 'tab-close-others', 'tab-close-right', 'tab-left', 'tab-right'].includes(action.command)) tabMenuAction(action.command, context.tabId); return; }
     if (transition.current || savingNamed || document.querySelector('[role="dialog"]') || current !== context.editor || current.isDestroyed || current.state.doc !== context.doc || projectRef.current.id !== context.projectId || activeId !== context.chapterId) { notify('The manuscript changed. Right-click the passage again.'); return; }
     if (action.command === 'apply-grammar-hint' || action.command === 'review-grammar-hint') {
       if (!context.grammarHint || requestRef.current) return;
       aiGrammarRef.current?.actOnHint(context.grammarHint, action.command === 'apply-grammar-hint' ? 'apply' : 'review'); return;
+    }
+    if (action.command === 'review-local-hint') { setModal({ type: 'local-grammar' }); return; }
+    if (action.command === 'ignore-local-hint' || action.command === 'ignore-local-matching') {
+      const hint = context.localHint, fresh = grammarKey.getState(current.state)?.hints.find(item => item.id === hint?.id && item.original === hint.original);
+      if (!fresh || requestRef.current) { notify('The passage changed. Right-click it again.'); return; }
+      current.view.dispatch(current.state.tr.setMeta(grammarKey, { ignore: { ...fresh, all: action.command === 'ignore-local-matching' } }).setMeta('addToHistory', false));
+      return;
+    }
+    if (action.command === 'add-local-word') {
+      if (context.localHint?.category === 'spelling' && !requestRef.current) addPersonalWord(context.localHint.original).catch(error => notify(errorText(error)));
+      return;
+    }
+    if (/^apply-local-hint-[0-4]$/.test(action.command)) {
+      const hint = context.localHint, replacement = context.localReplacements?.[Number(action.command.at(-1))];
+      const fresh = grammarKey.getState(current.state)?.hints.find(item => item.id === hint?.id && item.original === hint.original);
+      if (!fresh || typeof replacement !== 'string' || !(fresh.alternatives || [fresh.replacement]).includes(replacement) || requestRef.current) { notify('The passage changed. Right-click it again.'); return; }
+      try { current.view.dispatch(grammarCorrectionTransaction(current.state, { ...fresh, replacement })); current.view.focus(); }
+      catch (error) { notify(errorText(error)); }
+      return;
     }
     const commands = ['undo', 'redo', 'select-all', 'copy-format', 'paste-format', 'clear-format', 'add-comment', 'split-chapter', 'complete', 'rewrite', 'correct', 'context-assistant', 'accept', 'dismiss', 'stop-ai', 'toggle-ai', 'settings-connections', 'image-properties', 'open-link', 'edit-link', 'remove-link'];
     if (!commands.includes(action.command)) return;
@@ -1321,6 +1726,26 @@ export default function App() {
     else notify('Formatting applied. Ctrl+Z to undo.');
   }
 
+  paneActions.current = {
+    register: (id, current) => {
+      const previous = paneEditors.current.get(id);
+      if (current) paneEditors.current.set(id, current); else paneEditors.current.delete(id);
+      if (!current && editorRef.current === previous) { editorRef.current = null; setEditor(null); }
+    },
+    ready: handleEditorReady,
+    content: (id, ...args) => { if (id === workspaceRef.current.activeId && args[1] === editorRef.current) onContentChanged(...args); },
+    selection: id => { if (id === workspaceRef.current.activeId) onEditorSelection(); },
+    action: (id, action) => { if (id === workspaceRef.current.activeId) onEditorAction(action); },
+    activate: activatePane, remove: removePane, drag: setDraggingTab,
+    textDragStart: (id, current, event) => paneTextDrag.current.start(id, current, event),
+    textDragOver: (id, event) => paneTextDrag.current.over(id, paneEditors.current.get(id), event, !transition.current && !namedSave.current && !modal),
+    textDragLeave: (id, event) => paneTextDrag.current.leave(paneEditors.current.get(id), event),
+    textDragEnd: () => paneTextDrag.current.clear(),
+    textDrop: (id, event) => paneTextDrag.current.drop(id, paneEditors.current.get(id), event, activatePane, !transition.current && !namedSave.current && !modal),
+    chapter: async (id, chapterId) => { await switchProject(id); if (workspaceRef.current.activeId === id && !transition.current) changeChapter(chapterId); },
+    editChapter, reorderChapter, deleteChapter: () => openChapterDelete(chapter.id), canImportImages, notice: notify,
+  };
+
   const walkthroughState = { prefs, project, workspace, editor, activeId, busy, ghost, proposal, aiError, panel, query, path, modal, focus, searchOpen, switching };
   const tour = useWritingWalkthrough(walkthroughState, {
     create: createTutorialDocument, activate: activateTutorialDocument, dismiss, save: saveLocal, updatePrefs, changeChapter,
@@ -1329,7 +1754,7 @@ export default function App() {
     prepareChat: text => { setFocus(false); setPanel('assist'); setInstruction(text); const current = editorRef.current; if (current && !current.isDestroyed) current.commands.setTextSelection(current.state.doc.content.size - 1); requestAnimationFrame(() => document.querySelector('[aria-label="Ask the writing assistant"]')?.focus()); }
   });
   tourRef.current = tour;
-  const aiGrammar = useInlineGrammar({ editor, api, prefs, projectId: project?.id, chapterId: chapter?.id, language: documentLanguage,
+  const aiGrammar = useInlineGrammar({ editor, api, prefs, projectId: project?.id, chapterId: chapter?.id, chapters: project?.chapters, language: documentLanguage,
     paused: !!busy || !!modal || switching || savingNamed || tour.isCurrent || !!proposal, onNotice: notify });
   aiGrammarRef.current = aiGrammar;
   useEffect(() => {
@@ -1337,7 +1762,7 @@ export default function App() {
   }, [modal?.type, !!project, switching]);
 
   if (!api) return <div className="boot-screen"><Feather /><h1>WRAITER is a desktop application.</h1><p>Launch WRAITER.exe to use local files and writing assistance.</p></div>;
-  if (!project) return <div className="boot-screen"><Feather size={38} /><h1>Opening WRAITER…</h1>{toast && <p>{toast}</p>}</div>;
+  if (!project) return <div className="boot-screen"><Feather size={38} /><h1>{bootError ? 'Could not open the workspace' : 'Opening WRAITER…'}</h1>{bootError ? <><p role="alert">{bootError}</p><button className="primary-button" onClick={() => { setBootError(''); setBootAttempt(value => value + 1); }}>Retry</button></> : toast && <p>{toast}</p>}</div>;
   const totalWords = projectWords(project), chapterWords = contentWordCount(chapter.content);
   const selectedWords = editor && !editor.isDestroyed ? wordCount(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' ')) : 0;
   const activeReferences = (project.references || []).filter(r => r.enabled !== false);
@@ -1347,22 +1772,28 @@ export default function App() {
     if (tr.selection.empty) tr.setStoredMarks([]);
     return true;
   }));
-  const undoInfo = historyStatus(journal), layout = documentLayout(project);
+  const undoInfo = historyStatus(journal);
   const chatSettings = { ...prefs, ...prefs.taskProfiles?.chat };
   const busyTask = busy === 'background-chat' ? 'chat' : busy;
   const localBusy = busyTask && (prefs.taskProfiles?.[busyTask]?.provider || prefs.provider) === 'local';
   const docStyle = project.documentStyle || { fontFamily: 'Cambria', fontSize: 12, lineHeight: 1.5 };
   const titleStyle = editor?.isActive('heading', { level: 1 }) ? 'heading1' : editor?.isActive('heading', { level: 2 }) ? 'heading2' : editor?.isActive('heading', { level: 3 }) ? 'heading3' : 'paragraph';
 
-  return <div onDropCapture={captureFileDrop} onDragOverCapture={captureFileHover} onDragLeave={event => { const reference = event.target.closest?.(".reference-panel"); if (reference && !reference.contains(event.relatedTarget)) reference.removeAttribute("data-file-drop"); }} className={`app layout-${project.layout || 'story'} ${focus ? 'focus-mode' : ''}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight, '--writing-measure': `${prefs.measure}px`, '--document-zoom': (prefs.zoom || 100) / 100 }}>
-    <style>{namedStyleCSS(project.namedStyles, '.manuscript ')}</style>
-    {!focus && <ProjectTabs tabs={workspace.tabs} activeId={workspace.activeId} project={project} path={path} saveState={saveState} request={requestRef.current} cache={tabCache.current} disabled={switching || savingNamed || reorderingTabs || !!modal} onActivate={switchProject} onClose={closeProject} onCycle={cycleProject} onMove={moveProjectTab} onNew={createNew} />}
+  const currentSource = sourceStatus?.tabId === workspace.activeId && sourceStatus.path === path ? sourceStatus : null;
+  const fileWarning = currentSource?.state === 'missing' ? 'This file was moved, renamed or deleted. Locate it to load the saved version. Your current draft is safe in recovery.'
+    : currentSource?.state === 'changed' ? 'This file changed outside WRAITER. Load the modified version to refresh it. Your current draft will be kept in Open recent.'
+    : currentSource?.state === 'unavailable' ? currentSource.message : saveError;
+  return <div onDropCapture={captureFileDrop} onDragOverCapture={captureFileHover} onDragLeave={event => { const reference = event.target.closest?.(".reference-panel"); if (reference && !reference.contains(event.relatedTarget)) reference.removeAttribute("data-file-drop"); }} className={`app ${focus ? 'focus-mode' : ''} ${isWeb ? 'web-app' : ''} ${mobileTools ? 'mobile-tools-open' : ''}`} style={{ '--writing-font': docStyle.fontFamily, '--writing-size': `${docStyle.fontSize}pt`, '--writing-leading': docStyle.lineHeight, '--writing-measure': `${prefs.measure}px`, '--document-zoom': (prefs.zoom || 100) / 100 }}>
+    {isWeb && <nav className="web-writing-navigation" aria-label="Writing controls"><button className="secondary-button" onClick={() => api.openLibrary?.()}>Library</button><button className="secondary-button" onClick={() => setModal({ type: 'web-menu' })}>Menu</button><button className="secondary-button mobile-nav-only" aria-expanded={leftOpen && !focus} onClick={() => { setFocus(false); setPanel(null); setLeftOpen(value => !value); }}>Chapters</button><button className="secondary-button mobile-nav-only" aria-expanded={mobileTools} onClick={() => setMobileTools(value => !value)}>Format</button><button className="secondary-button mobile-nav-only" onClick={() => { setFocus(false); setLeftOpen(false); setPanel(value => value === 'assist' ? null : 'assist'); }}>Assistant</button>{panel && <button className="secondary-button mobile-nav-only" onClick={() => setPanel(null)}>Close panel</button>}</nav>}
+    {!isWeb && <div className="desktop-cloud-navigation"><button className="secondary-button" onClick={() => setModal({ type: 'cloud-library' })}>Cloud library</button></div>}
+    {!focus && <ProjectTabs tabs={workspace.tabs} openingId={openingTab} activeId={workspace.activeId} panes={panes} project={project} path={path} saveState={saveState} request={requestRef.current} cache={tabCache.current} disabled={switching || savingNamed || reorderingTabs || !!modal} onActivate={switchProject} onClose={closeProject} onCycle={cycleProject} onMove={moveProjectTab} onNew={createNew} onDrag={setDraggingTab} />}
     <div className="workspace" id="project-workspace" role="tabpanel" aria-labelledby={`project-tab-${workspace.activeId}`} inert={switching || (modal && modal.type !== 'tutorial') ? true : undefined}>
       {!focus && leftOpen && <aside className="sidebar">
         <div className="project-switcher"><div className="project-avatar"><BookOpen size={21} /></div><div className="project-switcher-text"><small>YOUR MANUSCRIPT</small><button className="project-title-button" onClick={() => setModal({ type: 'rename' })} title="Rename this manuscript.">{project.title}<PenLine size={12} /></button></div></div>
+        {isWeb && <button className="secondary-button mobile-nav-only" onClick={() => setLeftOpen(false)}>Close chapters</button>}
         <button className="sidebar-search" onClick={() => searchOpen ? closeSearch() : openSearch()} title={shortcutHint("Find and replace text across the manuscript or current chapter.", prefs.hotkeys?.find)}><Search size={15} />Find in manuscript<kbd>{formatShortcut(prefs.hotkeys?.find)}</kbd></button>
         <div className="sidebar-section-label">MANUSCRIPT <IconButton icon={Plus} title="Add chapter" onClick={addChapter} /></div>
-        <ChapterOutline project={project} activeId={chapter.id} renameId={renameId} onRenameStart={setRenameId} onRenameEnd={() => setRenameId(null)} onActivate={changeChapter} onNavigate={navigatePassage} onRename={(id, title) => { if (!requestRef.current && !transition.current) updateProject({ chapters: projectRef.current.chapters.map(item => item.id === id ? { ...item, title } : item) }, 'Rename chapter'); }} onMove={moveChapter} disabled={!!busy || switching || savingNamed} />
+        <ChapterOutline project={project} activeId={chapter.id} renameId={renameId} onRenameStart={setRenameId} onRenameEnd={() => setRenameId(null)} onActivate={id => { changeChapter(id); if (isWeb && window.matchMedia('(max-width: 760px)').matches) setLeftOpen(false); }} onNavigate={navigatePassage} onRename={renameOutlineChapter} onMove={moveChapter} disabled={!!busy || switching || savingNamed} />
         <button className="add-chapter" onClick={addChapter}><Plus size={15} />New chapter</button>
         <button className="add-chapter" onClick={() => setModal({ type: 'templates' })} title="Create a reusable manuscript template or start a new manuscript from one.">Document templates…</button>
         <BookmarksPanel project={project} editor={editor} chapterId={chapter.id} onChange={commitProjectBatch} onNavigate={navigatePassage} disabled={!!busy || switching || savingNamed} onError={notify} />
@@ -1380,9 +1811,9 @@ export default function App() {
       <main className="main-panel">
         {!focus && <div className="writer-toolbar formatbar" role="toolbar" aria-label="Text formatting">
           <CaseMenu editor={editor} disabled={!!busy || switching || savingNamed} onError={notify} />
-          <div className="native-toolbar-group"><IconButton icon={FilePlus2} title="New manuscript" onClick={createNew} /><IconButton icon={FolderOpen} title="Open manuscript" onClick={() => openDocument()} /><IconButton icon={Save} title="Save manuscript" onClick={() => saveNamed()} /><IconButton icon={Undo2} title="Undo (Ctrl Z)" disabled={!undoInfo.canUndo} onClick={() => travelHistory('undo')} /><IconButton icon={Redo2} title="Redo (Ctrl Shift Z)" disabled={!undoInfo.canRedo} onClick={() => travelHistory('redo')} /></div>
+          <div className="native-toolbar-group"><IconButton icon={FilePlus2} title="New manuscript" onClick={createNew} /><IconButton icon={FolderOpen} title="Open manuscript" onClick={() => openDocument()} /><IconButton icon={Save} title="Save manuscript" onClick={() => saveNamed()} />{api.reloadProject && api.platform !== 'web' && <IconButton icon={RotateCcw} title="Refresh from disk" disabled={!path || switching || savingNamed} onClick={() => reloadDocument()} hint="Load the saved file, or locate it if it moved. Your current draft is preserved in Open recent." />}<IconButton icon={Undo2} title="Undo (Ctrl Z)" disabled={!undoInfo.canUndo} onClick={() => travelHistory('undo')} /><IconButton icon={Redo2} title="Redo (Ctrl Shift Z)" disabled={!undoInfo.canRedo} onClick={() => travelHistory('redo')} /></div>
           <div className="native-toolbar-group"><select className="paragraph-style-select" aria-label="Paragraph style" value={titleStyle} onChange={e => editorCommand(c => e.target.value === 'paragraph' ? c.setParagraph() : c.setHeading({ level: Number(e.target.value.at(-1)) }))} title="Apply normal text or a heading level to the current or selected paragraphs."><option value="paragraph">Normal</option><option value="heading1">Heading 1</option><option value="heading2">Heading 2</option><option value="heading3">Heading 3</option></select><button className="secondary-button" type="button" onMouseDown={event => event.preventDefault()} onClick={() => setModal({ type: 'named-styles' })} title="Create, edit, and apply reusable paragraph or character styles.">Styles…</button><FontPicker value={editor?.getAttributes('textStyle').fontFamily || docStyle.fontFamily} fonts={fonts} onChange={font => editorCommand(c => c.setFontFamily(font))} /><FontSizeInput value={parseFloat(editor?.getAttributes('textStyle').fontSize || docStyle.fontSize)} onApply={size => editorCommand(c => c.setFontSize(size + 'pt'))} /></div>
-          <div className="native-toolbar-group"><IconButton icon={Bold} title="Bold (Ctrl B)" active={editor?.isActive('bold')} onClick={() => editorCommand(c => c.toggleBold())} /><IconButton icon={Italic} title="Italic (Ctrl I)" active={editor?.isActive('italic')} onClick={() => editorCommand(c => c.toggleItalic())} /><IconButton icon={Underline} title="Underline (Ctrl U)" active={editor?.isActive('underline')} onClick={() => editorCommand(c => c.toggleUnderline())} /><label className="font-color" style={{ '--font-color': editor?.getAttributes('textStyle').color || 'var(--text)' }} title="Change the colour of selected text or the next text you type."><Type size={17} /><input type="color" aria-label="Text colour" value={editor?.getAttributes('textStyle').color || '#222222'} onChange={e => editorCommand(c => c.setColor(e.target.value))} /></label><HighlightPicker active={editor?.isActive('highlight') || !!backgroundColour} colour={editor?.getAttributes('highlight').color || backgroundColour} onApply={colour => editorCommand(c => c.unsetBackgroundColor().setHighlight({ color: colour }))} onClear={() => editorCommand(c => c.unsetHighlight().unsetBackgroundColor())} /><IconButton icon={RemoveFormatting} title="Clear formatting" onMouseDown={e => e.preventDefault()} onClick={clearFormatting} hint="Remove text and paragraph formatting from the selection, or reset formatting at the cursor." /><FormatPainter available={!!editor && !busy && !switching} hasFormatting={!!formatting} onCopy={copyFormat} onPaste={pasteFormat} /><IconButton icon={MessageSquare} title="Add comment" disabled={!editor || editor.state.selection.empty || !!busy || switching} onMouseDown={e => e.preventDefault()} onClick={() => showComments(true)} hint={selectedWords ? "Attach a comment to the selected passage." : "Select a passage first, then add a comment."} /></div>
+          <div className="native-toolbar-group"><IconButton icon={Bold} title="Bold (Ctrl B)" active={editor?.isActive('bold')} onClick={() => editorCommand(c => c.toggleBold())} /><IconButton icon={Italic} title="Italic (Ctrl I)" active={editor?.isActive('italic')} onClick={() => editorCommand(c => c.toggleItalic())} /><IconButton icon={Underline} title="Underline (Ctrl U)" active={editor?.isActive('underline')} onClick={() => editorCommand(c => c.toggleUnderline())} /><ColourPicker kind="text" colour={editor?.getAttributes('textStyle').color} onApply={colour => editorCommand(c => c.setColor(colour))} onClear={() => editorCommand(c => c.unsetColor())} /><HighlightPicker active={editor?.isActive('highlight') || !!backgroundColour} colour={editor?.getAttributes('highlight').color || backgroundColour} onApply={colour => editorCommand(c => c.unsetBackgroundColor().setHighlight({ color: colour }))} onClear={() => editorCommand(c => c.unsetHighlight().unsetBackgroundColor())} /><IconButton icon={RemoveFormatting} title="Clear formatting" onMouseDown={e => e.preventDefault()} onClick={clearFormatting} hint="Remove text and paragraph formatting from the selection, or reset formatting at the cursor." /><FormatPainter available={!!editor && !busy && !switching} hasFormatting={!!formatting} onCopy={copyFormat} onPaste={pasteFormat} /><IconButton icon={MessageSquare} title="Add comment" disabled={!editor || editor.state.selection.empty || !!busy || switching} onMouseDown={e => e.preventDefault()} onClick={() => showComments(true)} hint={selectedWords ? "Attach a comment to the selected passage." : "Select a passage first, then add a comment."} /></div>
           <div className="native-toolbar-group"><IconButton icon={AlignLeft} title="Align left" active={editor?.isActive({ textAlign: 'left' })} onClick={() => editorCommand(c => c.setTextAlign('left'))} /><IconButton icon={AlignCenter} title="Align centre" active={editor?.isActive({ textAlign: 'center' })} onClick={() => editorCommand(c => c.setTextAlign('center'))} /><IconButton icon={AlignRight} title="Align right" active={editor?.isActive({ textAlign: 'right' })} onClick={() => editorCommand(c => c.setTextAlign('right'))} /><IconButton icon={List} title="Bullet list" active={editor?.isActive('bulletList')} onClick={() => editorCommand(c => c.toggleBulletList())} /><IconButton icon={ListOrdered} title="Numbered list" active={editor?.isActive('orderedList')} onClick={() => editorCommand(c => c.toggleOrderedList())} /></div>
           <div className="native-toolbar-group"><IconButton icon={Image} title="Insert image" disabled={!editor || !!busy || switching || savingNamed} onMouseDown={event => event.preventDefault()} onClick={() => insertPickedImage(editorRef.current, () => api.image())} /><IconButton icon={Link2} title="Insert or edit link (Ctrl K)" onMouseDown={event => event.preventDefault()} onClick={editLink} /><IconButton icon={Table2} title="Table tools" onClick={() => setModal({ type: 'table' })} hint="Insert a table, or edit rows, columns and cells in the current table." /><IconButton icon={SlidersHorizontal} title="Paragraph and document formatting" onClick={() => setModal({ type: 'format' })} hint="Adjust paragraph spacing and indents, or set the manuscript’s default font and spacing." /></div>
         </div>}
@@ -1390,18 +1821,18 @@ export default function App() {
         <AIGrammarHints grammar={aiGrammar} editor={editor} />
         {selectedImage(editor) && <div className="image-selection-tools" role="toolbar" aria-label="Image controls"><span>Drag a corner to resize</span><button className="secondary-button" disabled={!!busy || switching || savingNamed} onMouseDown={event => event.preventDefault()} onClick={showImageProperties} title="Adjust image size, text wrapping and the description used by screen readers.">Image properties…</button></div>}
         {searchOpen && <SearchPanel focusRequest={searchFocus} key={project.id} query={query} onQueryChange={setQuery} replacement={replacement} onReplacementChange={setReplacement} scope={searchScope} onScopeChange={setSearchScope} options={searchOptions} onOptionsChange={setSearchOptions} results={searchResults} activeResult={activeSearchId} onActivate={activateSearchResult} onReplace={(result, value) => replaceSearchResults([result], value)} onReplaceAll={(results, value) => replaceSearchResults(results, value, true)} onClose={closeSearch} busy={!!busy || switching} />}
-        {saveError && <div className="inline-warning"><Info size={16} /><span>{saveError}</span><button disabled={switching || savingNamed} onClick={() => saveNamed(true)} title="Choose a new file for this manuscript when the current file cannot be saved.">Save a copy</button>{path && /file changed outside WRAITER/i.test(saveError) && <button disabled={switching || savingNamed} title="Load the file from disk. Your current draft will be preserved in Open recent." onClick={reloadDocument}>Load modified version</button>}</div>}
-        <div className={`writing-scroll ${prefs.pageMode === 'pages' ? 'divided-pages' : 'continuous-pages'} ${prefs.showRowNumbers || prefs.showPageNumbers || prefs.showParagraphNumbers ? 'has-numbering' : ''}`} onDragOver={event => imageSurfaceEvent(editorRef.current, 'dragover', event.nativeEvent)} onDragLeave={event => imageSurfaceEvent(editorRef.current, 'dragleave', event.nativeEvent)} onDrop={event => imageSurfaceEvent(editorRef.current, 'drop', event.nativeEvent)} style={{ '--numbering-width': `${[prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers].filter(Boolean).length * 34}px` }}>
-          <article className="writing-sheet">
-            <div className="chapter-kicker"><span>CHAPTER {String(project.chapters.findIndex(c => c.id === chapter.id) + 1).padStart(2, '0')}</span><span className="kicker-line" /><select aria-label="Chapter status" value={chapter.status || 'Draft'} onChange={e => editChapter(chapter.id, { status: e.target.value })} title="Label this chapter’s progress for your own organisation."><option>Draft</option><option>Notes</option><option>Revising</option><option>Final</option></select></div>
-            <div className="chapter-title-row"><input className="chapter-title" aria-label="Chapter title" value={chapter.title} onChange={e => editChapter(chapter.id, { title: e.target.value })} /><div className="chapter-tools"><IconButton icon={ArrowUp} title="Move chapter earlier" disabled={project.chapters[0].id === chapter.id} onClick={() => reorderChapter(chapter.id, -1)} /><IconButton icon={ArrowDown} title="Move chapter later" disabled={project.chapters.at(-1).id === chapter.id} onClick={() => reorderChapter(chapter.id, 1)} /><IconButton icon={Trash2} title="Delete chapter" disabled={project.chapters.length === 1} onClick={() => setModal({ type: 'delete-chapter' })} /></div></div>
-            {(project.showStatistics ?? layout.showStatistics) && <div className="chapter-meta">{chapterWords.toLocaleString()} words<span>·</span>{Math.max(1, Math.ceil(chapterWords / 220))} min read</div>}
-            <ManuscriptEditor key={`${project.id}:${chapter.id}:${epoch}`} chapter={chapter} tracking={tracking} prefs={{ ...prefs, language: documentLanguage }} layoutSignature={JSON.stringify([docStyle, chapter.title, project.showStatistics])} onReady={handleEditorReady} onChange={onContentChanged} onSelection={onEditorSelection} onAction={onEditorAction} onNotice={notify} canImportImages={canImportImages} />
+        {fileWarning && <div className="inline-warning file-warning" role="status"><Info size={16} /><span>{fileWarning}</span>{path && api.reloadProject && api.platform !== 'web' && <><button disabled={switching || savingNamed} title="Load the file from disk. Your current draft will be preserved in Open recent." onClick={() => reloadDocument()}>{currentSource?.state === 'missing' ? 'Try original path' : 'Load modified version'}</button><button disabled={switching || savingNamed} onClick={() => reloadDocument(true)}>Locate file…</button></>}<button disabled={switching || savingNamed} onClick={() => saveNamed(true)} title="Choose a new file for this manuscript when the current file cannot be saved.">Save a copy</button></div>}
+        <MultitaskWorkspace panes={panes} activeId={workspace.activeId} draggingId={draggingTab} disabled={switching || savingNamed || reorderingTabs || !!modal}
+          onPlace={multitaskProject} onResize={resizePanes} onDragEnd={() => setDraggingTab(null)} renderPane={(id, multiple) => {
+            const active = id === workspace.activeId;
+            const data = active ? { project, chapterId: chapter.id, epoch, tracking } : paneSnapshots.current.get(id);
+            if (!data) return null;
+            return <DocumentPane id={id} {...data} active={active} multiple={multiple} prefs={prefs} actions={paneActions}>{active ? <>
             {ghost && <div className="ghost-controls"><span>{ghost.kind === 'revision' ? 'Selected text · proposed replacement' : 'Suggested continuation'}</span><button onClick={() => acceptGhost()} title={shortcutHint(ghost.kind === "revision" ? "Replace the selected text with this suggestion." : "Insert this suggestion at the cursor.", prefs.hotkeys?.accept)}><kbd>{formatShortcut(prefs.hotkeys?.accept ?? 'Tab')}</kbd> Accept</button><button onClick={retryAI} title="Discard this preview and ask AI for a different suggestion."><RotateCcw size={13} />Another</button><button onClick={rejectSuggestion} title={shortcutHint("Discard this suggestion and keep your wording.", prefs.hotkeys?.dismiss)}><kbd>{formatShortcut(prefs.hotkeys?.dismiss ?? 'Escape')}</kbd> Dismiss</button></div>}
             {busy && !['chat', 'background-chat'].includes(busy) && <div className="generation-inline" role="status">{localBusy && localProgress ? localProgress.message : 'Generating suggestion…'}<button onClick={dismiss} title="Cancel the current AI request.">Cancel</button></div>}
             {!!continuationNotices.length && <div className="continuation-notice" role="status"><Info size={16} /><div>{continuationNotices.map(message => <p key={message}>{message}</p>)}</div><button aria-label="Dismiss continuation notice" onClick={() => setContinuationNotices([])}>Dismiss</button></div>}
-          </article>
-        </div>
+            </> : null}</DocumentPane>;
+          }} />
         <div className="writer-status writing-status"><div><span className="file-format-label">{binding?.format?.toUpperCase() || 'WRAITER'}</span><span>{selectedWords ? selectedWords + ' selected' : chapterWords.toLocaleString() + ' words'}</span><span className="status-dot">·</span><span>{totalWords.toLocaleString()} in document</span>{(tracking || trackedChanges.length > 0) && <button className={`review-status ${tracking ? 'recording' : ''}`} onClick={() => showReview()} title={tracking ? 'Text edits are being recorded. Open review to stop recording or accept/reject edits.' : 'Open pending edits to accept or reject them.'}>{tracking ? 'Recording edits · ' : ''}{trackedChanges.length} to review</button>}</div><div><select className="layout-select" aria-label="Document layout" value={project.layout || 'story'} onChange={event => { const chosen = LAYOUTS[event.target.value]; updateProject({ layout: event.target.value, showStatistics: chosen.showStatistics, documentStyle: { ...docStyle, fontFamily: chosen.fontFamily, fontSize: chosen.fontSize, lineHeight: chosen.lineHeight } }, 'Apply ' + chosen.name + ' layout'); }} title="Apply a layout preset, including its default font, spacing and statistics display.">{Object.entries(LAYOUTS).map(([id, value]) => <option key={id} value={id}>{value.name}</option>)}</select><select className="language-select" aria-label="Content language" value={documentLanguage} onChange={e => updateProject({ language: e.target.value })} title="Set this manuscript’s language for spelling checks and AI translation.">{[...new Map([...LANGUAGES, [documentLanguage, languageName(documentLanguage)]]).entries()].map(([code, name]) => <option key={code} value={code}>{name}</option>)}</select><button data-tour="page-view" onClick={() => handleCommand('page-view')} title={prefs.pageMode === "pages" ? "Switch to a continuous writing view." : "Show page divisions in the writing view."}>{prefs.pageMode === 'pages' ? 'Divided pages' : 'Continuous view'}</button><select aria-label="Document zoom" value={prefs.zoom || 100} onChange={e => setDocumentZoom(e.target.value)} title="Change the writing-view magnification; exported text size stays the same.">{!ZOOM_LEVELS.includes(prefs.zoom) && <option value={prefs.zoom}>{prefs.zoom}%</option>}{ZOOM_LEVELS.map(zoom => <option key={zoom} value={zoom}>{zoom}%</option>)}</select></div></div>
       </main>
       {!focus && panel && <aside className="inspector">
@@ -1409,7 +1840,7 @@ export default function App() {
         {panel === 'assist' && <><div className="chat-session-bar"><select aria-label="Previous chats" value={project.activeChatId || ''} disabled={Boolean(busy && busy !== 'background-chat')} onChange={event => selectChat(event.target.value)} title="Switch between conversations saved with this manuscript.">{!chatSessions.length && <option value="">No previous chats</option>}{chatSessions.map(chat => <option key={chat.id} value={chat.id}>{chat.title}</option>)}</select><IconButton icon={Plus} title="New chat" disabled={Boolean(busy && busy !== 'background-chat')} onClick={startNewChat} hint="Start a separate conversation for this manuscript; previous chats stay saved." /></div><div className="inspector-body" ref={chatScrollRef}>
           <div className="assist-actions"><button onClick={() => askAI('continue')} disabled={!!busy}><span className="assist-action-icon"><PenLine size={17} /></span><span><strong>Continue writing</strong><small>A suggestion at your cursor</small></span><kbd>Tab</kbd></button><button onClick={() => askAI('correct')} disabled={!!busy} title={shortcutHint(selectedWords ? "Ask AI to correct spelling, grammar and punctuation in the selection. Review before applying." : "Select a passage first to ask AI for spelling, grammar and punctuation corrections.", prefs.hotkeys?.correct)}><span className="assist-action-icon"><CheckCheck size={18} /></span><span><strong>Check this passage</strong><small>Spelling, grammar & punctuation</small></span><ChevronRight size={14} /></button><button onClick={() => askAI('rewrite')} disabled={!!busy} title={shortcutHint(selectedWords ? "Ask AI for alternative wording, or translate the selection into the document language." : "Select a word or passage first to rephrase it or translate it into the document language.", prefs.hotkeys?.rewrite)}><span className="assist-action-icon"><WandSparkles size={17} /></span><span><strong>Find another phrasing</strong><small>A fresh take on selected text</small></span><ChevronRight size={14} /></button></div>
           <div className="context-summary"><div><BookOpen size={14} /><strong>Writing context</strong></div><p>{selectedWords ? `Chat edits are limited to ${selectedWords} selected words.` : 'Chat can work across all chapters.'} Inline suggestions use text near your cursor.{activeReferences.length ? ` ${activeReferences.length} reference${activeReferences.length > 1 ? 's' : ''} enabled.` : ''}</p><button onClick={() => setPanel('references')} title="Choose which attached reference files the AI can use.">Manage references <ArrowUpRight size={12} /></button></div>
-          {!prefs.enabled && <div className="connect-card"><span className="section-eyebrow">AI CONNECTION</span><p>Connect a local model or your preferred AI provider.</p><button className="primary-button" onClick={() => setModal({ type: 'settings', tab: 'connections' })} title="Choose the AI connection and model used for each writing task.">AI connections <ArrowUpRight size={14} /></button><small>Writing and saving always work offline.</small></div>}
+          {!prefs.enabled && <div className="connect-card"><span className="section-eyebrow">AI CONNECTION</span><p>{isWeb ? 'Connect your own cloud AI provider.' : 'Connect a local model or your preferred AI provider.'}</p><button className="primary-button" onClick={() => setModal({ type: 'settings', tab: 'connections' })} title="Choose the AI connection and model used for each writing task.">AI connections <ArrowUpRight size={14} /></button><small>{isWeb ? 'Your provider bills your own API account. Local recovery protects drafts during connection loss.' : 'Writing and saving always work offline.'}</small></div>}
           {prefs.enabled && <div className="provider-badge"><span className="tiny-dot" /><span>{providerNames[chatSettings.provider]}<small>{chatSettings.model || 'Default model'}</small></span><IconButton icon={Settings2} title="Connection settings" onClick={() => setModal({ type: 'settings', tab: 'connections' })} /></div>}
           {aiError && <div className="ai-error" role="alert"><Info size={16} /><p>{aiError}</p><button onClick={() => setAiError('')}>Dismiss</button></div>}
           {proposal && proposal.text !== proposal.original && <div className="revision-card"><div className="revision-heading"><Sparkles size={14} /><strong>Suggested revision</strong></div><small>ORIGINAL</small><p className="original-text">{proposal.original}</p><small>PROPOSED</small><p className="proposed-text">{proposal.text}</p>{proposal.changesStructure && <p className="small-muted">This changes paragraph structure or embedded content. Formatting inside the selection may be simplified; surrounding text stays intact.</p>}<div className="revision-actions"><button className="primary-button" onClick={acceptProposal} title="Replace the selected passage with this proposed revision."><Check size={14} />Accept</button><IconButton icon={RotateCcw} title="Another phrasing" onClick={retryAI} hint="Discard this preview and ask AI for a different revision." /><IconButton icon={X} title="Reject revision" onClick={rejectSuggestion} hint="Discard the proposed revision and keep your wording." /></div></div>}
@@ -1428,7 +1859,7 @@ export default function App() {
         {panel === 'notes' && <div className="inspector-body notes-panel"><div className="panel-description"><h3>Notes</h3><p>Private notes and instructions for this manuscript.</p></div><label className="field-label">PRIVATE NOTES <small>Not sent to AI</small></label><textarea className="notes-textarea" aria-label="Private manuscript notes" placeholder="A scene to come back to. A question to leave open…" value={project.notes || ''} onChange={e => updateProject({ notes: e.target.value })} /><label className="field-label">YOUR WRITING VOICE <small>Included in AI context</small></label><textarea className="notes-textarea voice" aria-label="Writing voice instructions" placeholder="For example: British spelling. Keep dialogue informal. Preserve deliberate fragments. Never rename characters." value={project.style || ''} onChange={e => updateProject({ style: e.target.value })} /><p className="small-muted">These are your instructions. AI suggestions never update them automatically.</p></div>}
         {panel === 'review' && <TrackedReview changes={trackedChanges} chapterId={activeId} tracking={tracking} selectedId={activeRevision} issue={trackingIssue} onToggle={toggleTracking} disabled={!!busy || switching || savingNamed} onReview={reviewEdits} onNavigate={change => { setActiveRevision(change.id); navigatePassage(change.chapterId, { from: change.from, to: change.to }, { focusEditor: false }); }} />}
         {panel === 'comments' && <CommentsPanel key={project.id} project={project} editor={editor} selection={editor && !editor.isDestroyed ? { chapterId: activeId, from: editor.state.selection.from, to: editor.state.selection.to } : null} onChange={commitProjectBatch} onNavigate={navigateComment} disabled={!!busy || switching} activeCommentId={activeCommentId} focusRequest={commentFocus} />}
-        {panel === 'history' && <><HistoryPanel journal={journal} gitHistory={gitHistory} onUndo={() => travelHistory('undo')} onRedo={() => travelHistory('redo')} onCheckpoint={() => createSnapshot()} onRestoreGit={item => setModal({ type: 'git-restore', item })} onPreviewGit={previewGitVersion} onCheckpointSettings={() => setModal({ type: 'settings', tab: 'connections', task: 'checkpoint' })} onOpenTree={() => setModal({ type: 'version-tree' })} />{Boolean(project.snapshots?.length) && <details className="legacy-snapshots"><summary>Earlier embedded snapshots</summary>{project.snapshots.map(item => <button className="secondary-button" key={item.id} onClick={() => setModal({ type: 'restore', item })} title="Review the option to restore this earlier embedded snapshot.">{item.name}</button>)}</details>}</>}
+        {panel === 'history' && <><HistoryPanel tab={historyTab} onTabChange={setHistoryTab} journal={journal} gitHistory={gitHistory} onUndo={() => travelHistory('undo')} onRedo={() => travelHistory('redo')} onCheckpoint={() => createSnapshot()} onRestoreGit={item => setModal({ type: 'git-restore', item })} onPreviewGit={previewGitVersion} onCheckpointSettings={() => setModal({ type: 'settings', tab: 'connections', task: 'checkpoint' })} onOpenTree={() => setModal({ type: 'version-tree' })} />{Boolean(project.snapshots?.length) && <details className="legacy-snapshots"><summary>Earlier embedded snapshots</summary>{project.snapshots.map(item => <button className="secondary-button" key={item.id} onClick={() => setModal({ type: 'restore', item })} title="Review the option to restore this earlier embedded snapshot.">{item.name}</button>)}</details>}</>}
       </aside>}
         </div>
       </div>
@@ -1447,7 +1878,19 @@ export default function App() {
     {modal?.type === 'named-styles' && <NamedStyles Modal={Modal} styles={project.namedStyles || []} onClose={() => setModal(null)} onSave={style => { const current = projectRef.current; const list = current.namedStyles || []; updateProject({ namedStyles: list.some(item => item.id === style.id) ? list.map(item => item.id === style.id ? style : item) : [...list, style] }, `Save style ${style.name}`); }} onClear={() => { clearNamedStyles(editorRef.current); setModal(null); }} onApply={style => { if (!style || !applyNamedStyle(editorRef.current, style)) { notify('Select text or place the cursor in a paragraph to apply the style.'); return; } setModal(null); }} />}
     {modal?.type === 'thesaurus' && <Thesaurus Modal={Modal} api={api} initial={modal.word} language={documentLanguage} onClose={() => setModal(null)} />}
     {modal?.type === 'go-paragraph' && <Modal title="Go to paragraph" subtitle={chapter?.title || 'Current chapter'} onClose={() => setModal(null)}><GoToParagraph doc={editor?.state.doc} position={editor?.state.selection.head} onGo={goToParagraph} onCancel={() => setModal(null)} /></Modal>}
-    {modal?.type === 'settings' && <Settings Modal={Modal} fonts={fonts} initialTab={modal.tab} initialTask={modal.task} prefs={prefs} updatePrefs={updatePrefs} onClose={() => setModal(null)} notify={notify} />}
+    {isWeb && <MobileWritingBar editor={editor} hidden={!!modal} ghost={ghost} busy={!!busy} onSuggest={() => handleCommand('complete')} onAccept={acceptGhost} onDismiss={rejectSuggestion} onUndo={() => travelHistory('undo')} onRedo={() => travelHistory('redo')} canUndo={undoInfo.canUndo} canRedo={undoInfo.canRedo} fontSize={parseFloat(editor?.getAttributes('textStyle').fontSize || docStyle.fontSize)} onFontSize={size => editorCommand(chain => chain.setFontSize(size + 'pt'))} />}
+    {modal?.type === 'cloud-library' && <CloudLibrary Modal={Modal} project={project} onClose={() => setModal(null)} onUpload={async asNew => { await saveLocal(); return api.cloudUpload(projectRef.current, asNew); }} onOpen={async id => { let opened = false; await projectTransition(async () => { const result = await api.cloudOpen(id); await installWorkspace(result); opened = true; setModal(null); }); if (!opened) throw new Error('The cloud document could not be opened. Your current draft is preserved.'); }} />}
+    {modal?.type === 'web-menu' && <WebWritingMenu Modal={Modal} onClose={() => setModal(null)} onCommand={command => {
+      if (command === 'library') api.openLibrary?.();
+      else if (command === 'formatting-toolbar') { setFocus(false); setMobileTools(value => !value); }
+      else if (command === 'add-chapter') addChapter();
+      else if (command === 'insert-image') insertPickedImage(editorRef.current, () => api.image());
+      else if (command === 'case-menu') { setMobileTools(true); setFocus(false); notify('Use the case menu in the formatting toolbar.'); }
+      else if (command.startsWith('modal:')) setModal({ type: command.slice(6) });
+      else if (command.startsWith('panel:')) { setFocus(false); setLeftOpen(false); setPanel(command.slice(6)); }
+      else handleCommand(command);
+    }} />}
+    {modal?.type === 'settings' && <Settings Modal={Modal} fonts={fonts} initialTab={modal.tab} initialTask={modal.task} prefs={prefs} updatePrefs={updatePrefs} onClose={() => setModal(modal.fromMap ? { type: 'version-tree' } : null)} notify={notify} />}
     {modal?.type === 'templates' && <TemplatesDialog Modal={Modal} project={project} onCreate={createFromTemplate} onClose={() => setModal(null)} />}
     {modal?.type === 'rename' && <Modal title="Document title" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); setModal(null); }}><label className="field-label">TITLE</label><input className="field-input" aria-label="Manuscript title" value={project.title} onChange={e => updateProject({ title: e.target.value })} /><div className="modal-footer"><button className="primary-button">Done</button></div></form></Modal>}
     {modal?.type === 'export' && <ExportDialog Modal={Modal} project={project} chapterId={activeId} hasSelection={Boolean(modal.selectionDoc)} onExport={exportDocument} onClose={() => setModal(null)} initialPreview={modal.print} />}
@@ -1458,11 +1901,12 @@ export default function App() {
     {modal?.type === 'table' && <TableTools Modal={Modal} editor={editor} onClose={() => setModal(null)} />}
     {modal?.type === 'format' && <Modal title="Paragraph and document formatting" onClose={() => setModal(null)} wide><div className="settings-section"><h3>Selected paragraphs</h3><div className="form-grid"><label>Line spacing<select className="field-input" defaultValue={editor?.getAttributes('paragraph').lineHeight || docStyle.lineHeight} onChange={e => editorCommand(c => c.setParagraphFormat({ lineHeight: Number(e.target.value) }))}>{[1, 1.15, 1.5, 2, 2.5, 3].map(n => <option key={n}>{n}</option>)}</select></label><label>Space before (pt)<input className="field-input" type="number" min="0" max="72" defaultValue={editor?.getAttributes('paragraph').spaceBefore ?? 0} onChange={e => editorCommand(c => c.setParagraphFormat({ spaceBefore: Math.max(0, Math.min(72, Number(e.target.value))) }))} /></label><label>Left indent (pt)<input className="field-input" type="number" min="-144" max="144" defaultValue={editor?.getAttributes('paragraph').leftIndent ?? 0} onChange={e => editorCommand(c => c.setParagraphFormat({ leftIndent: Math.max(-144, Math.min(144, Number(e.target.value))) }))} /></label><label>Right indent (pt)<input className="field-input" type="number" min="-144" max="144" defaultValue={editor?.getAttributes('paragraph').rightIndent ?? 0} onChange={e => editorCommand(c => c.setParagraphFormat({ rightIndent: Math.max(-144, Math.min(144, Number(e.target.value))) }))} /></label><label>Space after (pt)<input className="field-input" type="number" min="0" max="72" defaultValue={editor?.getAttributes('paragraph').spaceAfter ?? 8} onChange={e => editorCommand(c => c.setParagraphFormat({ spaceAfter: Math.max(0, Math.min(72, Number(e.target.value))) }))} /></label><label>First-line indent (pt; negative for hanging)<input className="field-input" type="number" min="-144" max="144" defaultValue={editor?.getAttributes('paragraph').firstLineIndent || 0} onChange={e => editorCommand(c => c.setParagraphFormat({ firstLineIndent: Math.max(-144, Math.min(144, Number(e.target.value))) }))} /></label></div><div className="button-grid"><button className="secondary-button" onClick={() => editorCommand(c => c.setTextAlign('justify'))} title="Align the selected paragraphs with both the left and right margins.">Justify</button><button className="secondary-button" onClick={() => editorCommand(c => c.toggleBlockquote())} title="Format the current or selected paragraphs as a quotation.">Block quote</button><button className="secondary-button" onClick={() => editorCommand(c => c.setHorizontalRule())} title="Insert a horizontal divider at the cursor.">Scene break</button><button className="secondary-button" onClick={() => editorCommand(c => c.toggleStrike())} title="Draw a line through the selected text.">Strikethrough</button><button className="secondary-button" aria-pressed={!!editor?.isActive('superscript')} onClick={() => editorCommand(c => c.toggleMark('superscript'))} title="Raise the selected text above the normal text line.">Superscript</button><button className="secondary-button" aria-pressed={!!editor?.isActive('subscript')} onClick={() => editorCommand(c => c.toggleMark('subscript'))} title="Lower the selected text below the normal text line.">Subscript</button><button className="secondary-button" onClick={clearFormatting} title="Remove text and paragraph formatting from the selection, or reset formatting at the cursor.">Clear formatting</button></div></div><div className="settings-section"><h3>Document defaults</h3><p className="small-muted">Applies to text without explicit formatting and to exports.</p><label className="check-label"><input type="checkbox" aria-label="Show reading statistics below chapter title" checked={project.showStatistics ?? layout.showStatistics} onChange={event => updateProject({ showStatistics: event.target.checked }, 'Show reading statistics')} />Show word count and reading time below chapter titles</label><div className="form-grid"><label>Default font<FontPicker label="Default document font" value={docStyle.fontFamily} fonts={fonts} onChange={font => updateProject({ documentStyle: { ...docStyle, fontFamily: font } })} /></label><label>Default size (pt)<input className="field-input" type="number" min="6" max="96" aria-label="Default document size" value={docStyle.fontSize} onChange={e => { const size = Number(e.target.value); if (size >= 6 && size <= 96) updateProject({ documentStyle: { ...docStyle, fontSize: size } }); }} /></label><label>Default line spacing<select className="field-input" value={docStyle.lineHeight} onChange={e => updateProject({ documentStyle: { ...docStyle, lineHeight: Number(e.target.value) } })}>{[1, 1.15, 1.5, 2, 2.5, 3].map(n => <option key={n}>{n}</option>)}</select></label></div></div><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Done</button></div></Modal>}
     {modal?.type === 'snapshot' && <Modal title="Save version" onClose={() => setModal(null)}><form onSubmit={e => { e.preventDefault(); createSnapshot(new FormData(e.currentTarget).get('label')); }}><label className="field-label">Version description</label><input className="field-input" name="label" aria-label="Version description" placeholder="e.g. Before revising the opening" maxLength="200" /><div className="modal-footer"><button className="primary-button" title="Save a named checkpoint of the manuscript to revisit later.">Save version</button></div></form></Modal>}
-    {modal?.type === 'version-tree' && <Modal title="Complete version tree" subtitle="Explore every branch of this manuscript." onClose={() => setModal(null)} className="version-tree-modal"><CheckpointGraph history={gitHistory} onPreview={previewGitVersion} onRestore={item => setModal({ type: 'git-restore', item })} /></Modal>}
-    {modal?.type === 'git-preview' && <Modal title={modal.item.title || modal.item.message} subtitle={new Date(modal.item.date).toLocaleString()} onClose={() => setModal(null)} wide><p className="small-muted">{modal.item.summary || 'Saved manuscript version'}{modal.item.location ? ` · ${modal.item.location}` : ''}</p><label className="field-label">Chapter<select className="field-input" aria-label="Preview chapter" value={modal.chapterId} onChange={event => setModal({ ...modal, chapterId: event.target.value })}>{modal.version.chapters.map(chapter => <option key={chapter.id} value={chapter.id}>{chapter.title}</option>)}</select></label><pre className="checkpoint-preview">{nodeText(modal.version.chapters.find(chapter => chapter.id === modal.chapterId)?.content || modal.version.chapters[0].content, '\n', true)}</pre><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Close preview</button><button className="primary-button" onClick={() => setModal({ type: 'git-restore', item: modal.item, chapterId: modal.chapterId })} title="Review restoring this saved version and continuing from it.">Continue from this version</button></div></Modal>}
-    {modal?.type === 'git-restore' && <Modal title="Continue from this version?" subtitle={(modal.item.title || modal.item.message) + ' · ' + new Date(modal.item.date).toLocaleString()} onClose={() => setModal(null)}><p className="notice-copy">Your current document will be saved as a checkpoint. You can return to either path in the version tree.</p><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Cancel</button><button className="primary-button" onClick={() => restoreGitVersion(modal.item.revision)} title="Save a checkpoint of the current draft, then restore this version and continue from it.">Continue here</button></div></Modal>}
+    {modal?.type === 'version-tree' && <Modal title="History map" onClose={() => setModal(null)} className="story-map-dialog"><CheckpointGraph key={project.id} viewState={historyMapView} aiEnabled={prefs.enabled} onSettings={() => setModal({ type: 'settings', tab: 'connections', task: 'checkpoint', fromMap: true })} history={gitHistory} projectId={project.id} journal={journal} onMerge={api.prepareGitMerge ? item => setModal({ type: 'branch-merge', item, target: projectRef.current, tabId: workspaceRef.current.activeId }) : undefined} onPreview={item => previewGitVersion(item, true)} onRestore={item => setModal({ type: 'git-restore', item, fromMap: true })} /></Modal>}
+    {modal?.type === 'branch-merge' && <BranchMergeDialog Modal={Modal} tabId={modal.tabId} aiEnabled={prefs.enabled} target={modal.target} item={modal.item} destination={gitHistory.entries.find(item => item.revision === gitHistory.headRevision)?.displayTitle || gitHistory.entries.find(item => item.revision === gitHistory.headRevision)?.title} prepare={() => prepareBranchMerge(modal.target, modal.tabId, modal.item.revision)} onApply={(context, candidate) => applyBranchMerge(modal, context, candidate)} onClose={() => setModal({ type: 'version-tree' })}/>}
+    {modal?.type === 'git-preview' && <Modal title={modal.item.displayTitle || modal.item.title || modal.item.message} subtitle={new Date(modal.item.date).toLocaleString()} onClose={() => setModal(modal.fromMap ? { type: 'version-tree' } : null)} wide><p className="small-muted">{modal.item.summary || 'Saved manuscript version'}{modal.item.location ? ` · ${modal.item.location}` : ''}</p><label className="field-label">Chapter<select className="field-input" aria-label="Preview chapter" value={modal.chapterId} onChange={event => setModal({ ...modal, chapterId: event.target.value })}>{modal.version.chapters.map(chapter => <option key={chapter.id} value={chapter.id}>{chapter.title}</option>)}</select></label><CheckpointPreview chapter={modal.version.chapters.find(chapter => chapter.id === modal.chapterId) || modal.version.chapters[0]} passage={modal.item.passage}/><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(modal.fromMap ? { type: 'version-tree' } : null)}>{modal.fromMap ? 'Back to map' : 'Close preview'}</button><button className="primary-button" onClick={() => setModal({ type: 'git-restore', item: modal.item, chapterId: modal.chapterId, fromMap: modal.fromMap })} title="Review restoring this saved version and continuing from it.">Continue from this version</button></div></Modal>}
+    {modal?.type === 'git-restore' && <Modal title="Continue from this version?" subtitle={(modal.item.displayTitle || modal.item.title || modal.item.message) + ' · ' + new Date(modal.item.date).toLocaleString()} onClose={() => setModal(modal.fromMap ? { type: 'version-tree' } : null)}><p className="notice-copy">Your current document will be saved as a checkpoint. Both drafts will be available in the history map.</p><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(modal.fromMap ? { type: 'version-tree' } : null)}>Cancel</button><button className="primary-button" onClick={() => restoreGitVersion(modal.item.revision)} title="Save a checkpoint of the current draft, then restore this version and continue from it.">Continue here</button></div></Modal>}
     {modal?.type === 'recent' && <Modal title="Recent manuscripts" onClose={() => setModal(null)}><div className="recent-list">{recents.length ? recents.map(target => <button className="secondary-button" key={target} title={target} onClick={() => { setModal(null); openDocument(target); }}>{target.split(/[\\/]/).pop()}</button>) : <p>No saved manuscripts yet.</p>}</div></Modal>}
-    {modal?.type === 'delete-chapter' && <Modal title={`Delete “${chapter.title}”?`} subtitle="A snapshot of your manuscript will be kept before the chapter is removed." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep chapter</button><button className="danger-button" onClick={() => { const current = projectRef.current; const chapters = current.chapters.filter(c => c.id !== chapter.id); dismiss(); updateProject({ chapters, snapshots: [snapshot(current, 'Before deleting a chapter'), ...(current.snapshots || [])].slice(0, 20) }); setActiveId(chapters[0].id); setModal(null); }}>Delete chapter</button></div></Modal>}
+    {modal?.type === 'delete-chapter' && <Modal title={'Delete “' + modal.title + '”?'} subtitle="A snapshot of your manuscript will be kept before the chapter is removed." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep chapter</button><button className="danger-button" onClick={confirmChapterDelete}>Delete chapter</button></div></Modal>}
     {modal?.type === 'restore' && <Modal title="Return to this revision?" subtitle="We’ll capture your current version first, so you can return to it later." onClose={() => setModal(null)}><div className="modal-footer"><button className="secondary-button" onClick={() => setModal(null)}>Keep writing</button><button className="primary-button" onClick={() => { const item = modal.item; dismiss(); updateProject({ title: item.title, chapters: structuredClone(item.chapters), notes: item.notes || '', style: item.style || '', language: item.language || project.language, documentStyle: item.documentStyle || project.documentStyle, printLayout: structuredClone(item.printLayout), namedStyles: structuredClone(item.namedStyles || []), references: structuredClone(item.references || []), comments: structuredClone(item.comments || []), bookmarks: structuredClone(item.bookmarks || []), snapshots: [snapshot(project, 'Before restoring a revision'), ...project.snapshots].slice(0, 20) }); setActiveId(item.chapters[0].id); setEpoch(x => x + 1); setModal(null); notify('Revision restored.'); }} title="Replace the current manuscript with this embedded snapshot. This can be undone.">Restore revision</button></div></Modal>}
     {modal?.type === 'reference' && <Modal title={modal.reference.name} subtitle="Attached copy. Linked files refresh separately before each AI request." onClose={() => setModal(null)} wide><pre className="reference-reader">{modal.reference.text}</pre></Modal>}
     {modal?.type === 'notice' && <Modal title={modal.title} onClose={() => setModal(null)}><p className="notice-copy">{modal.text}</p><div className="modal-footer"><button className="primary-button" onClick={() => setModal(null)}>Continue writing</button></div></Modal>}

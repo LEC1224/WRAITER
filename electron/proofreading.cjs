@@ -84,7 +84,7 @@ function parseJSON(text) {
   throw new Error('The proofreading model did not return a valid findings list. Try another model or a smaller scope.');
 }
 
-function locateOriginal(text, original, start, occurrence) {
+function locateOriginal(text, original, start, occurrence, strictLocation) {
   if (Number.isInteger(start) && start >= 0 && text.slice(start, start + original.length) === original) return start;
   const matches = []; let offset = 0;
   while (matches.length < 100) {
@@ -93,6 +93,7 @@ function locateOriginal(text, original, start, occurrence) {
     matches.push(found); offset = found + Math.max(1, original.length);
   }
   if (matches.length === 1) return matches[0];
+  if (strictLocation) return -1;
   if (Number.isInteger(occurrence) && occurrence > 0 && occurrence <= matches.length) return matches[occurrence - 1];
   if (Number.isInteger(start) && matches.length) return matches.reduce((best, value) => Math.abs(value - start) < Math.abs(best - start) ? value : best, matches[0]);
   return -1;
@@ -111,7 +112,7 @@ function normalizeCategory(value) {
   return CATEGORIES.includes(value) ? value : aliases[String(value || '').toLowerCase()] || null;
 }
 
-function parseProofreadResult(raw, input) {
+function parseProofreadResult(raw, input, { strictLocation = false, errorsOnly = false } = {}) {
   const request = validateProofreadRequest(input), parsed = parseJSON(raw);
   if (!object(parsed) || !Array.isArray(parsed.findings) || parsed.findings.length > 500) throw new Error('The proofreading model returned an invalid findings list.');
   const passages = new Map(request.passages.map(passage => [passage.id, passage]));
@@ -120,8 +121,9 @@ function parseProofreadResult(raw, input) {
     if (!object(value)) continue;
     const passage = passages.get(value.passageId);
     const severity = normalizeSeverity(value.severity), category = normalizeCategory(value.category);
+    if (errorsOnly && (severity === 'optional' || category === 'phrasing' || category === 'consistency')) continue;
     if (!passage || !severity || !category || typeof value.original !== 'string' || !value.original || value.original.length > 4000 || typeof value.replacement !== 'string' || value.replacement.length > 4000 || /\0/.test(value.replacement)) continue;
-    const start = locateOriginal(passage.text, value.original, value.start, value.occurrence);
+    const start = locateOriginal(passage.text, value.original, value.start, value.occurrence, strictLocation);
     if (start < 0 || value.replacement === value.original) continue;
     const reason = typeof value.reason === 'string' ? value.reason.trim().slice(0, 800) : '';
     candidates.push({ passageId: passage.id, start, end: start + value.original.length, original: value.original, replacement: value.replacement, severity, category, reason, order: passage.order });

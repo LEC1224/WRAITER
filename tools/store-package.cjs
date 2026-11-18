@@ -107,6 +107,8 @@ async function main() {
   const identity = args.includes('--preview') ? undefined : JSON.parse(await fs.readFile(path.resolve(identityFile), 'utf8'));
   const plan = storePlan(args, pkg.version, identity);
   const makeAppx = await findMakeAppx();
+  await runNode(path.join(root, 'tools/prepare-offline-grammar.cjs'));
+  await runNode(path.join(root, 'tools/prepare-neural-grammar.cjs'));
   await runNode(path.join(root, 'tools/third-party-notices.cjs'));
   await runNode(path.join(path.dirname(require.resolve('vite/package.json')), 'bin/vite.js'), ['build']);
   for (const [name] of require('./store-assets.cjs').assets) await fs.access(path.join(root, 'build/appx', name));

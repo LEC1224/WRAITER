@@ -1,0 +1,218 @@
+{"text":"The lamps along the platform was lit by dusk.","edits":[{"start":29,"end":32,"replacement":"were"}],"category":"subject-number","group":"P1"}
+{"text":"The lamps along the platform were lit by dusk.","edits":[],"category":"subject-number","group":"P1"}
+{"text":"“The lamps along the platform was lit by dusk.”","edits":[],"category":"voice","group":"P1"}
+{"text":"The keys inside the cabinet is not for us.","edits":[{"start":28,"end":30,"replacement":"are"}],"category":"subject-number","group":"P2"}
+{"text":"The keys inside the cabinet are not for us.","edits":[],"category":"subject-number","group":"P2"}
+{"text":"“The keys inside the cabinet is not for us.”","edits":[],"category":"voice","group":"P2"}
+{"text":"The shutters behind the table has been shut all winter.","edits":[{"start":30,"end":33,"replacement":"have"}],"category":"subject-number","group":"P3"}
+{"text":"The shutters behind the table have been shut all winter.","edits":[],"category":"subject-number","group":"P3"}
+{"text":"“The shutters behind the table has been shut all winter.”","edits":[],"category":"voice","group":"P3"}
+{"text":"The guards beside the arch does not know our names.","edits":[{"start":27,"end":31,"replacement":"do"}],"category":"subject-number","group":"P4"}
+{"text":"The guards beside the arch do not know our names.","edits":[],"category":"subject-number","group":"P4"}
+{"text":"“The guards beside the arch does not know our names.”","edits":[],"category":"voice","group":"P4"}
+{"text":"The branches over the roof brushes against the tiles.","edits":[{"start":27,"end":34,"replacement":"brush"}],"category":"subject-number","group":"P5"}
+{"text":"The branches over the roof brush against the tiles.","edits":[],"category":"subject-number","group":"P5"}
+{"text":"“The branches over the roof brushes against the tiles.”","edits":[],"category":"voice","group":"P5"}
+{"text":"The bells in the tower rings at noon.","edits":[{"start":23,"end":28,"replacement":"ring"}],"category":"subject-number","group":"P6"}
+{"text":"The bells in the tower ring at noon.","edits":[],"category":"subject-number","group":"P6"}
+{"text":"“The bells in the tower rings at noon.”","edits":[],"category":"voice","group":"P6"}
+{"text":"The ropes on the boat hangs into the water.","edits":[{"start":22,"end":27,"replacement":"hang"}],"category":"subject-number","group":"P7"}
+{"text":"The ropes on the boat hang into the water.","edits":[],"category":"subject-number","group":"P7"}
+{"text":"“The ropes on the boat hangs into the water.”","edits":[],"category":"voice","group":"P7"}
+{"text":"The letters under the door lies where they fell.","edits":[{"start":27,"end":31,"replacement":"lie"}],"category":"subject-number","group":"P8"}
+{"text":"The letters under the door lie where they fell.","edits":[],"category":"subject-number","group":"P8"}
+{"text":"“The letters under the door lies where they fell.”","edits":[],"category":"voice","group":"P8"}
+{"text":"The dogs near the wagon sits perfectly still.","edits":[{"start":24,"end":28,"replacement":"sit"}],"category":"subject-number","group":"P9"}
+{"text":"The dogs near the wagon sit perfectly still.","edits":[],"category":"subject-number","group":"P9"}
+{"text":"“The dogs near the wagon sits perfectly still.”","edits":[],"category":"voice","group":"P9"}
+{"text":"The stairs by the kitchen door creaks in cold weather.","edits":[{"start":31,"end":37,"replacement":"creak"}],"category":"subject-number","group":"P10"}
+{"text":"The stairs by the kitchen door creak in cold weather.","edits":[],"category":"subject-number","group":"P10"}
+{"text":"“The stairs by the kitchen door creaks in cold weather.”","edits":[],"category":"voice","group":"P10"}
+{"text":"The box of letters are too heavy to carry.","edits":[{"start":19,"end":22,"replacement":"is"}],"category":"subject-number","group":"P11"}
+{"text":"The box of letters is too heavy to carry.","edits":[],"category":"subject-number","group":"P11"}
+{"text":"“The box of letters are too heavy to carry.”","edits":[],"category":"voice","group":"P11"}
+{"text":"The sailor with the maps have a seal on each one.","edits":[{"start":25,"end":29,"replacement":"has"}],"category":"subject-number","group":"P12"}
+{"text":"The sailor with the maps has a seal on each one.","edits":[],"category":"subject-number","group":"P12"}
+{"text":"“The sailor with the maps have a seal on each one.”","edits":[],"category":"voice","group":"P12"}
+{"text":"The lock on the gates do not open from this side.","edits":[{"start":22,"end":24,"replacement":"does"}],"category":"subject-number","group":"P13"}
+{"text":"The lock on the gates does not open from this side.","edits":[],"category":"subject-number","group":"P13"}
+{"text":"“The lock on the gates do not open from this side.”","edits":[],"category":"voice","group":"P13"}
+{"text":"The end of the stairs lead straight to the cellar.","edits":[{"start":22,"end":26,"replacement":"leads"}],"category":"subject-number","group":"P14"}
+{"text":"The end of the stairs leads straight to the cellar.","edits":[],"category":"subject-number","group":"P14"}
+{"text":"“The end of the stairs lead straight to the cellar.”","edits":[],"category":"voice","group":"P14"}
+{"text":"The trail beyond the fields turn abruptly to the west.","edits":[{"start":28,"end":32,"replacement":"turns"}],"category":"subject-number","group":"P15"}
+{"text":"The trail beyond the fields turns abruptly to the west.","edits":[],"category":"subject-number","group":"P15"}
+{"text":"“The trail beyond the fields turn abruptly to the west.”","edits":[],"category":"voice","group":"P15"}
+{"text":"The tower near the cliffs lean toward the sea.","edits":[{"start":26,"end":30,"replacement":"leans"}],"category":"subject-number","group":"P16"}
+{"text":"The tower near the cliffs leans toward the sea.","edits":[],"category":"subject-number","group":"P16"}
+{"text":"“The tower near the cliffs lean toward the sea.”","edits":[],"category":"voice","group":"P16"}
+{"text":"The chest with the coats stand at the foot of the bed.","edits":[{"start":25,"end":30,"replacement":"stands"}],"category":"subject-number","group":"P17"}
+{"text":"The chest with the coats stands at the foot of the bed.","edits":[],"category":"subject-number","group":"P17"}
+{"text":"“The chest with the coats stand at the foot of the bed.”","edits":[],"category":"voice","group":"P17"}
+{"text":"The drawer beside the needles open only halfway.","edits":[{"start":30,"end":34,"replacement":"opens"}],"category":"subject-number","group":"P18"}
+{"text":"The drawer beside the needles opens only halfway.","edits":[],"category":"subject-number","group":"P18"}
+{"text":"“The drawer beside the needles open only halfway.”","edits":[],"category":"voice","group":"P18"}
+{"text":"The windows along the corridor rattles whenever a cart passes.","edits":[{"start":31,"end":38,"replacement":"rattle"}],"category":"subject-number","group":"P19"}
+{"text":"The windows along the corridor rattle whenever a cart passes.","edits":[],"category":"subject-number","group":"P19"}
+{"text":"“The windows along the corridor rattles whenever a cart passes.”","edits":[],"category":"voice","group":"P19"}
+{"text":"The bottles near the cupboard was already empty.","edits":[{"start":30,"end":33,"replacement":"were"}],"category":"subject-number","group":"P20"}
+{"text":"The bottles near the cupboard were already empty.","edits":[],"category":"subject-number","group":"P20"}
+{"text":"“The bottles near the cupboard was already empty.”","edits":[],"category":"voice","group":"P20"}
+{"text":"The wall under the windows shake when the bell rings.","edits":[{"start":27,"end":32,"replacement":"shakes"}],"category":"subject-number","group":"P21"}
+{"text":"The wall under the windows shakes when the bell rings.","edits":[],"category":"subject-number","group":"P21"}
+{"text":"“The wall under the windows shake when the bell rings.”","edits":[],"category":"voice","group":"P21"}
+{"text":"The candle between the mirrors flicker in the draught.","edits":[{"start":31,"end":38,"replacement":"flickers"}],"category":"subject-number","group":"P22"}
+{"text":"The candle between the mirrors flickers in the draught.","edits":[],"category":"subject-number","group":"P22"}
+{"text":"“The candle between the mirrors flicker in the draught.”","edits":[],"category":"voice","group":"P22"}
+{"text":"The oars inside the boat was gone by dawn.","edits":[{"start":25,"end":28,"replacement":"were"}],"category":"subject-number","group":"P23"}
+{"text":"The oars inside the boat were gone by dawn.","edits":[],"category":"subject-number","group":"P23"}
+{"text":"“The oars inside the boat was gone by dawn.”","edits":[],"category":"voice","group":"P23"}
+{"text":"The hinges on the chest scrapes when the lid moves.","edits":[{"start":24,"end":31,"replacement":"scrape"}],"category":"subject-number","group":"P24"}
+{"text":"The hinges on the chest scrape when the lid moves.","edits":[],"category":"subject-number","group":"P24"}
+{"text":"“The hinges on the chest scrapes when the lid moves.”","edits":[],"category":"voice","group":"P24"}
+{"text":"The path through the garden lead to the fountain.","edits":[{"start":28,"end":32,"replacement":"leads"}],"category":"subject-number","group":"P25"}
+{"text":"The path through the garden leads to the fountain.","edits":[],"category":"subject-number","group":"P25"}
+{"text":"“The path through the garden lead to the fountain.”","edits":[],"category":"voice","group":"P25"}
+{"text":"The messenger at the gate have already met the captain.","edits":[{"start":26,"end":30,"replacement":"has"}],"category":"subject-number","group":"P26"}
+{"text":"The messenger at the gate has already met the captain.","edits":[],"category":"subject-number","group":"P26"}
+{"text":"“The messenger at the gate have already met the captain.”","edits":[],"category":"voice","group":"P26"}
+{"text":"I had already ate half the bread.","edits":[{"start":14,"end":17,"replacement":"eaten"}],"category":"verb-form","group":"P27"}
+{"text":"I had already eaten half the bread.","edits":[],"category":"verb-form","group":"P27"}
+{"text":"“I had already ate half the bread.”","edits":[],"category":"voice","group":"P27"}
+{"text":"We had never saw the captain leave so early.","edits":[{"start":13,"end":16,"replacement":"seen"}],"category":"verb-form","group":"P28"}
+{"text":"We had never seen the captain leave so early.","edits":[],"category":"verb-form","group":"P28"}
+{"text":"“We had never saw the captain leave so early.”","edits":[],"category":"voice","group":"P28"}
+{"text":"She hasn’t wrote the last chapter yet.","edits":[{"start":11,"end":16,"replacement":"written"}],"category":"verb-form","group":"P29"}
+{"text":"She hasn’t written the last chapter yet.","edits":[],"category":"verb-form","group":"P29"}
+{"text":"“She hasn’t wrote the last chapter yet.”","edits":[],"category":"voice","group":"P29"}
+{"text":"They had just spoke when the rope snapped.","edits":[{"start":14,"end":19,"replacement":"spoken"}],"category":"verb-form","group":"P30"}
+{"text":"They had just spoken when the rope snapped.","edits":[],"category":"verb-form","group":"P30"}
+{"text":"“They had just spoke when the rope snapped.”","edits":[],"category":"voice","group":"P30"}
+{"text":"He had certainly gave the message by then.","edits":[{"start":17,"end":21,"replacement":"given"}],"category":"verb-form","group":"P31"}
+{"text":"He had certainly given the message by then.","edits":[],"category":"verb-form","group":"P31"}
+{"text":"“He had certainly gave the message by then.”","edits":[],"category":"voice","group":"P31"}
+{"text":"He had went long before the sky cleared.","edits":[{"start":7,"end":11,"replacement":"gone"}],"category":"verb-form","group":"P32"}
+{"text":"He had gone long before the sky cleared.","edits":[],"category":"verb-form","group":"P32"}
+{"text":"“He had went long before the sky cleared.”","edits":[],"category":"voice","group":"P32"}
+{"text":"They hadn’t took a lantern.","edits":[{"start":12,"end":16,"replacement":"taken"}],"category":"verb-form","group":"P33"}
+{"text":"They hadn’t taken a lantern.","edits":[],"category":"verb-form","group":"P33"}
+{"text":"“They hadn’t took a lantern.”","edits":[],"category":"voice","group":"P33"}
+{"text":"I had finally broke the ice.","edits":[{"start":14,"end":19,"replacement":"broken"}],"category":"verb-form","group":"P34"}
+{"text":"I had finally broken the ice.","edits":[],"category":"verb-form","group":"P34"}
+{"text":"“I had finally broke the ice.”","edits":[],"category":"voice","group":"P34"}
+{"text":"You should probably ran more slowly.","edits":[{"start":20,"end":23,"replacement":"run"}],"category":"verb-form","group":"P35"}
+{"text":"You should probably run more slowly.","edits":[],"category":"verb-form","group":"P35"}
+{"text":"“You should probably ran more slowly.”","edits":[],"category":"voice","group":"P35"}
+{"text":"He did not told the king about the map.","edits":[{"start":11,"end":15,"replacement":"tell"}],"category":"verb-form","group":"P36"}
+{"text":"He did not tell the king about the map.","edits":[],"category":"verb-form","group":"P36"}
+{"text":"“He did not told the king about the map.”","edits":[],"category":"voice","group":"P36"}
+{"text":"We can still saw the first bridge.","edits":[{"start":13,"end":16,"replacement":"see"}],"category":"verb-form","group":"P37"}
+{"text":"We can still see the first bridge.","edits":[],"category":"verb-form","group":"P37"}
+{"text":"“We can still saw the first bridge.”","edits":[],"category":"voice","group":"P37"}
+{"text":"She might drank a little if we asked.","edits":[{"start":10,"end":15,"replacement":"drink"}],"category":"verb-form","group":"P38"}
+{"text":"She might drink a little if we asked.","edits":[],"category":"verb-form","group":"P38"}
+{"text":"“She might drank a little if we asked.”","edits":[],"category":"voice","group":"P38"}
+{"text":"He didn’t went any farther that night.","edits":[{"start":10,"end":14,"replacement":"go"}],"category":"verb-form","group":"P39"}
+{"text":"He didn’t go any farther that night.","edits":[],"category":"verb-form","group":"P39"}
+{"text":"“He didn’t went any farther that night.”","edits":[],"category":"voice","group":"P39"}
+{"text":"Could you wrote this letter for me?","edits":[{"start":10,"end":15,"replacement":"write"}],"category":"verb-form","group":"P40"}
+{"text":"Could you write this letter for me?","edits":[],"category":"verb-form","group":"P40"}
+{"text":"“Could you wrote this letter for me?”","edits":[],"category":"voice","group":"P40"}
+{"text":"We could finally spoke to the keeper.","edits":[{"start":17,"end":22,"replacement":"speak"}],"category":"verb-form","group":"P41"}
+{"text":"We could finally speak to the keeper.","edits":[],"category":"verb-form","group":"P41"}
+{"text":"“We could finally spoke to the keeper.”","edits":[],"category":"voice","group":"P41"}
+{"text":"You must never broke the seal.","edits":[{"start":15,"end":20,"replacement":"break"}],"category":"verb-form","group":"P42"}
+{"text":"You must never break the seal.","edits":[],"category":"verb-form","group":"P42"}
+{"text":"“You must never broke the seal.”","edits":[],"category":"voice","group":"P42"}
+{"text":"I wanted to waited beside the well.","edits":[{"start":12,"end":18,"replacement":"wait"}],"category":"verb-form","group":"P43"}
+{"text":"I wanted to wait beside the well.","edits":[],"category":"verb-form","group":"P43"}
+{"text":"“I wanted to waited beside the well.”","edits":[],"category":"voice","group":"P43"}
+{"text":"She paused to closed the window.","edits":[{"start":14,"end":20,"replacement":"close"}],"category":"verb-form","group":"P44"}
+{"text":"She paused to close the window.","edits":[],"category":"verb-form","group":"P44"}
+{"text":"“She paused to closed the window.”","edits":[],"category":"voice","group":"P44"}
+{"text":"The keeper bent to touched the bell.","edits":[{"start":19,"end":26,"replacement":"touch"}],"category":"verb-form","group":"P45"}
+{"text":"The keeper bent to touch the bell.","edits":[],"category":"verb-form","group":"P45"}
+{"text":"“The keeper bent to touched the bell.”","edits":[],"category":"voice","group":"P45"}
+{"text":"We turned to watched the girl pass.","edits":[{"start":13,"end":20,"replacement":"watch"}],"category":"verb-form","group":"P46"}
+{"text":"We turned to watch the girl pass.","edits":[],"category":"verb-form","group":"P46"}
+{"text":"“We turned to watched the girl pass.”","edits":[],"category":"voice","group":"P46"}
+{"text":"He was too tired to walked any farther.","edits":[{"start":20,"end":26,"replacement":"walk"}],"category":"verb-form","group":"P47"}
+{"text":"He was too tired to walk any farther.","edits":[],"category":"verb-form","group":"P47"}
+{"text":"“He was too tired to walked any farther.”","edits":[],"category":"voice","group":"P47"}
+{"text":"I had no wish to helped the captain.","edits":[{"start":17,"end":23,"replacement":"help"}],"category":"verb-form","group":"P48"}
+{"text":"I had no wish to help the captain.","edits":[],"category":"verb-form","group":"P48"}
+{"text":"“I had no wish to helped the captain.”","edits":[],"category":"voice","group":"P48"}
+{"text":"She took a moment to explained what she had seen.","edits":[{"start":21,"end":30,"replacement":"explain"}],"category":"verb-form","group":"P49"}
+{"text":"She took a moment to explain what she had seen.","edits":[],"category":"verb-form","group":"P49"}
+{"text":"“She took a moment to explained what she had seen.”","edits":[],"category":"voice","group":"P49"}
+{"text":"He lifted the lamp to lighted the corridor.","edits":[{"start":22,"end":29,"replacement":"light"}],"category":"verb-form","group":"P50"}
+{"text":"He lifted the lamp to light the corridor.","edits":[],"category":"verb-form","group":"P50"}
+{"text":"“He lifted the lamp to lighted the corridor.”","edits":[],"category":"voice","group":"P50"}
+{"text":"They offered three practical advices about the ropes.","edits":[{"start":29,"end":36,"replacement":"pieces of advice"}],"category":"noun-count","group":"P51"}
+{"text":"They offered three practical pieces of advice about the ropes.","edits":[],"category":"noun-count","group":"P51"}
+{"text":"“They offered three practical advices about the ropes.”","edits":[],"category":"voice","group":"P51"}
+{"text":"Her several useful informations were all we had to go on.","edits":[{"start":19,"end":31,"replacement":"pieces of information"}],"category":"noun-count","group":"P52"}
+{"text":"Her several useful pieces of information were all we had to go on.","edits":[],"category":"noun-count","group":"P52"}
+{"text":"“Her several useful informations were all we had to go on.”","edits":[],"category":"voice","group":"P52"}
+{"text":"We salvaged three old furnitures from the house.","edits":[{"start":22,"end":32,"replacement":"pieces of furniture"}],"category":"noun-count","group":"P53"}
+{"text":"We salvaged three old pieces of furniture from the house.","edits":[],"category":"noun-count","group":"P53"}
+{"text":"“We salvaged three old furnitures from the house.”","edits":[],"category":"voice","group":"P53"}
+{"text":"The cart carried two spare equipments for the dig.","edits":[{"start":27,"end":37,"replacement":"pieces of equipment"}],"category":"noun-count","group":"P54"}
+{"text":"The cart carried two spare pieces of equipment for the dig.","edits":[],"category":"noun-count","group":"P54"}
+{"text":"“The cart carried two spare equipments for the dig.”","edits":[],"category":"voice","group":"P54"}
+{"text":"I wrote down some advices before we left.","edits":[{"start":18,"end":25,"replacement":"advice"}],"category":"noun-count","group":"P55"}
+{"text":"I wrote down some advice before we left.","edits":[],"category":"noun-count","group":"P55"}
+{"text":"“I wrote down some advices before we left.”","edits":[],"category":"voice","group":"P55"}
+{"text":"We brought a few luggages along with the maps.","edits":[{"start":17,"end":25,"replacement":"pieces of luggage"}],"category":"noun-count","group":"P56"}
+{"text":"We brought a few pieces of luggage along with the maps.","edits":[],"category":"noun-count","group":"P56"}
+{"text":"“We brought a few luggages along with the maps.”","edits":[],"category":"voice","group":"P56"}
+{"text":"They had two small baggages to unload.","edits":[{"start":19,"end":27,"replacement":"pieces of baggage"}],"category":"noun-count","group":"P57"}
+{"text":"They had two small pieces of baggage to unload.","edits":[],"category":"noun-count","group":"P57"}
+{"text":"“They had two small baggages to unload.”","edits":[],"category":"voice","group":"P57"}
+{"text":"All the informations she left us fitted in one envelope.","edits":[{"start":8,"end":20,"replacement":"information"}],"category":"noun-count","group":"P58"}
+{"text":"All the information she left us fitted in one envelope.","edits":[],"category":"noun-count","group":"P58"}
+{"text":"“All the informations she left us fitted in one envelope.”","edits":[],"category":"voice","group":"P58"}
+{"text":"The innkeeper gave us many advices on staying warm.","edits":[{"start":27,"end":34,"replacement":"pieces of advice"}],"category":"noun-count","group":"P59"}
+{"text":"The innkeeper gave us many pieces of advice on staying warm.","edits":[],"category":"noun-count","group":"P59"}
+{"text":"“The innkeeper gave us many advices on staying warm.”","edits":[],"category":"voice","group":"P59"}
+{"text":"They left four horse in the barn.","edits":[{"start":15,"end":20,"replacement":"horses"}],"category":"noun-count","group":"P60"}
+{"text":"They left four horses in the barn.","edits":[],"category":"noun-count","group":"P60"}
+{"text":"“They left four horse in the barn.”","edits":[],"category":"voice","group":"P60"}
+{"text":"Several bench on the deck were splintered.","edits":[{"start":8,"end":13,"replacement":"benches"}],"category":"noun-count","group":"P61"}
+{"text":"Several benches on the deck were splintered.","edits":[],"category":"noun-count","group":"P61"}
+{"text":"“Several bench on the deck were splintered.”","edits":[],"category":"voice","group":"P61"}
+{"text":"We found three spare key in the box.","edits":[{"start":21,"end":24,"replacement":"keys"}],"category":"noun-count","group":"P62"}
+{"text":"We found three spare keys in the box.","edits":[],"category":"noun-count","group":"P62"}
+{"text":"“We found three spare key in the box.”","edits":[],"category":"voice","group":"P62"}
+{"text":"A few broken chain hung from the west wall.","edits":[{"start":13,"end":18,"replacement":"chains"}],"category":"noun-count","group":"P63"}
+{"text":"A few broken chains hung from the west wall.","edits":[],"category":"noun-count","group":"P63"}
+{"text":"“A few broken chain hung from the west wall.”","edits":[],"category":"voice","group":"P63"}
+{"text":"The drawer held seven coin and a letter.","edits":[{"start":22,"end":26,"replacement":"coins"}],"category":"noun-count","group":"P64"}
+{"text":"The drawer held seven coins and a letter.","edits":[],"category":"noun-count","group":"P64"}
+{"text":"“The drawer held seven coin and a letter.”","edits":[],"category":"voice","group":"P64"}
+{"text":"There were eight chair in the back row.","edits":[{"start":17,"end":22,"replacement":"chairs"}],"category":"noun-count","group":"P65"}
+{"text":"There were eight chairs in the back row.","edits":[],"category":"noun-count","group":"P65"}
+{"text":"“There were eight chair in the back row.”","edits":[],"category":"voice","group":"P65"}
+{"text":"We listened to recorded voices from the attic.","edits":[],"category":"context-lookalike","group":"P66"}
+{"text":"The narrow trail led to packed earth and weeds.","edits":[],"category":"context-lookalike","group":"P67"}
+{"text":"The key was fitted to warped wood.","edits":[],"category":"context-lookalike","group":"P68"}
+{"text":"The wing was given over to retired officers.","edits":[],"category":"context-lookalike","group":"P69"}
+{"text":"She returned to closed doors and dark windows.","edits":[],"category":"context-lookalike","group":"P70"}
+{"text":"The same code applies to borrowed books.","edits":[],"category":"context-lookalike","group":"P71"}
+{"text":"He rubbed some oil into the wood to finish the carved chairs.","edits":[],"category":"context-lookalike","group":"P72"}
+{"text":"The path led to abandoned boats near the river.","edits":[],"category":"context-lookalike","group":"P73"}
+{"text":"The river had turned the field to flooded pasture.","edits":[],"category":"context-lookalike","group":"P74"}
+{"text":"The next steps are up to elected officials.","edits":[],"category":"context-lookalike","group":"P75"}
+{"text":"To burned fields and ruined houses they returned.","edits":[],"category":"context-lookalike","group":"P76"}
+{"text":"She would saw through the rope with her knife.","edits":[],"category":"context-lookalike","group":"P77"}
+{"text":"The worker could saw the oak into planks.","edits":[],"category":"context-lookalike","group":"P78"}
+{"text":"He does saw when the shop is quiet.","edits":[],"category":"context-lookalike","group":"P79"}
+{"text":"She was going to saw the timber before lunch.","edits":[],"category":"context-lookalike","group":"P80"}
+{"text":"A clear path led to fallen branches.","edits":[],"category":"context-lookalike","group":"P81"}
+{"text":"The new law applies to stolen goods.","edits":[],"category":"context-lookalike","group":"P82"}
+{"text":"We spoke to retired captains, all of them cheerful.","edits":[],"category":"context-lookalike","group":"P83"}
+{"text":"She was accustomed to close calls.","edits":[],"category":"context-lookalike","group":"P84"}
+{"text":"The hall was hung with several chain links.","edits":[],"category":"context-lookalike","group":"P85"}
+{"text":"Several lamp makers rented the upper floor.","edits":[],"category":"context-lookalike","group":"P86"}
+{"text":"She bought four coat hangers.","edits":[],"category":"context-lookalike","group":"P87"}
+{"text":"Two clock faces showed different times.","edits":[],"category":"context-lookalike","group":"P88"}

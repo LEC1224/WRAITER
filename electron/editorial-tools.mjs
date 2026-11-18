@@ -1,11 +1,12 @@
-import { randomUUID, createHash } from 'node:crypto';
+import portableCrypto from './portable-crypto.cjs';
+const { randomUUID, hash } = portableCrypto;
 import { EditorState } from '@tiptap/pm/state';
 import { TableMap } from '@tiptap/pm/tables';
 import { editorialSchema as schema } from './editor-schema.mjs';
 import { applyTextChanges } from './text-edits.mjs';
 import { documentChanges, documentFields } from './document-changes.mjs';
-import core from './core.cjs';
-import legacy from './writing-agent.cjs';
+import core from './document-core.cjs';
+import legacy from './writing-agent-core.cjs';
 
 const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const paragraph = text => ({ type: 'paragraph', ...(text ? { content: [{ type: 'text', text }] } : {}) });
@@ -60,7 +61,7 @@ export function createEditorialTools(project, options = {}) {
     if (node.attrs) projected.attrs = structuredClone(node.attrs);
     if (node.marks) { const marks = providerMarks(node.marks); if (marks.length) projected.marks = marks; else delete projected.marks; }
     if (node.type === 'image') {
-      const assetId = createHash('sha256').update(JSON.stringify(node)).digest('hex').slice(0, 20);
+      const assetId = hash(JSON.stringify(node)).slice(0, 20);
       assets.set(assetId, structuredClone(node));
       const { src, ...attrs } = projected.attrs || {};
       return { type: 'image', assetId, attrs, ...(projected.marks ? { marks: projected.marks } : {}) };

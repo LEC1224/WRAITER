@@ -49,5 +49,8 @@ for (const [dir, manifest] of [...visited].sort((a, b) => `${a[1].name}@${a[1].v
 }
 if (missing.length) throw new Error(`Review packages missing license files: ${missing.join(', ')}`);
 output.push('## English WordNet thesaurus', '', 'The compressed English thesaurus in assets/thesaurus is the WordNet 2.1 dictionary distributed with LibreOffice. The full notice is included with the asset.', '', '````text', fs.readFileSync(path.join(root, 'assets', 'thesaurus', 'WordNet_license.txt'), 'utf8').trim(), '````', '');
+output.push('## Bundled local spelling and grammar', '', 'LanguageTool, its English and Swedish rules and dependencies, Chromium Hunspell dictionaries, and Eclipse Temurin are included in the separately replaceable resources/offline-grammar directory. Their notices, licenses, source archives, and corresponding source information are in resources/offline-grammar/notices, resources/offline-grammar/sources, and resources/offline-grammar/runtime/legal.', '');
+output.push('## Offline neural grammar', '', fs.readFileSync(path.join(root, 'tools/grammar-model/licenses/NEURAL-NOTICE.txt'), 'utf8'), '', 'Complete model licenses and attribution are installed in resources/neural-grammar.', '');
 fs.writeFileSync(path.join(root, 'THIRD-PARTY-NOTICES.md'), output.join('\n'));
 console.log(`Collected notices for ${visited.size} installed application dependencies.`);
+

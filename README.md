@@ -202,3 +202,7 @@ The [validation report](TEST-REPORT.md) records checks and remaining limitations
 WRAITER is released under the **[MIT license](LICENSE)**. Its name and this repository do not imply endorsement by OpenAI, Anthropic or any other provider.
 
 WRAITER uses Electron, React, TipTap/ProseMirror and other community projects. Their notices are collected in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); the Windows distribution also includes Electron and Chromium notices. Optional AI helpers, runtimes and downloaded models retain their own licenses and terms.
+
+## Web preview
+
+Build the browser app with `npm run build:web`. Run the cloud service with `node --env-file=cloud/.env.example cloud/server.cjs`. Configure an HTTPS origin, secure cookies, a verified sender, and a send-only API key for a public deployment. Use `npm run test:cloud` for the account and document API checks.

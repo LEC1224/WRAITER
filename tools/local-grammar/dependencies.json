@@ -1,0 +1,534 @@
+{
+  "languageTool": "6.8",
+  "artifacts": [
+    {
+      "file": "language-sv-6.8.jar",
+      "group": "org.languagetool",
+      "artifact": "language-sv",
+      "version": "6.8",
+      "sha256": "fe8877bfaafc7b54049997973f128c192a09b965c7d9e3ab5a7eacbcf8aebffe"
+    },
+    {
+      "file": "aho-corasick-double-array-trie-1.2.2.jar",
+      "group": "com.hankcs",
+      "artifact": "aho-corasick-double-array-trie",
+      "version": "1.2.2",
+      "sha256": "cbc79badb1e3d18dd18fdb77850da17d4566371c955e5ae85654b770c6e17858"
+    },
+    {
+      "file": "angus-activation-2.0.2.jar",
+      "group": "org.eclipse.angus",
+      "artifact": "angus-activation",
+      "version": "2.0.2",
+      "sha256": "6dd3bcffc22bce83b07376a0e2e094e4964a3195d4118fb43e380ef35436cc1e"
+    },
+    {
+      "file": "annotations-12.0.jar",
+      "group": "com.intellij",
+      "artifact": "annotations",
+      "version": "12.0",
+      "sha256": "f8ab13b14be080fe2f617f90e55599760e4a1b4deeea5c595df63d0d6375ed6d"
+    },
+    {
+      "file": "commons-digester-2.1.jar",
+      "group": "commons-digester",
+      "artifact": "commons-digester",
+      "version": "2.1",
+      "sha256": "e0b2b980a84fc6533c5ce291f1917b32c507f62bcad64198fff44368c2196a3d"
+    },
+    {
+      "file": "commons-lang3-3.18.0.jar",
+      "group": "org.apache.commons",
+      "artifact": "commons-lang3",
+      "version": "3.18.0",
+      "sha256": "4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720"
+    },
+    {
+      "file": "commons-logging-1.3.4.jar",
+      "group": "commons-logging",
+      "artifact": "commons-logging",
+      "version": "1.3.4",
+      "sha256": "bc2dfe32f1ef06509e6a065144c1adf7b420eabf11a87f30bd127f8faa332016"
+    },
+    {
+      "file": "commons-pool2-2.12.0.jar",
+      "group": "org.apache.commons",
+      "artifact": "commons-pool2",
+      "version": "2.12.0",
+      "sha256": "6d3bd18df8410f3e31b031aca582cc109342358a62a2759ebd0c4cdf30d06f8b"
+    },
+    {
+      "file": "commons-text-1.12.0.jar",
+      "group": "org.apache.commons",
+      "artifact": "commons-text",
+      "version": "1.12.0",
+      "sha256": "de023257ff166044a56bd1aa9124e843cd05dac5806cc705a9311f3556d5a15f"
+    },
+    {
+      "file": "commons-validator-1.9.0.jar",
+      "group": "commons-validator",
+      "artifact": "commons-validator",
+      "version": "1.9.0",
+      "sha256": "c3c14748e2d78db58df88808740711bd643b32c45ffa7b8a739f00fb467cd7d7"
+    },
+    {
+      "file": "english-pos-dict-0.6.jar",
+      "group": "org.languagetool",
+      "artifact": "english-pos-dict",
+      "version": "0.6",
+      "sha256": "2a3e96b49854e5275f8eb7a1bb5b3b85b82f687fed272f3043882ccc0b1634b1"
+    },
+    {
+      "file": "error_prone_annotations-2.41.0.jar",
+      "group": "com.google.errorprone",
+      "artifact": "error_prone_annotations",
+      "version": "2.41.0",
+      "sha256": "a56e782b5b50811ac204073a355a21d915a2107fce13ec711331ad036f660fcc"
+    },
+    {
+      "file": "failureaccess-1.0.3.jar",
+      "group": "com.google.guava",
+      "artifact": "failureaccess",
+      "version": "1.0.3",
+      "sha256": "cbfc3906b19b8f55dd7cfd6dfe0aa4532e834250d7f080bd8d211a3e246b59cb"
+    },
+    {
+      "file": "fastutil-core-8.5.14.jar",
+      "group": "it.unimi.dsi",
+      "artifact": "fastutil-core",
+      "version": "8.5.14",
+      "sha256": "8fb6fe5989a32a74df3158fd8d6b91a4dfc44348772a8654c47dcadd1090a4d8"
+    },
+    {
+      "file": "grpc-api-1.75.0.jar",
+      "group": "io.grpc",
+      "artifact": "grpc-api",
+      "version": "1.75.0",
+      "sha256": "7f309616691fa655d02512762049ed18bf4ab2b52ced424cab2f527d0bb8e3fc"
+    },
+    {
+      "file": "guava-33.5.0-jre.jar",
+      "group": "com.google.guava",
+      "artifact": "guava",
+      "version": "33.5.0-jre",
+      "sha256": "1e301f0c52ac248b0b14fdc3d12283c77252d4d6f48521d572e7d8c4c2cc4ac7"
+    },
+    {
+      "file": "hppc-0.8.2.jar",
+      "group": "com.carrotsearch",
+      "artifact": "hppc",
+      "version": "0.8.2",
+      "sha256": "97e45d4e0106d98dd3e76d9610e0bd3895409bd1ab1ed189855b05af0571025e"
+    },
+    {
+      "file": "hunspell-2.1.2.jar",
+      "group": "com.gitlab.dumonts",
+      "artifact": "hunspell",
+      "version": "2.1.2",
+      "sha256": "973329ae3a43d35dacd618b93a5773a0a9210c8bf2b58a6b2d2a1e1c9f0389e9"
+    },
+    {
+      "file": "indriya-1.3.jar",
+      "group": "tech.units",
+      "artifact": "indriya",
+      "version": "1.3",
+      "sha256": "7cbaa6f42e2c8412ef13cd0fb7f81936d64a1c3ea7c4f69cf75bb4e9410cb76b"
+    },
+    {
+      "file": "istack-commons-runtime-4.1.2.jar",
+      "group": "com.sun.istack",
+      "artifact": "istack-commons-runtime",
+      "version": "4.1.2",
+      "sha256": "7fd6792361f4dd00f8c56af4a20cecc0066deea4a8f3dec38348af23fc2296ee"
+    },
+    {
+      "file": "j2objc-annotations-3.1.jar",
+      "group": "com.google.j2objc",
+      "artifact": "j2objc-annotations",
+      "version": "3.1",
+      "sha256": "84d3a150518485f8140ea99b8a985656749629f6433c92b80c75b36aba3b099b"
+    },
+    {
+      "file": "jackson-annotations-2.18.0.jar",
+      "group": "com.fasterxml.jackson.core",
+      "artifact": "jackson-annotations",
+      "version": "2.18.0",
+      "sha256": "a09367d2eeb526873abf737ff754c5085f82073a382ee72c3bbe15412217671f"
+    },
+    {
+      "file": "jackson-core-2.18.0.jar",
+      "group": "com.fasterxml.jackson.core",
+      "artifact": "jackson-core",
+      "version": "2.18.0",
+      "sha256": "215bbd7c8fd65be504cb92ff3aa1c4b790fc7b14cca72f4546aac4143c101bb5"
+    },
+    {
+      "file": "jackson-databind-2.18.0.jar",
+      "group": "com.fasterxml.jackson.core",
+      "artifact": "jackson-databind",
+      "version": "2.18.0",
+      "sha256": "2bf1927b7f3224683ed0157a1ec3b0ede75179da3e597d78c572d56ed00f9f3c"
+    },
+    {
+      "file": "jakarta.activation-1.2.2.jar",
+      "group": "com.sun.activation",
+      "artifact": "jakarta.activation",
+      "version": "1.2.2",
+      "sha256": "02156773e4ae9d048d14a56ad35d644bee9f1052a791d072df3ded3c656e6e1a"
+    },
+    {
+      "file": "jakarta.activation-api-2.1.3.jar",
+      "group": "jakarta.activation",
+      "artifact": "jakarta.activation-api",
+      "version": "2.1.3",
+      "sha256": "01b176d718a169263e78290691fc479977186bcc6b333487325084d6586f4627"
+    },
+    {
+      "file": "jakarta.xml.bind-api-2.3.3.jar",
+      "group": "jakarta.xml.bind",
+      "artifact": "jakarta.xml.bind-api",
+      "version": "2.3.3",
+      "sha256": "c04539f472e9a6dd0c7685ea82d677282269ab8e7baca2e14500e381e0c6cec5"
+    },
+    {
+      "file": "java-diff-utils-4.12.jar",
+      "group": "io.github.java-diff-utils",
+      "artifact": "java-diff-utils",
+      "version": "4.12",
+      "sha256": "9990a2039778f6b4cc94790141c2868864eacee0620c6c459451121a901cd5b5"
+    },
+    {
+      "file": "javax.activation-api-1.2.0.jar",
+      "group": "javax.activation",
+      "artifact": "javax.activation-api",
+      "version": "1.2.0",
+      "sha256": "43fdef0b5b6ceb31b0424b208b930c74ab58fac2ceeb7b3f6fd3aeb8b5ca4393"
+    },
+    {
+      "file": "javax.annotation-api-1.3.2.jar",
+      "group": "javax.annotation",
+      "artifact": "javax.annotation-api",
+      "version": "1.3.2",
+      "sha256": "e04ba5195bcd555dc95650f7cc614d151e4bcd52d29a10b8aa2197f3ab89ab9b"
+    },
+    {
+      "file": "jaxb-api-2.3.1.jar",
+      "group": "javax.xml.bind",
+      "artifact": "jaxb-api",
+      "version": "2.3.1",
+      "sha256": "88b955a0df57880a26a74708bc34f74dcaf8ebf4e78843a28b50eae945732b06"
+    },
+    {
+      "file": "jaxb-core-2.3.0.1.jar",
+      "group": "com.sun.xml.bind",
+      "artifact": "jaxb-core",
+      "version": "2.3.0.1",
+      "sha256": "d2ecba63615f317a11fb55c6468f6a9480f6411c10951d9881bafd9a9a8d0467"
+    },
+    {
+      "file": "jaxb-core-4.0.5.jar",
+      "group": "org.glassfish.jaxb",
+      "artifact": "jaxb-core",
+      "version": "4.0.5",
+      "sha256": "ad3fd9bf00de3eda9859f70b6cfb011e2fe9904804e16a2665092888ece0fdca"
+    },
+    {
+      "file": "jaxb-impl-2.3.3.jar",
+      "group": "com.sun.xml.bind",
+      "artifact": "jaxb-impl",
+      "version": "2.3.3",
+      "sha256": "e5178d0c7948247f75a13c689bf36f4d5d4910a121f712aa3b20ae94377069d8"
+    },
+    {
+      "file": "jaxb-runtime-4.0.5.jar",
+      "group": "org.glassfish.jaxb",
+      "artifact": "jaxb-runtime",
+      "version": "4.0.5",
+      "sha256": "485d8940e76373a7f300815ea5504bf5b726c234425ad30971019d133124cca4"
+    },
+    {
+      "file": "jna-5.12.1.jar",
+      "group": "net.java.dev.jna",
+      "artifact": "jna",
+      "version": "5.12.1",
+      "sha256": "91a814ac4f40d60dee91d842e1a8ad874c62197984403d0e3c30d39e55cf53b3"
+    },
+    {
+      "file": "jna-platform-5.12.1.jar",
+      "group": "net.java.dev.jna",
+      "artifact": "jna-platform",
+      "version": "5.12.1",
+      "sha256": "8ce969116cac95bd61b07a8d5e07174b352e63301473caac72c395e3c08488d2"
+    },
+    {
+      "file": "json-20240303.jar",
+      "group": "org.json",
+      "artifact": "json",
+      "version": "20240303",
+      "sha256": "3cf6cd6892e32e2b4c1c39e0f52f5248a2f5b37646fdfbb79a66b46b618414ed"
+    },
+    {
+      "file": "jsonic-1.2.11.jar",
+      "group": "net.arnx",
+      "artifact": "jsonic",
+      "version": "1.2.11",
+      "sha256": "76a787944faab6c9bea64dc78400949027ed6fb686fe9b328d18f949852bc89f"
+    },
+    {
+      "file": "jspecify-1.0.0.jar",
+      "group": "org.jspecify",
+      "artifact": "jspecify",
+      "version": "1.0.0",
+      "sha256": "1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab"
+    },
+    {
+      "file": "jsr305-3.0.2.jar",
+      "group": "com.google.code.findbugs",
+      "artifact": "jsr305",
+      "version": "3.0.2",
+      "sha256": "766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7"
+    },
+    {
+      "file": "language-detector-0.6.jar",
+      "group": "com.optimaize.languagedetector",
+      "artifact": "language-detector",
+      "version": "0.6",
+      "sha256": "f53ecc3d71da9ebc82edd10fb35638d32e8b9d849273dd717a021eca02f2278d"
+    },
+    {
+      "file": "language-en-6.8.jar",
+      "group": "org.languagetool",
+      "artifact": "language-en",
+      "version": "6.8",
+      "sha256": "69d3fa1020dea45ad38266e3d54c81969f3ba7eef5efd0a83a8b3fd778acddd0",
+      "excludeResources": [
+        "org/languagetool/resource/en/spelling_correction_model.bin"
+      ],
+      "derivedSha256": "8d06dc05b9681b91d9b75c5071dc0ecf5808b507d7d0867a7657c11e4c25075c"
+    },
+    {
+      "file": "languagetool-core-6.8.jar",
+      "group": "org.languagetool",
+      "artifact": "languagetool-core",
+      "version": "6.8",
+      "sha256": "c441918b1cf2de5491756772cd4bce2a408c3b9eb08e4ab84d843b2cd50f1d2b"
+    },
+    {
+      "file": "listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar",
+      "group": "com.google.guava",
+      "artifact": "listenablefuture",
+      "version": "9999.0-empty-to-avoid-conflict-with-guava",
+      "sha256": "b372a037d4230aa57fbeffdef30fd6123f9c0c2db85d0aced00c91b974f33f99"
+    },
+    {
+      "file": "lucene-backward-codecs-5.5.5.jar",
+      "group": "org.apache.lucene",
+      "artifact": "lucene-backward-codecs",
+      "version": "5.5.5",
+      "sha256": "b62e089f505bc72dd8abb0ad55040604cdd92306e14871d7febcbf947dd9c6e5"
+    },
+    {
+      "file": "lucene-core-5.5.5.jar",
+      "group": "org.apache.lucene",
+      "artifact": "lucene-core",
+      "version": "5.5.5",
+      "sha256": "8d27a8ab4ee8883282d7713f067e72d1cfde1e88d0f5701a119100ec9e86d7e1"
+    },
+    {
+      "file": "morfologik-fsa-2.1.9.jar",
+      "group": "org.carrot2",
+      "artifact": "morfologik-fsa",
+      "version": "2.1.9",
+      "sha256": "1bfefce937df14cc94d32a98ce59c33f4d5b6c0eddbb436b6bfe27ff2120a23d"
+    },
+    {
+      "file": "morfologik-fsa-builders-2.1.9.jar",
+      "group": "org.carrot2",
+      "artifact": "morfologik-fsa-builders",
+      "version": "2.1.9",
+      "sha256": "f418c519b49470c2ec7024086bf210ba370ff158732368005d3b8cef964d3fff"
+    },
+    {
+      "file": "morfologik-speller-2.1.9.jar",
+      "group": "org.carrot2",
+      "artifact": "morfologik-speller",
+      "version": "2.1.9",
+      "sha256": "8d2566a216f401380878f25196f84bd351b807b11f18bc71acd1417e04a1ec29"
+    },
+    {
+      "file": "morfologik-stemming-2.1.9.jar",
+      "group": "org.carrot2",
+      "artifact": "morfologik-stemming",
+      "version": "2.1.9",
+      "sha256": "6170895b2315b697f4da5630caf57c6c441f1cb419d89d1cb5326b0673293e8a"
+    },
+    {
+      "file": "opennlp-chunk-models-1.5.jar",
+      "group": "edu.washington.cs.knowitall",
+      "artifact": "opennlp-chunk-models",
+      "version": "1.5",
+      "sha256": "e7090de37093d2b91a0136f9e1e9cf60567bc27f72781cfdd083d86e342d7cb0"
+    },
+    {
+      "file": "opennlp-postag-models-1.5.jar",
+      "group": "edu.washington.cs.knowitall",
+      "artifact": "opennlp-postag-models",
+      "version": "1.5",
+      "sha256": "4d58462b891dbe478a8a68c8a93749af5bedd874af1974596a72f5667fffc8c9"
+    },
+    {
+      "file": "opennlp-tokenize-models-1.5.jar",
+      "group": "edu.washington.cs.knowitall",
+      "artifact": "opennlp-tokenize-models",
+      "version": "1.5",
+      "sha256": "1c10141d547b9ae1de1238d5a9ec69db043289cd6f8caf0d7d2f14bbfcda9502"
+    },
+    {
+      "file": "opennlp-tools-1.9.4.jar",
+      "group": "org.apache.opennlp",
+      "artifact": "opennlp-tools",
+      "version": "1.9.4",
+      "sha256": "0dfb53f81c8dbb9171338be3744c799b82413649fc0e39d1db928ccc0932098a"
+    },
+    {
+      "file": "openregex-1.1.1.jar",
+      "group": "edu.washington.cs.knowitall",
+      "artifact": "openregex",
+      "version": "1.1.1",
+      "sha256": "33021c9cca70c6292d53ff7dac5d1832d422e986aba52ec998532a5f47f921f8"
+    },
+    {
+      "file": "opentelemetry-api-1.42.1.jar",
+      "group": "io.opentelemetry",
+      "artifact": "opentelemetry-api",
+      "version": "1.42.1",
+      "sha256": "6b0f9d067260ea3ed6c3960352b80800b993cb3962fa6fb1b6383cd04c3c0874"
+    },
+    {
+      "file": "opentelemetry-context-1.42.1.jar",
+      "group": "io.opentelemetry",
+      "artifact": "opentelemetry-context",
+      "version": "1.42.1",
+      "sha256": "fc8f47bc94bec89a3dbdbcf631470fb7fd7d3e628b10d43bc376f17ebde4b405"
+    },
+    {
+      "file": "opentelemetry-semconv-1.30.1-alpha.jar",
+      "group": "io.opentelemetry",
+      "artifact": "opentelemetry-semconv",
+      "version": "1.30.1-alpha",
+      "sha256": "aaa73f6c6a3a67cdc07870387383808826d8dae7a84e47cae182b7a88a08e513"
+    },
+    {
+      "file": "segment-2.0.3.jar",
+      "group": "net.loomchild",
+      "artifact": "segment",
+      "version": "2.0.3",
+      "sha256": "a134be9884ddfa18304c8e437e64aa598d83ccfa439310029e61ea3fdae8b2ce"
+    },
+    {
+      "file": "slf4j-api-2.0.16.jar",
+      "group": "org.slf4j",
+      "artifact": "slf4j-api",
+      "version": "2.0.16",
+      "sha256": "a12578dde1ba00bd9b816d388a0b879928d00bab3c83c240f7013bf4196c579a"
+    },
+    {
+      "file": "txw2-4.0.5.jar",
+      "group": "org.glassfish.jaxb",
+      "artifact": "txw2",
+      "version": "4.0.5",
+      "sha256": "917355bc451481f30d043b24d123110517966af34383901773882810dca480e5"
+    },
+    {
+      "file": "unit-api-1.0.jar",
+      "group": "javax.measure",
+      "artifact": "unit-api",
+      "version": "1.0",
+      "sha256": "35da65fdbd3f9c1fe79cfc8399db975fd97660d8a219febfda9fd1a5fc058f10"
+    },
+    {
+      "file": "uom-lib-common-1.1.jar",
+      "group": "tech.uom.lib",
+      "artifact": "uom-lib-common",
+      "version": "1.1",
+      "sha256": "4add5fbcb7f548b79230ed7e01cb9fd4f9e2524bd1598dbcbfd8150563fe27f7"
+    }
+  ],
+  "runtime": {
+    "file": "OpenJDK21U-jre_x64_windows_hotspot_21.0.13_9.zip",
+    "url": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.13_9.zip",
+    "sha256": "2332c0b4cff6bed722da3567c91d5e47568bcba863fa4945d0a8d6fc76158628",
+    "root": "jdk-21.0.13+9-jre/"
+  },
+  "hunspell": {
+    "file": "chromium-hunspell-cccf64a8.tar.gz",
+    "url": "https://chromium.googlesource.com/chromium/deps/hunspell_dictionaries/+archive/cccf64a8acc951afe3f47fee023908e55699bc58.tar.gz",
+    "memberChecksums": "hunspell-checksums.json",
+    "binaries": [
+      "da-DK-3-0.bdic",
+      "de-DE-3-0.bdic",
+      "en-GB-10-1.bdic",
+      "en-US-10-1.bdic",
+      "es-ES-3-0.bdic",
+      "fr-FR-3-0.bdic",
+      "hi-IN-3-0.bdic",
+      "it-IT-3-0.bdic",
+      "ko-3-0.bdic",
+      "nb-NO-3-0.bdic",
+      "nl-NL-3-0.bdic",
+      "pl-PL-3-0.bdic",
+      "pt-BR-3-0.bdic",
+      "pt-PT-3-0.bdic",
+      "ru-RU-3-0.bdic",
+      "sv-SE-3-0.bdic",
+      "uk-UA-5-0.bdic"
+    ],
+    "sourcePrefixes": [
+      "da_DK",
+      "de_DE",
+      "de_DE_neu",
+      "en_GB",
+      "en_US",
+      "es_ES",
+      "fr_FR",
+      "hi_IN",
+      "it_IT",
+      "ko",
+      "nb_NO",
+      "nl_NL",
+      "pl_PL",
+      "pt_BR",
+      "pt_PT",
+      "ru_RU",
+      "sv_SE",
+      "uk_UA"
+    ]
+  },
+  "sources": [
+    {
+      "file": "language-sv-6.8-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/languagetool/language-sv/6.8/language-sv-6.8-sources.jar",
+      "sha256": "abe3c8329b2d232fee6bef67b3319cd285de7e62197084001c2d249530dc1390"
+    },
+    {
+      "file": "languagetool-core-6.8-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/languagetool/languagetool-core/6.8/languagetool-core-6.8-sources.jar",
+      "sha256": "67cf55314626fd397f0618057caeb88a2a12cfdd8f6cea288a7e420f8d7fc764"
+    },
+    {
+      "file": "language-en-6.8-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/languagetool/language-en/6.8/language-en-6.8-sources.jar",
+      "sha256": "a5e6eeb8e521acd3e08fe159f01b3d585ebe612e77072f9b301474ebb2161941"
+    },
+    {
+      "file": "openregex-1.1.1-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/edu/washington/cs/knowitall/openregex/1.1.1/openregex-1.1.1-sources.jar",
+      "sha256": "aacc5c8b962b78fa2a5b758daa7403313af006afb6e1c6f9e02dd42538190157"
+    },
+    {
+      "file": "english-pos-dict-source.zip",
+      "url": "https://codeload.github.com/languagetool-org/english-pos-dict/zip/2c68994244eba9f54a0b561b9213c60c6cbf9c6c",
+      "sha256": "d8aac53bca0bf521bd05d7de2c426b8c2121c0e761aca1cd642f68eff02e37a2"
+    }
+  ]
+}

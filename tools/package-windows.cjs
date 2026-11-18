@@ -51,6 +51,8 @@ async function main() {
   const signing = process.env.WRAITER_SIGNING_CONFIG
     ? JSON.parse(await fs.readFile(path.resolve(process.env.WRAITER_SIGNING_CONFIG), 'utf8')) : {};
   const plan = packagingPlan(process.argv.slice(2), pkg.version, signing);
+  await runNode(path.join(root, 'tools/prepare-offline-grammar.cjs'));
+  await runNode(path.join(root, 'tools/prepare-neural-grammar.cjs'));
   await runNode(path.join(root, 'tools/third-party-notices.cjs'));
   await runNode(path.join(path.dirname(require.resolve('vite/package.json')), 'bin/vite.js'), ['build']);
   const { build, Platform, Arch } = require('electron-builder');
@@ -70,3 +72,4 @@ async function main() {
 
 module.exports = { packagingPlan };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });
+

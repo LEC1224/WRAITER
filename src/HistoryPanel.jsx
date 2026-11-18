@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Clock3, Eye, GitBranch, Plus, Redo2, Search, Settings2, Undo2 } from 'lucide-react';
-import { historyStatus, timelineEntries } from './history.js';
+import { historyStatus, timelinePage } from './history.js';
 import { currentCheckpointPath } from './checkpoint-tree.js';
 
 function readableNode(node) {
@@ -26,7 +26,7 @@ function ChangeText({ label, text }) {
   if (!text) return null;
   return <div className="history-change"><strong>{label}</strong><pre>{text.length > 12000 ? text.slice(0, 12000) + '\n[Preview limited to 12,000 characters; the complete edit is saved.]' : text}</pre></div>;
 }
-function EditDetails({ entry }) {
+export function EditDetails({ entry }) {
   if (entry.kind === 'steps') {
     const added = fragments(entry.forward), removed = fragments(entry.inverse);
     const formats = [...new Set(entry.forward.map(step => step.mark?.type || (step.stepType === 'attr' ? step.attr : '')).filter(Boolean))];
@@ -45,32 +45,35 @@ function EditDetails({ entry }) {
   })}</div>;
 }
 
-export default function HistoryPanel({ journal, gitHistory = { entries: [] }, onUndo, onRedo, onCheckpoint, onRestoreGit, onPreviewGit, onCheckpointSettings, onOpenTree, onInspectEntry }) {
-  const [tab, setTab] = useState('edits'), [query, setQuery] = useState(''), [shown, setShown] = useState(100), [expanded, setExpanded] = useState(null);
+export default function HistoryPanel({ tab, onTabChange, journal, gitHistory = { entries: [] }, onUndo, onRedo, onCheckpoint, onRestoreGit, onPreviewGit, onCheckpointSettings, onOpenTree, onInspectEntry }) {
+  const [query, setQuery] = useState(''), [shown, setShown] = useState(100), [expanded, setExpanded] = useState(null);
   const [checkpointQuery, setCheckpointQuery] = useState('');
   const status = historyStatus(journal);
-  const entries = useMemo(() => timelineEntries(journal), [journal]);
   const checkpoints = useMemo(() => currentCheckpointPath(gitHistory.entries, gitHistory.headRevision), [gitHistory.entries, gitHistory.headRevision]);
   const visibleCheckpoints = useMemo(() => {
     const needle = checkpointQuery.trim().toLocaleLowerCase();
-    return needle ? checkpoints.filter(({ item }) => [item.title, item.message, item.summary, item.location, item.date].some(value => String(value || '').toLocaleLowerCase().includes(needle))) : checkpoints;
+    return needle ? checkpoints.filter(({ item }) => [item.displayTitle, item.title, item.message, item.summary, item.location, item.date].some(value => String(value || '').toLocaleLowerCase().includes(needle))) : checkpoints;
   }, [checkpoints, checkpointQuery]);
-  const filtered = useMemo(() => {
+  const edits = useMemo(() => {
+    if (tab !== 'edits') return null;
     const needle = query.trim().toLocaleLowerCase();
-    return needle ? entries.filter(entry => [entry.label, entry.chapterTitle, entry.summary, entry.status, new Date(entry.timestamp).toLocaleString()].some(value => String(value || '').toLocaleLowerCase().includes(needle))) : entries;
-  }, [entries, query]);
+    const matches = needle ? entry => [entry.label, entry.chapterTitle, entry.summary, entry.status].some(value => String(value || '').toLocaleLowerCase().includes(needle)) || new Date(entry.timestamp).toLocaleString().toLocaleLowerCase().includes(needle) : null;
+    return timelinePage(journal, shown, matches);
+  }, [tab, journal, shown, query]);
   return <div className="inspector-body history-panel">
+    {gitHistory.loading && !gitHistory.entries?.length && tab === 'edits' && <p className="small-muted" role="status">Loading history map…</p>}
+    {!!gitHistory.entries?.length && <button className="secondary-button full checkpoint-open-tree" onClick={onOpenTree} title="Explore all saved versions, including alternative paths from earlier drafts."><GitBranch size={14} />Open history map <span>{gitHistory.entries.length} versions</span></button>}
     <div className="history-tabs" role="tablist" aria-label="Revision history views">
-      <button role="tab" aria-selected={tab === 'edits'} onClick={() => setTab('edits')} title="Inspect the editing history and move through undo and redo steps.">Every edit <span>{status.totalEdits}</span></button>
-      <button role="tab" aria-selected={tab === 'checkpoints'} onClick={() => setTab('checkpoints')} title="Browse saved manuscript versions along the current version path.">Checkpoints <span>{gitHistory.entries?.length || 0}</span></button>
+      <button role="tab" aria-selected={tab === 'edits'} onClick={() => onTabChange('edits')} title="Inspect the editing history and move through undo and redo steps.">Every edit <span>{status.totalEdits}</span></button>
+      <button role="tab" aria-selected={tab === 'checkpoints'} onClick={() => onTabChange('checkpoints')} title="Browse saved manuscript versions along the current version path.">Checkpoints <span>{gitHistory.entries?.length || 0}</span></button>
     </div>
     {tab === 'edits' ? <>
       <div className="history-actions"><button className="secondary-button" disabled={!status.canUndo} title={status.undoLabel ? `Undo: ${status.undoLabel}` : 'Nothing to undo'} onClick={onUndo}><Undo2 size={14} />Undo</button><button className="secondary-button" disabled={!status.canRedo} title={status.redoLabel ? `Redo: ${status.redoLabel}` : 'Nothing to redo'} onClick={onRedo}><Redo2 size={14} />Redo</button></div>
       <p className="small-muted">Typing is grouped into familiar word-sized undo steps. The edit journal still protects your work across chapters and sessions.</p>
       <label className="history-search"><Search size={14} /><input className="field-input" type="search" aria-label="Search editing history" placeholder="Search edits, chapters or dates" value={query} onChange={event => { setQuery(event.target.value); setShown(100); }} /></label>
-      {!entries.length && <p className="small-muted history-empty">Your editing history begins when you change this document.</p>}
-      {Boolean(entries.length) && !filtered.length && <p className="small-muted history-empty">No edits match this search.</p>}
-      <div className="history-timeline">{filtered.slice(0, shown).map(entry => <article key={entry.id} className={`history-edit ${entry.status}${entry.current ? ' current' : ''}`}>
+      {!status.totalEdits && <p className="small-muted history-empty">Your editing history begins when you change this document.</p>}
+      {Boolean(status.totalEdits) && !edits.total && <p className="small-muted history-empty">No edits match this search.</p>}
+      <div className="history-timeline">{edits.rows.map(entry => <article key={entry.id} className={`history-edit ${entry.status}${entry.current ? ' current' : ''}`}>
         <button className="history-edit-heading" aria-expanded={expanded === entry.id} onClick={() => { setExpanded(expanded === entry.id ? null : entry.id); onInspectEntry?.(entry); }} title="Expand this edit to inspect what changed.">
           {expanded === entry.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           <span><strong>{entry.label}</strong><small>{entry.chapterTitle || 'Manuscript'} · {new Date(entry.timestamp).toLocaleString()}</small></span>
@@ -78,17 +81,16 @@ export default function HistoryPanel({ journal, gitHistory = { entries: [] }, on
         <div className="history-edit-state"><span>{entry.current ? 'Current revision' : entry.status === 'applied' ? 'Applied' : entry.status === 'undone' ? 'Undone · available to redo' : 'Earlier branch'}</span>{entry.status === 'branched' && <GitBranch size={12} />}</div>
         {expanded === entry.id ? <EditDetails entry={entry} /> : entry.summary && <p className="history-edit-summary">{entry.summary}</p>}
       </article>)}</div>
-      {filtered.length > shown && <button className="secondary-button full" onClick={() => setShown(value => value + 100)}>Show 100 more edits ({filtered.length - shown} remaining)</button>}
+      {edits.total > shown && <button className="secondary-button full" onClick={() => setShown(value => value + 100)}>Show 100 more edits ({edits.total - shown} remaining)</button>}
     </> : <>
-      <p className="small-muted">Your current path is shown newest first. Open the complete tree to explore other branches. AI can name and summarize checkpoints using the model chosen in settings.</p>
+      <p className="small-muted">Saved versions on your current path, newest first.</p>
       <div className="history-checkpoint-actions"><button className="primary-button" onClick={() => onCheckpoint?.()} title="Name and save a checkpoint of the manuscript to revisit later."><Plus size={15} />Save version</button><button className="secondary-button" aria-label="Checkpoint AI settings" title="Choose the checkpoint model" onClick={onCheckpointSettings}><Settings2 size={15} /></button></div>
-      {!!gitHistory.entries?.length && <button className="secondary-button full checkpoint-open-tree" onClick={onOpenTree} title="Explore all saved versions, including alternative paths from earlier drafts."><GitBranch size={14} />Open complete tree <span>{gitHistory.entries.length} versions</span></button>}
       {gitHistory.error && <p className="ai-error">{gitHistory.error}</p>}
-      {!gitHistory.entries?.length && <p className="small-muted history-empty">Save a version to mark an important point in your draft.</p>}
+      {!gitHistory.entries?.length && <p className="small-muted history-empty" role={gitHistory.loading ? 'status' : undefined}>{gitHistory.loading ? 'Loading checkpoints…' : 'Save a version to mark an important point in your draft.'}</p>}
       {!!checkpoints.length && <label className="history-search"><Search size={14} /><input className="field-input" type="search" aria-label="Search checkpoints" placeholder="Search changes or chapters" value={checkpointQuery} onChange={event => setCheckpointQuery(event.target.value)} /></label>}
       {!!checkpoints.length && !visibleCheckpoints.length && <p className="small-muted history-empty">No checkpoints match this search.</p>}
       <div className="checkpoint-tree" aria-label="Current version path">{visibleCheckpoints.map(({ item, current }) => <article key={item.revision} className={`checkpoint-node current-path${current ? ' current' : ''}`} style={{ '--branch-depth': 0 }}>
-        <div className="checkpoint-node-header"><span className="checkpoint-dot" aria-hidden="true" /><button className="checkpoint-title" onClick={() => onPreviewGit?.(item)} title="Read this saved version without changing your current draft."><strong>{item.title || item.message}</strong></button></div>
+        <div className="checkpoint-node-header"><span className="checkpoint-dot" aria-hidden="true" /><button className="checkpoint-title" onClick={() => onPreviewGit?.(item)} title="Read this saved version without changing your current draft."><strong>{item.displayTitle || item.title || item.message}</strong></button></div>
         <div className="checkpoint-meta"><Clock3 size={12} /><time dateTime={item.date}>{new Date(item.date).toLocaleString()}</time></div>
         {item.summary && <p className="checkpoint-summary">{item.summary}</p>}
         {item.location && <p className="checkpoint-location">Changed in {item.location}</p>}

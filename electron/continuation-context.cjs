@@ -1,4 +1,4 @@
-const { buildPrompt } = require('./core.cjs');
+const { buildPrompt } = require('./document-core.cjs');
 
 const MARGIN_TOKENS = 512;
 const DEFAULT_CONTEXT_LENGTH = 32768;

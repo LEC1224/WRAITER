@@ -1,0 +1,365 @@
+{"text": "The captain of the sailors wait at the gate.", "edits": [{"start": 26, "end": 32, "replacement": " waits "}], "category": "long_distance_agreement", "group": "X0001"}
+{"text": "The captain of the sailors waits at the gate.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0001"}
+{"text": "The lantern of the windows shine after midnight.", "edits": [{"start": 26, "end": 33, "replacement": " shines "}], "category": "long_distance_agreement", "group": "X0002"}
+{"text": "The lantern of the windows shines after midnight.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0002"}
+{"text": "The song of the children echo through the hall.", "edits": [{"start": 24, "end": 30, "replacement": " echoes "}], "category": "long_distance_agreement", "group": "X0003"}
+{"text": "The song of the children echoes through the hall.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0003"}
+{"text": "The scent of the roses linger in the room.", "edits": [{"start": 22, "end": 30, "replacement": " lingers "}], "category": "long_distance_agreement", "group": "X0004"}
+{"text": "The scent of the roses lingers in the room.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0004"}
+{"text": "The sound of the footsteps carry across the courtyard.", "edits": [{"start": 26, "end": 33, "replacement": " carries "}], "category": "long_distance_agreement", "group": "X0005"}
+{"text": "The sound of the footsteps carries across the courtyard.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0005"}
+{"text": "The shadow of the branches stretch over the path.", "edits": [{"start": 26, "end": 35, "replacement": " stretches "}], "category": "long_distance_agreement", "group": "X0006"}
+{"text": "The shadow of the branches stretches over the path.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0006"}
+{"text": "The keeper of the horses sleep beside the gate.", "edits": [{"start": 24, "end": 31, "replacement": " sleeps "}], "category": "long_distance_agreement", "group": "X0007"}
+{"text": "The keeper of the horses sleeps beside the gate.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0007"}
+{"text": "The queen of the islands rule from a marble throne.", "edits": [{"start": 24, "end": 30, "replacement": " rules "}], "category": "long_distance_agreement", "group": "X0008"}
+{"text": "The queen of the islands rules from a marble throne.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0008"}
+{"text": "The roof of the stables leak when it rains.", "edits": [{"start": 23, "end": 29, "replacement": " leaks "}], "category": "long_distance_agreement", "group": "X0009"}
+{"text": "The roof of the stables leaks when it rains.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0009"}
+{"text": "The edge of the cliffs crumble beneath his boots.", "edits": [{"start": 22, "end": 31, "replacement": " crumbles "}], "category": "long_distance_agreement", "group": "X0010"}
+{"text": "The edge of the cliffs crumbles beneath his boots.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0010"}
+{"text": "The color of the leaves change before winter.", "edits": [{"start": 23, "end": 31, "replacement": " changes "}], "category": "long_distance_agreement", "group": "X0011"}
+{"text": "The color of the leaves changes before winter.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0011"}
+{"text": "The leader of the guards ride a white horse.", "edits": [{"start": 24, "end": 30, "replacement": " rides "}], "category": "long_distance_agreement", "group": "X0012"}
+{"text": "The leader of the guards rides a white horse.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0012"}
+{"text": "The captain of the ships know the harbor well.", "edits": [{"start": 24, "end": 30, "replacement": " knows "}], "category": "long_distance_agreement", "group": "X0013"}
+{"text": "The captain of the ships knows the harbor well.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0013"}
+{"text": "The owner of the keys live beyond the bridge.", "edits": [{"start": 21, "end": 27, "replacement": " lives "}], "category": "long_distance_agreement", "group": "X0014"}
+{"text": "The owner of the keys lives beyond the bridge.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0014"}
+{"text": "The weight of the stones make the cart difficult to pull.", "edits": [{"start": 24, "end": 30, "replacement": " makes "}], "category": "long_distance_agreement", "group": "X0015"}
+{"text": "The weight of the stones makes the cart difficult to pull.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0015"}
+{"text": "The shape of the clouds remind her of a dragon.", "edits": [{"start": 23, "end": 31, "replacement": " reminds "}], "category": "long_distance_agreement", "group": "X0016"}
+{"text": "The shape of the clouds reminds her of a dragon.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0016"}
+{"text": "The sight of the wolves frighten the horses.", "edits": [{"start": 23, "end": 33, "replacement": " frightens "}], "category": "long_distance_agreement", "group": "X0017"}
+{"text": "The sight of the wolves frightens the horses.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0017"}
+{"text": "The memory of the battles haunt the veteran.", "edits": [{"start": 25, "end": 32, "replacement": " haunts "}], "category": "long_distance_agreement", "group": "X0018"}
+{"text": "The memory of the battles haunts the veteran.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0018"}
+{"text": "The smell of the apples fill the cellar.", "edits": [{"start": 23, "end": 29, "replacement": " fills "}], "category": "long_distance_agreement", "group": "X0019"}
+{"text": "The smell of the apples fills the cellar.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0019"}
+{"text": "The taste of the berries bring back memories.", "edits": [{"start": 24, "end": 31, "replacement": " brings "}], "category": "long_distance_agreement", "group": "X0020"}
+{"text": "The taste of the berries brings back memories.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0020"}
+{"text": "The flicker of the candles make the shadows dance.", "edits": [{"start": 26, "end": 32, "replacement": " makes "}], "category": "long_distance_agreement", "group": "X0021"}
+{"text": "The flicker of the candles makes the shadows dance.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0021"}
+{"text": "The clatter of the hooves wake the sleeping village.", "edits": [{"start": 25, "end": 31, "replacement": " wakes "}], "category": "long_distance_agreement", "group": "X0022"}
+{"text": "The clatter of the hooves wakes the sleeping village.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0022"}
+{"text": "The shimmer of the stars catch her eye.", "edits": [{"start": 24, "end": 31, "replacement": " catches "}], "category": "long_distance_agreement", "group": "X0023"}
+{"text": "The shimmer of the stars catches her eye.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0023"}
+{"text": "The rustle of the curtains startle the cat.", "edits": [{"start": 26, "end": 35, "replacement": " startles "}], "category": "long_distance_agreement", "group": "X0024"}
+{"text": "The rustle of the curtains startles the cat.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0024"}
+{"text": "The voice of the spirits call from the well.", "edits": [{"start": 24, "end": 30, "replacement": " calls "}], "category": "long_distance_agreement", "group": "X0025"}
+{"text": "The voice of the spirits calls from the well.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0025"}
+{"text": "The sound of the bells reach the valley.", "edits": [{"start": 22, "end": 29, "replacement": " reaches "}], "category": "long_distance_agreement", "group": "X0026"}
+{"text": "The sound of the bells reaches the valley.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0026"}
+{"text": "The trail of the riders lead north.", "edits": [{"start": 23, "end": 29, "replacement": " leads "}], "category": "long_distance_agreement", "group": "X0027"}
+{"text": "The trail of the riders leads north.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0027"}
+{"text": "The arrival of the merchants please the innkeeper.", "edits": [{"start": 28, "end": 36, "replacement": " pleases "}], "category": "long_distance_agreement", "group": "X0028"}
+{"text": "The arrival of the merchants pleases the innkeeper.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0028"}
+{"text": "The departure of the soldiers leave the village defenseless.", "edits": [{"start": 29, "end": 36, "replacement": " leaves "}], "category": "long_distance_agreement", "group": "X0029"}
+{"text": "The departure of the soldiers leaves the village defenseless.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0029"}
+{"text": "The return of the swallows signal the spring.", "edits": [{"start": 26, "end": 34, "replacement": " signals "}], "category": "long_distance_agreement", "group": "X0030"}
+{"text": "The return of the swallows signals the spring.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0030"}
+{"text": "The presence of the strangers alarm the watchman.", "edits": [{"start": 29, "end": 36, "replacement": " alarms "}], "category": "long_distance_agreement", "group": "X0031"}
+{"text": "The presence of the strangers alarms the watchman.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0031"}
+{"text": "The movement of the shadows betray the intruder.", "edits": [{"start": 27, "end": 35, "replacement": " betrays "}], "category": "long_distance_agreement", "group": "X0032"}
+{"text": "The movement of the shadows betrays the intruder.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0032"}
+{"text": "The pattern of the tiles suggest a hidden door.", "edits": [{"start": 24, "end": 33, "replacement": " suggests "}], "category": "long_distance_agreement", "group": "X0033"}
+{"text": "The pattern of the tiles suggests a hidden door.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0033"}
+{"text": "The promise of the gods offer little comfort.", "edits": [{"start": 23, "end": 30, "replacement": " offers "}], "category": "long_distance_agreement", "group": "X0034"}
+{"text": "The promise of the gods offers little comfort.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0034"}
+{"text": "The tale of the sisters begin with a storm.", "edits": [{"start": 23, "end": 30, "replacement": " begins "}], "category": "long_distance_agreement", "group": "X0035"}
+{"text": "The tale of the sisters begins with a storm.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0035"}
+{"text": "The history of the kingdoms interest the scholar.", "edits": [{"start": 27, "end": 37, "replacement": " interests "}], "category": "long_distance_agreement", "group": "X0036"}
+{"text": "The history of the kingdoms interests the scholar.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0036"}
+{"text": "The fate of the prisoners rest with the council.", "edits": [{"start": 25, "end": 31, "replacement": " rests "}], "category": "long_distance_agreement", "group": "X0037"}
+{"text": "The fate of the prisoners rests with the council.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0037"}
+{"text": "The master of the hounds wait by the gate.", "edits": [{"start": 24, "end": 30, "replacement": " waits "}], "category": "long_distance_agreement", "group": "X0038"}
+{"text": "The master of the hounds waits by the gate.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0038"}
+{"text": "The center of the gardens hold a dry fountain.", "edits": [{"start": 25, "end": 31, "replacement": " holds "}], "category": "long_distance_agreement", "group": "X0039"}
+{"text": "The center of the gardens holds a dry fountain.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0039"}
+{"text": "The line of the trees mark the old boundary.", "edits": [{"start": 21, "end": 27, "replacement": " marks "}], "category": "long_distance_agreement", "group": "X0040"}
+{"text": "The line of the trees marks the old boundary.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0040"}
+{"text": "The ring of the stones surround the clearing.", "edits": [{"start": 22, "end": 32, "replacement": " surrounds "}], "category": "long_distance_agreement", "group": "X0041"}
+{"text": "The ring of the stones surrounds the clearing.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0041"}
+{"text": "The pile of the blankets conceal a small chest.", "edits": [{"start": 24, "end": 33, "replacement": " conceals "}], "category": "long_distance_agreement", "group": "X0042"}
+{"text": "The pile of the blankets conceals a small chest.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0042"}
+{"text": "The collection of the maps occupy an entire shelf.", "edits": [{"start": 26, "end": 34, "replacement": " occupies "}], "category": "long_distance_agreement", "group": "X0043"}
+{"text": "The collection of the maps occupies an entire shelf.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0043"}
+{"text": "The stack of the books block the doorway.", "edits": [{"start": 22, "end": 29, "replacement": " blocks "}], "category": "long_distance_agreement", "group": "X0044"}
+{"text": "The stack of the books blocks the doorway.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0044"}
+{"text": "The row of the houses face the harbor.", "edits": [{"start": 21, "end": 27, "replacement": " faces "}], "category": "long_distance_agreement", "group": "X0045"}
+{"text": "The row of the houses faces the harbor.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0045"}
+{"text": "The number of the travelers grow each summer.", "edits": [{"start": 27, "end": 33, "replacement": " grows "}], "category": "long_distance_agreement", "group": "X0046"}
+{"text": "The number of the travelers grows each summer.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0046"}
+{"text": "The absence of the stars trouble the navigator.", "edits": [{"start": 24, "end": 33, "replacement": " troubles "}], "category": "long_distance_agreement", "group": "X0047"}
+{"text": "The absence of the stars troubles the navigator.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0047"}
+{"text": "The rhythm of the drums change without warning.", "edits": [{"start": 23, "end": 31, "replacement": " changes "}], "category": "long_distance_agreement", "group": "X0048"}
+{"text": "The rhythm of the drums changes without warning.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0048"}
+{"text": "The echo of the voices fade into the darkness.", "edits": [{"start": 22, "end": 28, "replacement": " fades "}], "category": "long_distance_agreement", "group": "X0049"}
+{"text": "The echo of the voices fades into the darkness.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0049"}
+{"text": "The scent of the herbs mask the smoke.", "edits": [{"start": 22, "end": 28, "replacement": " masks "}], "category": "long_distance_agreement", "group": "X0050"}
+{"text": "The scent of the herbs masks the smoke.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0050"}
+{"text": "The cry of the gulls interrupt her thoughts.", "edits": [{"start": 20, "end": 31, "replacement": " interrupts "}], "category": "long_distance_agreement", "group": "X0051"}
+{"text": "The cry of the gulls interrupts her thoughts.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0051"}
+{"text": "The glint of the coins tempt the thief.", "edits": [{"start": 22, "end": 29, "replacement": " tempts "}], "category": "long_distance_agreement", "group": "X0052"}
+{"text": "The glint of the coins tempts the thief.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0052"}
+{"text": "The key of the rooms fit the cellar door.", "edits": [{"start": 20, "end": 25, "replacement": " fits "}], "category": "long_distance_agreement", "group": "X0053"}
+{"text": "The key of the rooms fits the cellar door.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0053"}
+{"text": "The door of the chambers open onto the courtyard.", "edits": [{"start": 24, "end": 30, "replacement": " opens "}], "category": "long_distance_agreement", "group": "X0054"}
+{"text": "The door of the chambers opens onto the courtyard.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0054"}
+{"text": "The blade of the swords gleam in the firelight.", "edits": [{"start": 23, "end": 30, "replacement": " gleams "}], "category": "long_distance_agreement", "group": "X0055"}
+{"text": "The blade of the swords gleams in the firelight.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0055"}
+{"text": "The captain, with all her sailors behind her, were afraid.", "edits": [{"start": 46, "end": 50, "replacement": "was"}], "category": "long_distance_agreement", "group": "X0056"}
+{"text": "The captain, with all her sailors behind her, was afraid.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0056"}
+{"text": "The basket, along with the apples inside it, were missing.", "edits": [{"start": 45, "end": 49, "replacement": "was"}], "category": "long_distance_agreement", "group": "X0057"}
+{"text": "The basket, along with the apples inside it, was missing.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0057"}
+{"text": "The candles, as well as the lantern by the door, was extinguished.", "edits": [{"start": 49, "end": 52, "replacement": "were"}], "category": "long_distance_agreement", "group": "X0058"}
+{"text": "The candles, as well as the lantern by the door, were extinguished.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0058"}
+{"text": "The books on the shelf beside the window belongs to Mara.", "edits": [{"start": 41, "end": 48, "replacement": "belong"}], "category": "long_distance_agreement", "group": "X0059"}
+{"text": "The books on the shelf beside the window belong to Mara.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0059"}
+{"text": "The key to the rooms above the kitchens have vanished.", "edits": [{"start": 40, "end": 44, "replacement": "has"}], "category": "long_distance_agreement", "group": "X0060"}
+{"text": "The key to the rooms above the kitchens has vanished.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0060"}
+{"text": "The horses in the field beyond the village has escaped.", "edits": [{"start": 43, "end": 46, "replacement": "have"}], "category": "long_distance_agreement", "group": "X0061"}
+{"text": "The horses in the field beyond the village have escaped.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0061"}
+{"text": "The box containing the letters from her sisters were locked.", "edits": [{"start": 48, "end": 52, "replacement": "was"}], "category": "long_distance_agreement", "group": "X0062"}
+{"text": "The box containing the letters from her sisters was locked.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0062"}
+{"text": "Each of the travelers carrying lanterns know the way.", "edits": [{"start": 40, "end": 44, "replacement": "knows"}], "category": "long_distance_agreement", "group": "X0063"}
+{"text": "Each of the travelers carrying lanterns knows the way.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0063"}
+{"text": "One of the soldiers at the gates have fallen asleep.", "edits": [{"start": 33, "end": 37, "replacement": "has"}], "category": "long_distance_agreement", "group": "X0064"}
+{"text": "One of the soldiers at the gates has fallen asleep.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0064"}
+{"text": "Every one of the windows in the towers were dark.", "edits": [{"start": 39, "end": 43, "replacement": "was"}], "category": "long_distance_agreement", "group": "X0065"}
+{"text": "Every one of the windows in the towers was dark.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0065"}
+{"text": "The sound of the wolves beyond the hills keep him awake.", "edits": [{"start": 41, "end": 45, "replacement": "keeps"}], "category": "long_distance_agreement", "group": "X0066"}
+{"text": "The sound of the wolves beyond the hills keeps him awake.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0066"}
+{"text": "The stories about the queen of the islands was true.", "edits": [{"start": 43, "end": 46, "replacement": "were"}], "category": "long_distance_agreement", "group": "X0067"}
+{"text": "The stories about the queen of the islands were true.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0067"}
+{"text": "A number of the guards at the doors is asleep.", "edits": [{"start": 36, "end": 38, "replacement": "are"}], "category": "long_distance_agreement", "group": "X0068"}
+{"text": "A number of the guards at the doors are asleep.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0068"}
+{"text": "The number of guards at the doors are dwindling.", "edits": [{"start": 34, "end": 37, "replacement": "is"}], "category": "long_distance_agreement", "group": "X0069"}
+{"text": "The number of guards at the doors is dwindling.", "edits": [], "category": "correct_long_distance_agreement", "group": "X0069"}
+{"text": "She packed three luggages for the journey.", "edits": [{"start": 17, "end": 25, "replacement": "pieces of luggage"}], "category": "mass_noun", "group": "X0070"}
+{"text": "She packed three pieces of luggage for the journey.", "edits": [], "category": "correct_mass_noun", "group": "X0070"}
+{"text": "He gave her two advices before she left.", "edits": [{"start": 16, "end": 23, "replacement": "pieces of advice"}], "category": "mass_noun", "group": "X0071"}
+{"text": "He gave her two pieces of advice before she left.", "edits": [], "category": "correct_mass_noun", "group": "X0071"}
+{"text": "The clerk shared several informations about the harbor.", "edits": [{"start": 25, "end": 37, "replacement": "pieces of information"}], "category": "mass_noun", "group": "X0072"}
+{"text": "The clerk shared several pieces of information about the harbor.", "edits": [], "category": "correct_mass_noun", "group": "X0072"}
+{"text": "They bought four furnitures for the cottage.", "edits": [{"start": 17, "end": 27, "replacement": "pieces of furniture"}], "category": "mass_noun", "group": "X0073"}
+{"text": "They bought four pieces of furniture for the cottage.", "edits": [], "category": "correct_mass_noun", "group": "X0073"}
+{"text": "She found two evidences in the locked room.", "edits": [{"start": 14, "end": 23, "replacement": "pieces of evidence"}], "category": "mass_noun", "group": "X0074"}
+{"text": "She found two pieces of evidence in the locked room.", "edits": [], "category": "correct_mass_noun", "group": "X0074"}
+{"text": "The baker ordered six equipments for the kitchen.", "edits": [{"start": 22, "end": 32, "replacement": "pieces of equipment"}], "category": "mass_noun", "group": "X0075"}
+{"text": "The baker ordered six pieces of equipment for the kitchen.", "edits": [], "category": "correct_mass_noun", "group": "X0075"}
+{"text": "He collected three useful informations from the travelers.", "edits": [{"start": 26, "end": 38, "replacement": "pieces of information"}], "category": "mass_noun", "group": "X0076"}
+{"text": "He collected three useful pieces of information from the travelers.", "edits": [], "category": "correct_mass_noun", "group": "X0076"}
+{"text": "The innkeeper offered two helpful advices.", "edits": [{"start": 34, "end": 41, "replacement": "pieces of advice"}], "category": "mass_noun", "group": "X0077"}
+{"text": "The innkeeper offered two helpful pieces of advice.", "edits": [], "category": "correct_mass_noun", "group": "X0077"}
+{"text": "They moved five heavy furnitures into the hall.", "edits": [{"start": 22, "end": 32, "replacement": "pieces of furniture"}], "category": "mass_noun", "group": "X0078"}
+{"text": "They moved five heavy pieces of furniture into the hall.", "edits": [], "category": "correct_mass_noun", "group": "X0078"}
+{"text": "She carried two small luggages to the carriage.", "edits": [{"start": 22, "end": 30, "replacement": "pieces of luggage"}], "category": "mass_noun", "group": "X0079"}
+{"text": "She carried two small pieces of luggage to the carriage.", "edits": [], "category": "correct_mass_noun", "group": "X0079"}
+{"text": "The detective found three compelling evidences.", "edits": [{"start": 37, "end": 46, "replacement": "pieces of evidence"}], "category": "mass_noun", "group": "X0080"}
+{"text": "The detective found three compelling pieces of evidence.", "edits": [], "category": "correct_mass_noun", "group": "X0080"}
+{"text": "The crew loaded several new equipments onto the ship.", "edits": [{"start": 28, "end": 38, "replacement": "pieces of equipment"}], "category": "mass_noun", "group": "X0081"}
+{"text": "The crew loaded several new pieces of equipment onto the ship.", "edits": [], "category": "correct_mass_noun", "group": "X0081"}
+{"text": "She carried three lantern across the courtyard.", "edits": [{"start": 18, "end": 25, "replacement": "lanterns"}], "category": "quantified_noun", "group": "X0084"}
+{"text": "She carried three lanterns across the courtyard.", "edits": [], "category": "correct_quantified_noun", "group": "X0084"}
+{"text": "He found two coin beneath the floorboards.", "edits": [{"start": 13, "end": 17, "replacement": "coins"}], "category": "quantified_noun", "group": "X0085"}
+{"text": "He found two coins beneath the floorboards.", "edits": [], "category": "correct_quantified_noun", "group": "X0085"}
+{"text": "There were five raven on the wall.", "edits": [{"start": 16, "end": 21, "replacement": "ravens"}], "category": "quantified_noun", "group": "X0086"}
+{"text": "There were five ravens on the wall.", "edits": [], "category": "correct_quantified_noun", "group": "X0086"}
+{"text": "They waited for several hour in the rain.", "edits": [{"start": 24, "end": 28, "replacement": "hours"}], "category": "quantified_noun", "group": "X0087"}
+{"text": "They waited for several hours in the rain.", "edits": [], "category": "correct_quantified_noun", "group": "X0087"}
+{"text": "The inn had four empty room upstairs.", "edits": [{"start": 23, "end": 27, "replacement": "rooms"}], "category": "quantified_noun", "group": "X0088"}
+{"text": "The inn had four empty rooms upstairs.", "edits": [], "category": "correct_quantified_noun", "group": "X0088"}
+{"text": "She tied both horse to the fence.", "edits": [{"start": 14, "end": 19, "replacement": "horses"}], "category": "quantified_noun", "group": "X0089"}
+{"text": "She tied both horses to the fence.", "edits": [], "category": "correct_quantified_noun", "group": "X0089"}
+{"text": "Many traveler feared the northern road.", "edits": [{"start": 5, "end": 13, "replacement": "travelers"}], "category": "quantified_noun", "group": "X0090"}
+{"text": "Many travelers feared the northern road.", "edits": [], "category": "correct_quantified_noun", "group": "X0090"}
+{"text": "A few soldier remained at the gate.", "edits": [{"start": 6, "end": 13, "replacement": "soldiers"}], "category": "quantified_noun", "group": "X0091"}
+{"text": "A few soldiers remained at the gate.", "edits": [], "category": "correct_quantified_noun", "group": "X0091"}
+{"text": "He gathered seven smooth stone from the river.", "edits": [{"start": 25, "end": 30, "replacement": "stones"}], "category": "quantified_noun", "group": "X0092"}
+{"text": "He gathered seven smooth stones from the river.", "edits": [], "category": "correct_quantified_noun", "group": "X0092"}
+{"text": "The chest held twelve silver key.", "edits": [{"start": 29, "end": 32, "replacement": "keys"}], "category": "quantified_noun", "group": "X0093"}
+{"text": "The chest held twelve silver keys.", "edits": [], "category": "correct_quantified_noun", "group": "X0093"}
+{"text": "Each of the three candle was lit.", "edits": [{"start": 18, "end": 24, "replacement": "candles"}], "category": "quantified_noun", "group": "X0094"}
+{"text": "Each of the three candles was lit.", "edits": [], "category": "correct_quantified_noun", "group": "X0094"}
+{"text": "The two woman exchanged a glance.", "edits": [{"start": 8, "end": 13, "replacement": "women"}], "category": "quantified_noun", "group": "X0095"}
+{"text": "The two women exchanged a glance.", "edits": [], "category": "correct_quantified_noun", "group": "X0095"}
+{"text": "Three child hid behind the cart.", "edits": [{"start": 6, "end": 11, "replacement": "children"}], "category": "quantified_noun", "group": "X0096"}
+{"text": "Three children hid behind the cart.", "edits": [], "category": "correct_quantified_noun", "group": "X0096"}
+{"text": "Several mouse escaped through the crack.", "edits": [{"start": 8, "end": 13, "replacement": "mice"}], "category": "quantified_noun", "group": "X0097"}
+{"text": "Several mice escaped through the crack.", "edits": [], "category": "correct_quantified_noun", "group": "X0097"}
+{"text": "He counted six tooth in the jawbone.", "edits": [{"start": 15, "end": 20, "replacement": "teeth"}], "category": "quantified_noun", "group": "X0098"}
+{"text": "He counted six teeth in the jawbone.", "edits": [], "category": "correct_quantified_noun", "group": "X0098"}
+{"text": "The tracks led past two fallen tree.", "edits": [{"start": 31, "end": 35, "replacement": "trees"}], "category": "quantified_noun", "group": "X0099"}
+{"text": "The tracks led past two fallen trees.", "edits": [], "category": "correct_quantified_noun", "group": "X0099"}
+{"text": "A dozen knight rode through the gate.", "edits": [{"start": 8, "end": 14, "replacement": "knights"}], "category": "quantified_noun", "group": "X0100"}
+{"text": "A dozen knights rode through the gate.", "edits": [], "category": "correct_quantified_noun", "group": "X0100"}
+{"text": "She had many good reason to distrust him.", "edits": [{"start": 18, "end": 24, "replacement": "reasons"}], "category": "quantified_noun", "group": "X0101"}
+{"text": "She had many good reasons to distrust him.", "edits": [], "category": "correct_quantified_noun", "group": "X0101"}
+{"text": "The crew found a few broken oar on the shore.", "edits": [{"start": 28, "end": 31, "replacement": "oars"}], "category": "quantified_noun", "group": "X0102"}
+{"text": "The crew found a few broken oars on the shore.", "edits": [], "category": "correct_quantified_noun", "group": "X0102"}
+{"text": "The witch kept nine black cat.", "edits": [{"start": 26, "end": 29, "replacement": "cats"}], "category": "quantified_noun", "group": "X0103"}
+{"text": "The witch kept nine black cats.", "edits": [], "category": "correct_quantified_noun", "group": "X0103"}
+{"text": "She do not recognize the stranger.", "edits": [{"start": 4, "end": 6, "replacement": "does"}], "category": "finite_and_verb_form", "group": "X0104"}
+{"text": "She does not recognize the stranger.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0104"}
+{"text": "They does not know the way home.", "edits": [{"start": 5, "end": 9, "replacement": "do"}], "category": "finite_and_verb_form", "group": "X0105"}
+{"text": "They do not know the way home.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0105"}
+{"text": "The captain have a map of the coast.", "edits": [{"start": 12, "end": 16, "replacement": "has"}], "category": "finite_and_verb_form", "group": "X0106"}
+{"text": "The captain has a map of the coast.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0106"}
+{"text": "The sailors has a map of the coast.", "edits": [{"start": 12, "end": 15, "replacement": "have"}], "category": "finite_and_verb_form", "group": "X0107"}
+{"text": "The sailors have a map of the coast.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0107"}
+{"text": "She did not went through the gate.", "edits": [{"start": 12, "end": 16, "replacement": "go"}], "category": "finite_and_verb_form", "group": "X0108"}
+{"text": "She did not go through the gate.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0108"}
+{"text": "He does not knows her name.", "edits": [{"start": 12, "end": 17, "replacement": "know"}], "category": "finite_and_verb_form", "group": "X0109"}
+{"text": "He does not know her name.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0109"}
+{"text": "They do not remembers the fire.", "edits": [{"start": 12, "end": 21, "replacement": "remember"}], "category": "finite_and_verb_form", "group": "X0110"}
+{"text": "They do not remember the fire.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0110"}
+{"text": "She can sings beautifully.", "edits": [{"start": 8, "end": 13, "replacement": "sing"}], "category": "finite_and_verb_form", "group": "X0111"}
+{"text": "She can sing beautifully.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0111"}
+{"text": "The captain must leaves before dawn.", "edits": [{"start": 17, "end": 23, "replacement": "leave"}], "category": "finite_and_verb_form", "group": "X0112"}
+{"text": "The captain must leave before dawn.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0112"}
+{"text": "He could hears the wolves outside.", "edits": [{"start": 9, "end": 14, "replacement": "hear"}], "category": "finite_and_verb_form", "group": "X0113"}
+{"text": "He could hear the wolves outside.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0113"}
+{"text": "They would follows if she called.", "edits": [{"start": 11, "end": 18, "replacement": "follow"}], "category": "finite_and_verb_form", "group": "X0114"}
+{"text": "They would follow if she called.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0114"}
+{"text": "She should waits for the others.", "edits": [{"start": 11, "end": 16, "replacement": "wait"}], "category": "finite_and_verb_form", "group": "X0115"}
+{"text": "She should wait for the others.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0115"}
+{"text": "He may knows where the key is.", "edits": [{"start": 7, "end": 12, "replacement": "know"}], "category": "finite_and_verb_form", "group": "X0116"}
+{"text": "He may know where the key is.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0116"}
+{"text": "The guards might arrives before noon.", "edits": [{"start": 17, "end": 24, "replacement": "arrive"}], "category": "finite_and_verb_form", "group": "X0117"}
+{"text": "The guards might arrive before noon.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0117"}
+{"text": "She has wrote to her sister.", "edits": [{"start": 8, "end": 13, "replacement": "written"}], "category": "finite_and_verb_form", "group": "X0118"}
+{"text": "She has written to her sister.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0118"}
+{"text": "They have took the wrong path.", "edits": [{"start": 10, "end": 14, "replacement": "taken"}], "category": "finite_and_verb_form", "group": "X0119"}
+{"text": "They have taken the wrong path.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0119"}
+{"text": "The king had chose a successor.", "edits": [{"start": 13, "end": 18, "replacement": "chosen"}], "category": "finite_and_verb_form", "group": "X0120"}
+{"text": "The king had chosen a successor.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0120"}
+{"text": "The bird had flew over the wall.", "edits": [{"start": 13, "end": 17, "replacement": "flown"}], "category": "finite_and_verb_form", "group": "X0121"}
+{"text": "The bird had flown over the wall.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0121"}
+{"text": "The glass was broke in the fall.", "edits": [{"start": 14, "end": 19, "replacement": "broken"}], "category": "finite_and_verb_form", "group": "X0122"}
+{"text": "The glass was broken in the fall.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0122"}
+{"text": "The gate has froze shut overnight.", "edits": [{"start": 13, "end": 18, "replacement": "frozen"}], "category": "finite_and_verb_form", "group": "X0123"}
+{"text": "The gate has frozen shut overnight.", "edits": [], "category": "correct_finite_and_verb_form", "group": "X0123"}
+{"text": "The waters around the island were treacherous.", "edits": [], "category": "hard_negative", "group": "X0124"}
+{"text": "She tested the waters before making her offer.", "edits": [], "category": "hard_negative", "group": "X0125"}
+{"text": "The sands shifted beneath their feet.", "edits": [], "category": "hard_negative", "group": "X0126"}
+{"text": "The winds brought rain from the west.", "edits": [], "category": "hard_negative", "group": "X0127"}
+{"text": "The snows of winter covered the pass.", "edits": [], "category": "hard_negative", "group": "X0128"}
+{"text": "The wines were stored beneath the inn.", "edits": [], "category": "hard_negative", "group": "X0129"}
+{"text": "The cheeses came from three different farms.", "edits": [], "category": "hard_negative", "group": "X0130"}
+{"text": "The irons were hot enough to shape the metal.", "edits": [], "category": "hard_negative", "group": "X0131"}
+{"text": "The papers lay scattered across the table.", "edits": [], "category": "hard_negative", "group": "X0132"}
+{"text": "The lights of the city vanished behind them.", "edits": [], "category": "hard_negative", "group": "X0133"}
+{"text": "The works of the old poet filled a shelf.", "edits": [], "category": "hard_negative", "group": "X0134"}
+{"text": "The remains of the tower stood on the hill.", "edits": [], "category": "hard_negative", "group": "X0135"}
+{"text": "The stairs were steep and narrow.", "edits": [], "category": "hard_negative", "group": "X0136"}
+{"text": "The scissors were on the table.", "edits": [], "category": "hard_negative", "group": "X0137"}
+{"text": "The fish were swimming beneath the boat.", "edits": [], "category": "hard_negative", "group": "X0138"}
+{"text": "Three deer crossed the clearing.", "edits": [], "category": "hard_negative", "group": "X0139"}
+{"text": "Two sheep stood by the gate.", "edits": [], "category": "hard_negative", "group": "X0140"}
+{"text": "Many species live in the forest.", "edits": [], "category": "hard_negative", "group": "X0141"}
+{"text": "The series of letters was incomplete.", "edits": [], "category": "hard_negative", "group": "X0142"}
+{"text": "The species was thought extinct.", "edits": [], "category": "hard_negative", "group": "X0143"}
+{"text": "The news from the islands was troubling.", "edits": [], "category": "hard_negative", "group": "X0144"}
+{"text": "Mathematics was never his strongest subject.", "edits": [], "category": "hard_negative", "group": "X0145"}
+{"text": "A number of guards were waiting outside.", "edits": [], "category": "hard_negative", "group": "X0146"}
+{"text": "The number of guards was increasing.", "edits": [], "category": "hard_negative", "group": "X0147"}
+{"text": "The captain and the cook were waiting outside.", "edits": [], "category": "hard_negative", "group": "X0148"}
+{"text": "The captain, with her sailors, was waiting outside.", "edits": [], "category": "hard_negative", "group": "X0149"}
+{"text": "The captain who led the sailors was wounded.", "edits": [], "category": "hard_negative", "group": "X0150"}
+{"text": "The sailors who followed the captain were tired.", "edits": [], "category": "hard_negative", "group": "X0151"}
+{"text": "One of the guards who were waiting outside waved.", "edits": [], "category": "hard_negative", "group": "X0152"}
+{"text": "Each of the guards was given a lantern.", "edits": [], "category": "hard_negative", "group": "X0153"}
+{"text": "Neither of the doors was open.", "edits": [], "category": "hard_negative", "group": "X0154"}
+{"text": "Neither of the doors were open.", "edits": [], "category": "hard_negative", "group": "X0155"}
+{"text": "The family were gathering their belongings.", "edits": [], "category": "hard_negative", "group": "X0156"}
+{"text": "The family was gathered in the kitchen.", "edits": [], "category": "hard_negative", "group": "X0157"}
+{"text": "The crew have abandoned the ship.", "edits": [], "category": "hard_negative", "group": "X0158"}
+{"text": "The crew has abandoned the ship.", "edits": [], "category": "hard_negative", "group": "X0159"}
+{"text": "A hundred miles is a long way to walk.", "edits": [], "category": "hard_negative", "group": "X0160"}
+{"text": "Ten years is a long time to wait.", "edits": [], "category": "hard_negative", "group": "X0161"}
+{"text": "The fish is fresh, but the chips are cold.", "edits": [], "category": "hard_negative", "group": "X0162"}
+{"text": "She can fish, but she cannot sail.", "edits": [], "category": "hard_negative", "group": "X0163"}
+{"text": "He saw the saw lying by the tree.", "edits": [], "category": "hard_negative", "group": "X0164"}
+{"text": "The lead singer carried a lead weight.", "edits": [], "category": "hard_negative", "group": "X0165"}
+{"text": "The wound had healed, but the road wound onward.", "edits": [], "category": "hard_negative", "group": "X0166"}
+{"text": "The left hand held what was left of the bread.", "edits": [], "category": "hard_negative", "group": "X0167"}
+{"text": "The captain watched the watch from the tower.", "edits": [], "category": "hard_negative", "group": "X0168"}
+{"text": "The guards guard the gate at night.", "edits": [], "category": "hard_negative", "group": "X0169"}
+{"text": "The cooks cook for the whole village.", "edits": [], "category": "hard_negative", "group": "X0170"}
+{"text": "The flies fly toward the light.", "edits": [], "category": "hard_negative", "group": "X0171"}
+{"text": "She does not know the answer.", "edits": [], "category": "hard_negative", "group": "X0172"}
+{"text": "They should have gone before dawn.", "edits": [], "category": "hard_negative", "group": "X0175"}
+{"text": "The bridge might have been built centuries ago.", "edits": [], "category": "hard_negative", "group": "X0176"}
+{"text": "The doors have been closed since dawn.", "edits": [], "category": "hard_negative", "group": "X0177"}
+{"text": "The child had had enough of waiting.", "edits": [], "category": "hard_negative", "group": "X0178"}
+{"text": "He said he would help if he could.", "edits": [], "category": "hard_negative", "group": "X0179"}
+{"text": "\"The guards was here,\" the child whispered.", "edits": [], "category": "hard_negative", "group": "X0180"}
+{"text": "\"She don't know nothing,\" the ferryman said.", "edits": [], "category": "hard_negative", "group": "X0181"}
+{"text": "\"Them horses is mine,\" said the farmer.", "edits": [], "category": "hard_negative", "group": "X0182"}
+{"text": "\"We was waiting by the gate,\" he said.", "edits": [], "category": "hard_negative", "group": "X0183"}
+{"text": "\"I seen it with my own eyes.\"", "edits": [], "category": "hard_negative", "group": "X0184"}
+{"text": "\"You got any news?\" she asked.", "edits": [], "category": "hard_negative", "group": "X0185"}
+{"text": "\"Three days,\" he said. \"Maybe four.\"", "edits": [], "category": "hard_negative", "group": "X0186"}
+{"text": "Not three days. Not even two.", "edits": [], "category": "hard_negative", "group": "X0187"}
+{"text": "A hundred candles, all burning at once.", "edits": [], "category": "hard_negative", "group": "X0188"}
+{"text": "The sound of bells. The smell of rain.", "edits": [], "category": "hard_negative", "group": "X0189"}
+{"text": "Beyond the gates stood a row of trees.", "edits": [], "category": "hard_negative", "group": "X0190"}
+{"text": "Beyond the gates stood three soldiers.", "edits": [], "category": "hard_negative", "group": "X0191"}
+{"text": "There is a lantern beside the books.", "edits": [], "category": "hard_negative", "group": "X0192"}
+{"text": "There are books beside the lantern.", "edits": [], "category": "hard_negative", "group": "X0193"}
+{"text": "More than one sailor was missing.", "edits": [], "category": "hard_negative", "group": "X0194"}
+{"text": "Many a traveler has taken that road.", "edits": [], "category": "hard_negative", "group": "X0195"}
+{"text": "Every boy and girl was given a gift.", "edits": [], "category": "hard_negative", "group": "X0196"}
+{"text": "Neither the king nor his guards were present.", "edits": [], "category": "hard_negative", "group": "X0197"}
+{"text": "Neither the guards nor the king was present.", "edits": [], "category": "hard_negative", "group": "X0198"}
+{"text": "The pieces of furniture were old but sturdy.", "edits": [], "category": "hard_negative", "group": "X0199"}
+{"text": "She gave him several useful pieces of advice.", "edits": [], "category": "hard_negative", "group": "X0200"}
+{"text": "The equipment in the two rooms was damaged.", "edits": [], "category": "hard_negative", "group": "X0201"}
+{"text": "He had less water than she did.", "edits": [], "category": "hard_negative", "group": "X0202"}
+{"text": "She had fewer coins than he did.", "edits": [], "category": "hard_negative", "group": "X0203"}
+{"text": "A little patience was all he needed.", "edits": [], "category": "hard_negative", "group": "X0204"}
+{"text": "A few coins were hidden beneath the floor.", "edits": [], "category": "hard_negative", "group": "X0205"}
+{"text": "Some of the bread was stale.", "edits": [], "category": "hard_negative", "group": "X0206"}
+{"text": "Some of the loaves were stale.", "edits": [], "category": "hard_negative", "group": "X0207"}
+{"text": "She had never saw the ocean.", "edits": [{"start": 14, "end": 17, "replacement": "seen"}], "category": "morphology", "group": "X0301"}
+{"text": "She had never seen the ocean.", "edits": [], "category": "correct_morphology", "group": "X0301"}
+{"text": "He has already went inside.", "edits": [{"start": 15, "end": 19, "replacement": "gone"}], "category": "morphology", "group": "X0302"}
+{"text": "He has already gone inside.", "edits": [], "category": "correct_morphology", "group": "X0302"}
+{"text": "They had not yet took the horses.", "edits": [{"start": 17, "end": 21, "replacement": "taken"}], "category": "morphology", "group": "X0303"}
+{"text": "They had not yet taken the horses.", "edits": [], "category": "correct_morphology", "group": "X0303"}
+{"text": "She had hardly began to speak.", "edits": [{"start": 15, "end": 20, "replacement": "begun"}], "category": "morphology", "group": "X0304"}
+{"text": "She had hardly begun to speak.", "edits": [], "category": "correct_morphology", "group": "X0304"}
+{"text": "The messenger had just ran past.", "edits": [{"start": 23, "end": 26, "replacement": "run"}], "category": "morphology", "group": "X0305"}
+{"text": "The messenger had just run past.", "edits": [], "category": "correct_morphology", "group": "X0305"}
+{"text": "He has not wrote to her.", "edits": [{"start": 11, "end": 16, "replacement": "written"}], "category": "morphology", "group": "X0306"}
+{"text": "He has not written to her.", "edits": [], "category": "correct_morphology", "group": "X0306"}
+{"text": "She hasn't yet ate her supper.", "edits": [{"start": 15, "end": 18, "replacement": "eaten"}], "category": "morphology", "group": "X0307"}
+{"text": "She hasn't yet eaten her supper.", "edits": [], "category": "correct_morphology", "group": "X0307"}
+{"text": "She did not even noticed the trap.", "edits": [{"start": 17, "end": 24, "replacement": "notice"}], "category": "morphology", "group": "X0308"}
+{"text": "She did not even notice the trap.", "edits": [], "category": "correct_morphology", "group": "X0308"}
+{"text": "He didn't ever mentioned the letter.", "edits": [{"start": 15, "end": 24, "replacement": "mention"}], "category": "morphology", "group": "X0309"}
+{"text": "He didn't ever mention the letter.", "edits": [], "category": "correct_morphology", "group": "X0309"}
+{"text": "They could never understood her warning.", "edits": [{"start": 17, "end": 27, "replacement": "understand"}], "category": "morphology", "group": "X0310"}
+{"text": "They could never understand her warning.", "edits": [], "category": "correct_morphology", "group": "X0310"}
+{"text": "She would probably waited by the gate.", "edits": [{"start": 19, "end": 25, "replacement": "wait"}], "category": "morphology", "group": "X0311"}
+{"text": "She would probably wait by the gate.", "edits": [], "category": "correct_morphology", "group": "X0311"}
+{"text": "He wanted to quickly opened the door.", "edits": [{"start": 21, "end": 27, "replacement": "open"}], "category": "morphology", "group": "X0312"}
+{"text": "He wanted to quickly open the door.", "edits": [], "category": "correct_morphology", "group": "X0312"}
+{"text": "She began to carefully folded the map.", "edits": [{"start": 23, "end": 29, "replacement": "fold"}], "category": "morphology", "group": "X0313"}
+{"text": "She began to carefully fold the map.", "edits": [], "category": "correct_morphology", "group": "X0313"}
+{"text": "They hoped to finally reached the harbor.", "edits": [{"start": 22, "end": 29, "replacement": "reach"}], "category": "morphology", "group": "X0314"}
+{"text": "They hoped to finally reach the harbor.", "edits": [], "category": "correct_morphology", "group": "X0314"}
+{"text": "The knight chose to quietly followed her.", "edits": [{"start": 28, "end": 36, "replacement": "follow"}], "category": "morphology", "group": "X0315"}
+{"text": "The knight chose to quietly follow her.", "edits": [], "category": "correct_morphology", "group": "X0315"}
+{"text": "The path led to burned wood and blackened stone.", "edits": [], "category": "hard_negative", "group": "X0316"}
+{"text": "She pointed to broken glass beneath the window.", "edits": [], "category": "hard_negative", "group": "X0317"}
+{"text": "He returned to frozen ground at dawn.", "edits": [], "category": "hard_negative", "group": "X0318"}
+{"text": "The smell of smoke clung to charred timber.", "edits": [], "category": "hard_negative", "group": "X0319"}
+{"text": "The travelers came to abandoned houses by the river.", "edits": [], "category": "hard_negative", "group": "X0320"}
+{"text": "She listened to whispered stories by the fire.", "edits": [], "category": "hard_negative", "group": "X0321"}
+{"text": "They walked to the ruined tower.", "edits": [], "category": "hard_negative", "group": "X0322"}
+{"text": "He carried water to the waiting horses.", "edits": [], "category": "hard_negative", "group": "X0323"}
+{"text": "She hadn't yet seen the sea.", "edits": [], "category": "hard_negative", "group": "X0324"}
+{"text": "He didn't even notice the trap.", "edits": [], "category": "hard_negative", "group": "X0325"}
+{"text": "She had not yet taken the horses.", "edits": [], "category": "hard_negative", "group": "X0326"}

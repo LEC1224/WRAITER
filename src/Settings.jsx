@@ -6,11 +6,12 @@ import { LANGUAGES } from './languages.js';
 import LocalModels from './LocalModels.jsx';
 
 const api = window.wraiter;
+const isWeb = api?.platform === 'web';
 const TASKS = [['continue', 'Autocomplete'], ['correct', 'Spell correction'], ['rewrite', 'Rephrase / translate'], ['proofread', 'Proofreading review'], ['chat', 'Project assistant'], ['checkpoint', 'Version summaries']];
 const PROVIDERS = { local: 'Local models (managed)', codex: 'Codex account', claude: 'Claude Code account', ollama: 'Ollama (local)', openai: 'OpenAI API', anthropic: 'Claude API', compatible: 'Compatible API / xAI' };
 const PRESETS = { claude: { baseUrl: '', model: '', claudePath: '' }, local: { baseUrl: '', model: '' }, codex: { baseUrl: '', model: '', codexPath: '' }, ollama: { baseUrl: 'http://localhost:11434', model: '' }, openai: { baseUrl: 'https://api.openai.com/v1', model: '' }, anthropic: { baseUrl: 'https://api.anthropic.com/v1', model: '' }, compatible: { baseUrl: 'https://api.x.ai/v1', model: '' } };
 const errorText = error => { reportError('settings.operation', error); return String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''); };
-const profileFor = (settings, task) => ({ provider: settings.provider || 'codex', baseUrl: settings.baseUrl || '', model: settings.model || '', codexPath: settings.codexPath || '', claudePath: settings.claudePath || '', ...(settings.taskProfiles?.[task] || {}) });
+const profileFor = (settings, task) => ({ provider: settings.provider || (isWeb ? 'openai' : 'codex'), baseUrl: settings.baseUrl || '', model: settings.model || '', codexPath: settings.codexPath || '', claudePath: settings.claudePath || '', ...(settings.taskProfiles?.[task] || {}) });
 const connectionKey = profile => [profile.provider, profile.baseUrl.trim().replace(/\/+$/, ''), profile.provider === 'codex' ? profile.codexPath || '' : '', profile.provider === 'claude' ? profile.claudePath || '' : ''].join('|');
 const modelIds = models => [...new Set((models || []).map(model => typeof model === 'string' ? model : model.id || model.model).filter(Boolean))];
 
@@ -20,7 +21,7 @@ function NumberField({ label, value, min, max, step = 1, onChange, help, disable
 
 export default function Settings({ initialTab, initialTask, prefs, updatePrefs, onClose, notify, fonts = [], Modal }) {
   const [tab, setTab] = useState(['general', 'appearance', 'grammar', 'language', 'connections', 'local', 'ai', 'hotkeys', 'logging'].includes(initialTab) ? initialTab : 'appearance');
-  const [draft, setDraft] = useState(() => ({ logCleanupEnabled: true, logRetentionMonths: 1, translationSuggestions: 3, correctionSuggestions: 1, rephraseSuggestions: 3, ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
+  const [draft, setDraft] = useState(() => ({ logCleanupEnabled: true, logRetentionMonths: 1, logNativeCrashDumps: false, translationSuggestions: 3, correctionSuggestions: 1, rephraseSuggestions: 3, ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
   const [logStatus, setLogStatus] = useState(null);
   useLoggedSurface('settings', tab);
   useEffect(() => {
@@ -28,7 +29,7 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
     let active = true;
     api?.diagnosticsStatus?.().then(value => { if (active) setLogStatus(value); }).catch(error => { if (active) setSaveError(errorText(error)); });
     return () => { active = false; };
-  }, [tab, prefs.logCleanupEnabled, prefs.logRetentionMonths]);
+  }, [tab, prefs.logCleanupEnabled, prefs.logRetentionMonths, prefs.logNativeCrashDumps]);
   const [task, setTask] = useState(TASKS.some(([which]) => which === initialTask) ? initialTask : 'continue');
   const [keyEdits, setKeyEdits] = useState({});
   const [connections, setConnections] = useState({});
@@ -109,13 +110,13 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
     finally { if (mounted.current) setSaving(false); }
   }
 
-  const tabs = [['general', 'General', SlidersHorizontal], ['appearance', 'Appearance', Sun], ['grammar', 'Spelling and grammar', Check], ['language', 'Languages', Globe2], ['connections', 'Connections', Plug], ['local', 'Local models', Download], ['ai', 'Writing AI', SlidersHorizontal], ['hotkeys', 'Shortcuts', Keyboard], ['logging', 'Logging', FileText]];
+  const tabs = [['general', 'General', SlidersHorizontal], ['appearance', 'Appearance', Sun], ['grammar', 'Spelling and grammar', Check], ['language', 'Languages', Globe2], ['connections', 'Connections', Plug], ...(!isWeb ? [['local', 'Local models', Download]] : []), ['ai', 'Writing AI', SlidersHorizontal], ['hotkeys', 'Shortcuts', Keyboard], ...(!isWeb ? [['logging', 'Logging', FileText]] : [])];
   return <Modal title="Settings" onClose={saving ? () => {} : onClose} wide>
     <div className="settings-tabs" role="tablist" aria-label="Settings categories">{tabs.map(([id, label, Icon]) => <button type="button" key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'selected' : ''} onClick={() => { setCapturing(''); setTab(id); }}><Icon size={15} />{label}</button>)}</div>
     <div className="settings-content" role="tabpanel" aria-label={tabs.find(([id]) => id === tab)?.[1]}>
       {tab === 'logging' && <>
         <h3>Local activity and error logs</h3>
-        <p className="notice-copy">Logs help diagnose problems and understand how WRAITER is used. They record settings changes, panels and windows opening or closing, document operations, and errors.</p>
+        <p className="notice-copy">Logs help diagnose problems and understand how WRAITER is used. They record settings changes, panels and windows opening or closing, document operations, and errors. Detected crashes and hangs also produce a local diagnostic report with recent activity and technical context.</p>
         <p className="small-muted">Logs stay on this computer. Typing, manuscript text, chats, document names and paths, credentials, and free-text setting values are excluded.</p>
         <label className="check-label"><input type="checkbox" checked={draft.logCleanupEnabled} onChange={event => set('logCleanupEnabled', event.target.checked)} />Automatically delete old logs</label>
         <div className="form-grid"><NumberField label="Keep logs for (months)" value={draft.logRetentionMonths} min={1} max={24} disabled={!draft.logCleanupEnabled} onChange={value => set('logRetentionMonths', value)} help="1–24 calendar months. The default is one month." /></div>
@@ -123,13 +124,22 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
         <button type="button" className="secondary-button" onClick={async () => { try { await api.openLogFolder(); } catch (error) { setSaveError(errorText(error)); } }} title="Open WRAITER’s diagnostic log folder in File Explorer."><FolderOpen size={15} />Open log folder</button>
         {logStatus && <p className="small-muted" style={{ overflowWrap: 'anywhere' }}>{logStatus.directory}</p>}
         {!!logStatus?.failures && <p className="connection-status error" role="status">Some log files could not be written or cleaned up ({logStatus.lastFailure}). Check the folder’s permissions and available disk space.</p>}
+        <h3>Native crash dumps</h3>
+        <label className="check-label"><input type="checkbox" checked={draft.logNativeCrashDumps} onChange={event => set('logNativeCrashDumps', event.target.checked)} />Save native crash dumps</label>
+        <p className="small-muted">Optional dumps help investigate crashes inside Electron or graphics drivers. They can contain manuscript text and credentials from memory. Dumps stay on this computer and are never uploaded automatically. Restart WRAITER after applying a change.</p>
+        {logStatus?.nativeCrashDumps?.error ? <p className="connection-status error" role="status">Native crash dumps could not be enabled ({logStatus.nativeCrashDumps.error}). Check the crash dump folder’s permissions and available disk space, then restart WRAITER.</p> : logStatus?.nativeCrashDumps && <p className="small-muted" role="status">Native crash dumps are {logStatus.nativeCrashDumps.enabled ? 'enabled' : 'disabled'} for this session.{Boolean(prefs.logNativeCrashDumps) !== logStatus.nativeCrashDumps.enabled ? ' Restart WRAITER to use the saved setting.' : ''}</p>}
+        <button type="button" className="secondary-button" onClick={async () => { try { await api.openCrashDumpFolder(); } catch (error) { setSaveError(errorText(error)); } }} title="Open WRAITER’s native crash dump folder in File Explorer."><FolderOpen size={15} />Open crash dump folder</button>
+        {logStatus?.nativeCrashDumps?.directory && <p className="small-muted" style={{ overflowWrap: 'anywhere' }}>{logStatus.nativeCrashDumps.directory}</p>}
+        <p className="small-muted">Log cleanup does not delete native crash dumps. Review and remove them separately when they are no longer needed.</p>
       </>}
       {tab === 'general' && <><h3>Projects and startup</h3><label className="field-label" htmlFor="startup-projects">When WRAITER starts</label><select id="startup-projects" className="field-input" aria-label="When WRAITER starts" value={draft.startup || 'restore'} onChange={event => set('startup', event.target.value)}><option value="restore">Restore all open project tabs</option><option value="new">Open a clean new project</option></select><p className="small-muted">Restoring includes unnamed drafts and the last active tab. Each project keeps its own editing history. Starting clean preserves unnamed drafts in File → Open recent.</p><p className="small-muted">New and Open add a project tab. Closing a tab keeps its saved file; unnamed drafts remain available in Open recent. This setting takes effect the next time you launch WRAITER.</p></>}
       {tab === 'local' && <LocalModels notify={notify} onAssign={(which, model) => setProfile(which, { provider: 'local', baseUrl: '', model })} />}
       {tab === 'grammar' && <><h3>Spelling and grammar</h3>
         <label className="check-label"><input type="checkbox" checked={!!draft.spellcheck} onChange={event => set('spellcheck', event.target.checked)} />Underline spelling mistakes with the local dictionary</label>
-        <label className="check-label"><input type="checkbox" checked={!!draft.localGrammar} onChange={event => set('localGrammar', event.target.checked)} />Local grammar hints while typing (English)</label><p className="small-muted">Checks repeated words, a/an and common “could of” expressions on this computer. Hover an underline to read the suggestion; intentional wording can stay.</p>
-        <label className="check-label"><input type="checkbox" checked={!!draft.aiGrammar} onChange={event => set('aiGrammar', event.target.checked)} />AI grammar hints while typing</label><p className="small-muted">After a three-second pause, sends the current paragraph to your selected proofreading connection. Cloud providers may charge or use your allowance. Suggestions never change the manuscript automatically.</p>
+        <label className="check-label"><input type="checkbox" checked={!!draft.localGrammar} onChange={event => set('localGrammar', event.target.checked)} />Local grammar hints while typing (English and Swedish)</label><p className="small-muted">Checks English grammar, agreement, punctuation and common word mix-ups, with a smaller set of Swedish grammar checks, on this computer. Right-click an underline for suggestions; intentional wording can stay. Spelling dictionaries for English and several other languages are bundled for offline use.</p>
+        <label className="check-label"><input type="checkbox" checked={!!draft.aiGrammar} onChange={event => set('aiGrammar', event.target.checked)} />AI grammar hints while typing</label>
+        <p className="small-muted"><strong>AI-heavy:</strong> Automatically checks text throughout this manuscript, including pasted text and chapters you have not opened. Starts promptly and rechecks edits after about half a second, with the current chapter first. This can use many AI requests and tokens: cloud providers may charge or use your allowance, {isWeb ? 'through your own API account.' : 'and local models use your computer’s resources.'}</p>
+        <p className="small-muted">Uses your proofreading connection. Only manuscript passages are sent, without notes, comments, reference material or chapter titles. Unchanged results are reused. Suggestions never change text automatically; turn this off to stop background checks.</p>
         <p className="small-muted">Hover a purple underline to see why it was flagged and what the AI suggests. Click it to apply or ignore. AI hints require AI to be enabled; choose their model under Connections → Proofreading review.</p>
       </>}
       {tab === 'appearance' && <>
@@ -164,7 +174,7 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
             const item = profileFor(draft, which), known = connections[connectionKey(item)], modelNames = modelIds(known?.models).filter(model => !(draft.hiddenModels?.[connectionKey(item)] || []).includes(model));
             return <div key={which} className={'task-profile-row' + (task === which ? ' selected' : '')}>
               <strong>{label}</strong>
-              <select className="field-input" aria-label={label + ' provider'} value={item.provider} onChange={event => { setProfile(which, { provider: event.target.value, ...PRESETS[event.target.value] }); setTask(which); }}>{Object.entries(PROVIDERS).map(([value, name]) => <option value={value} key={value}>{name}</option>)}</select>
+              <select className="field-input" aria-label={label + ' provider'} value={item.provider} onChange={event => { setProfile(which, { provider: event.target.value, ...PRESETS[event.target.value] }); setTask(which); }}>{Object.entries(PROVIDERS).filter(([value]) => !isWeb || ['openai', 'anthropic', 'compatible'].includes(value)).map(([value, name]) => <option value={value} key={value}>{name}</option>)}</select>
               <div className="model-picker" onFocus={() => setTask(which)}>
                 <input className="field-input" role="combobox" aria-expanded="false" aria-label={label + ' model'} value={item.model} placeholder={item.provider === 'codex' ? 'Codex default model' : 'Choose or type model'} onChange={event => setProfile(which, { model: event.target.value })} />
                 <select className="field-input model-dropdown" aria-label={'Available models for ' + label} title="Show all available models" value="" onChange={event => { if (event.target.value) setProfile(which, { model: event.target.value }); }}>
@@ -185,7 +195,7 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
             <label className="field-label">{profile.provider === 'ollama' ? 'Ollama address' : 'API base address'}</label>
             <input className="field-input" aria-label="Provider base address" value={profile.baseUrl} onChange={event => setProfile(task, { baseUrl: event.target.value })} />
             {profile.provider !== 'ollama' && <>
-              <label className="field-label spaced">API key<small>{hasSavedKey ? 'Saved securely; leave blank to keep' : 'Stored with Windows encryption'}</small></label>
+              <label className="field-label spaced">API key<small>{isWeb ? 'Kept only for this browser session; requests use your API account' : hasSavedKey ? 'Saved securely; leave blank to keep' : 'Stored with Windows encryption'}</small></label>
               <input className="field-input" type="password" autoComplete="off" aria-label="Provider API key" value={keyEdit.apiKey} placeholder={hasSavedKey ? 'Saved API key' : 'Enter API key'} onChange={event => setKeyEdit({ apiKey: event.target.value, clearKey: false })} />
               <label className="check-label small"><input type="checkbox" checked={keyEdit.clearKey} onChange={event => setKeyEdit({ clearKey: event.target.checked, apiKey: '' })} />Remove the saved API key for this connection</label>
             </>}
@@ -221,10 +231,10 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
           <NumberField label="Context budget (words)" value={draft.contextWords} min={50} max={16000} step={50} onChange={value => set('contextWords', value)} help="50–16,000 words of manuscript before the cursor. References have a separate limit." />
           <NumberField label="Maximum output tokens" value={draft.tokenCap} min={64} max={32768} step={64} onChange={value => set('tokenCap', value)} help="64–32,768. Caps the output requested from a model." />
           <NumberField label="Temperature" value={draft.temperature} min={0} max={2} step={0.05} onChange={value => set('temperature', value)} help="0–2. Lower values give more predictable suggestions." />
-          <label>Ollama completion mode<select className="field-input" value={draft.ollamaMode || 'auto'} onChange={event => set('ollamaMode', event.target.value)}><option value="auto">Automatic model detection</option><option value="guided">Guided / instruction model</option><option value="raw">Raw / base model</option></select></label>
+          {!isWeb && <label>Ollama completion mode<select className="field-input" value={draft.ollamaMode || 'auto'} onChange={event => set('ollamaMode', event.target.value)}><option value="auto">Automatic model detection</option><option value="guided">Guided / instruction model</option><option value="raw">Raw / base model</option></select></label>}
         </div>
         <label className="check-label"><input type="checkbox" checked={!!draft.allowReasoning} onChange={event => set('allowReasoning', event.target.checked)} />Allow additional model reasoning when supported</label>
-        <p className="small-muted">Higher reasoning and larger context can increase response time and usage. Codex uses reasoning effort and ignores the temperature and token-cap controls. Other providers apply supported generation options. Enabled references are separately limited to 48,000 characters. Assign different models under Connections.</p>
+        <p className="small-muted">Higher reasoning and larger context can increase response time and usage. {isWeb ? 'Requests are billed to your own cloud-provider API account.' : 'Codex uses reasoning effort and ignores the temperature and token-cap controls. Other providers apply supported generation options.'} Enabled references are separately limited to 48,000 characters. Assign different models under Connections.</p>
         <h3>Accepting suggestions</h3><p className="notice-copy">Accept everything with {formatShortcut(draft.hotkeys.accept)}, accept the next character with {formatShortcut(draft.hotkeys.acceptCharacter)}, or the next word with {formatShortcut(draft.hotkeys.acceptWord)}. Use {formatShortcut(draft.hotkeys.dismiss)} to dismiss a suggestion. Unaccepted suggestions are never saved as manuscript text.</p>
       </>}
       {tab === 'hotkeys' && <>

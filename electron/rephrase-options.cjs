@@ -1,4 +1,4 @@
-const { cleanResult, getSuggestionLimit } = require('./core.cjs');
+const { cleanResult, getSuggestionLimit } = require('./document-core.cjs');
 
 function parseRephraseOptions(raw, request) {
   let text = String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim().replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1');

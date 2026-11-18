@@ -2,13 +2,19 @@ const { randomUUID } = require('node:crypto');
 
 const CONTEXT_FLAGS = ['hasSelection', 'hasTextSelection', 'blocked', 'canUndo', 'canRedo', 'canCopyFormatting', 'canPasteFormatting', 'canSplitChapter', 'aiEnabled', 'hasSuggestion', 'hasImage', 'hasLink'];
 function editorMenuContext(value) {
-  if (value?.tab === true && typeof value.tabId === 'string' && /^[a-f0-9-]{36}$/.test(value.tabId)) return { tab: true, tabId: value.tabId, canMoveLeft: value.canMoveLeft === true, canMoveRight: value.canMoveRight === true, canCloseOthers: value.canCloseOthers === true, blocked: value.blocked === true };
+  if (value?.chapter === true) return { chapter: true, blocked: value.blocked === true, canDelete: value.canDelete === true, canDuplicate: value.canDuplicate === true };
+  if (value?.tab === true && typeof value.tabId === 'string' && /^[a-f0-9-]{36}$/.test(value.tabId)) return { tab: true, tabId: value.tabId, hasFile: value.hasFile === true, canMoveLeft: value.canMoveLeft === true, canMoveRight: value.canMoveRight === true, canCloseOthers: value.canCloseOthers === true, canMultitask: value.canMultitask === true, inMultitask: value.inMultitask === true, blocked: value.blocked === true };
   if (!value || typeof value !== 'object' || Array.isArray(value) || value.editor !== true) return null;
   const context = { editor: true, ...Object.fromEntries(CONTEXT_FLAGS.map(key => [key, value[key] === true])) };
   const hint = value.grammarHint;
   if (context.aiEnabled && !context.blocked && typeof hint?.preview === 'string' && hint.preview.length <= 104 &&
       typeof hint.reviewOnly === 'boolean' && (hint.preview.length || hint.reviewOnly) && !/[\p{Cc}\p{Bidi_Control}\u2028\u2029]/u.test(hint.preview)) {
     context.grammarHint = { preview: hint.preview, reviewOnly: hint.reviewOnly };
+  }
+  const local = value.localHint;
+  if (!context.blocked && ['spelling', 'grammar'].includes(local?.category) && Array.isArray(local.previews) && local.previews.length <= 5 &&
+      local.previews.every(preview => typeof preview?.preview === 'string' && preview.preview.length <= 104 && typeof preview.reviewOnly === 'boolean' && !/[\p{Cc}\p{Bidi_Control}\u2028\u2029]/u.test(preview.preview))) {
+    context.localHint = { category: local.category, previews: local.previews, canAdd: local.canAdd === true };
   }
   return context;
 }
@@ -19,10 +25,42 @@ function contextMenuTemplate(params, context, handlers, shortcuts = {}) {
     id: command, label, enabled, click: () => handlers.command(command),
     ...(shortcut ? { accelerator: shortcut, registerAccelerator: false } : {})
   });
-  if (editor?.tab) return [action('Close tab', 'tab-close', !editor.blocked, shortcuts.closeTab), action('Close other tabs', 'tab-close-others', !editor.blocked && editor.canCloseOthers), action('Close tabs to the right', 'tab-close-right', !editor.blocked && editor.canMoveRight), separator, action('Move tab left', 'tab-left', !editor.blocked && editor.canMoveLeft), action('Move tab right', 'tab-right', !editor.blocked && editor.canMoveRight)];
+  if (editor?.chapter) return [
+    action('Rename', 'chapter-rename', !editor.blocked, 'F2'),
+    action('Duplicate', 'chapter-duplicate', !editor.blocked && editor.canDuplicate),
+    separator,
+    action('Delete…', 'chapter-delete', !editor.blocked && editor.canDelete)
+  ];
+  if (editor?.tab) return [
+    { id: 'tab-multitask', label: 'Multitask', enabled: !editor.blocked && (editor.canMultitask || editor.inMultitask), submenu: [
+      action('Open to the left', 'tab-multitask-left', !editor.blocked && editor.canMultitask),
+      action('Open to the right', 'tab-multitask-right', !editor.blocked && editor.canMultitask),
+      ...(editor.inMultitask ? [separator, action('Remove from multitask', 'tab-multitask-remove', !editor.blocked)] : [])
+    ] }, separator,
+    action('Save', 'tab-save', !editor.blocked),
+    action('Save As…', 'tab-save-as', !editor.blocked),
+    action('Export…', 'tab-export', !editor.blocked),
+    action('Print Preview…', 'tab-print', !editor.blocked),
+    action('Revision History', 'tab-history', !editor.blocked), separator,
+    action('Open in Explorer', 'tab-reveal', editor.hasFile && !editor.blocked),
+    action('Copy File Path', 'tab-copy-path', editor.hasFile && !editor.blocked),
+    action('Copy File Name', 'tab-copy-name', editor.hasFile && !editor.blocked), separator,
+    action('Close tab', 'tab-close', !editor.blocked, shortcuts.closeTab), action('Close other tabs', 'tab-close-others', !editor.blocked && editor.canCloseOthers), action('Close tabs to the right', 'tab-close-right', !editor.blocked && editor.canMoveRight), separator, action('Move tab left', 'tab-left', !editor.blocked && editor.canMoveLeft), action('Move tab right', 'tab-right', !editor.blocked && editor.canMoveRight)
+  ];
   const items = (params.dictionarySuggestions || []).slice(0, 5).map(word => ({ label: word.replace(/&/g, '&&'), click: () => handlers.replaceMisspelling(word) }));
   if (params.misspelledWord) items.push({ label: 'Add to dictionary', click: () => handlers.addToDictionary(params.misspelledWord) });
   if (items.length) items.push(separator);
+  if (params.isEditable && editor?.localHint) {
+    const { category, previews, canAdd } = editor.localHint;
+    previews.forEach(({ preview, reviewOnly }, index) => {
+      const label = preview.replace(/&/g, '&&');
+      items.push(action(reviewOnly ? 'Review local suggestion: ' + label : `Local ${category}: ` + label,
+        reviewOnly ? 'review-local-hint' : `apply-local-hint-${index}`));
+    });
+    if (canAdd) items.push(action('Add to personal dictionary', 'add-local-word'));
+    items.push(action('Ignore this suggestion', 'ignore-local-hint'), action('Ignore matching suggestions in this chapter', 'ignore-local-matching'));
+    items.push(action('Review local spelling and grammar…', 'review-local-hint'), separator);
+  }
   if (params.isEditable && editor?.grammarHint) {
     const { preview, reviewOnly } = editor.grammarHint, label = preview.replace(/&/g, '&&');
     if (reviewOnly) items.push(action(label ? 'Review AI grammar: ' + label : 'Review AI grammar suggestion…', 'review-grammar-hint'));

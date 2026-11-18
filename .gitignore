@@ -3,7 +3,15 @@ dist/
 release/
 test-output/
 tmp/
+build/offline-grammar/
 *.log
 .env
 .env.*
 !.env.example
+build/neural-grammar/
+build/neural-grammar-cache/
+dist-web/
+cloud/data/
+cloud/config/
+cloud/.backup-transfer/
+cloud/.runtime/

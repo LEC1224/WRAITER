@@ -13,8 +13,8 @@ import { parseTabStops } from '../src/tabs.js';
 import { styleIdValid } from '../src/named-styles.js';
 import { TrackedChange } from './tracked-changes.mjs';
 
-// Keep the original colour in the document and exports. Only the manuscript
-// stylesheet blends this colour with the current page to keep text readable.
+// Keep the original colour in the document and native saves. The manuscript
+// stylesheet and publication exporters blend it with their respective pages.
 const ReadableHighlight = Highlight.extend({
   addAttributes() {
     const attributes = this.parent();

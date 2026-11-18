@@ -1,0 +1,209 @@
+{"text": "The lanterns was still burning when Mira returned.", "edits": [{"start": 13, "end": 16, "replacement": "were"}], "category": "subject_verb_agreement", "group": "T0001"}
+{"text": "A bundle of letters were hidden beneath the floor.", "edits": [{"start": 20, "end": 24, "replacement": "was"}], "category": "subject_verb_agreement", "group": "T0002"}
+{"text": "Neither the captain nor her sisters knows the route.", "edits": [{"start": 36, "end": 41, "replacement": "know"}], "category": "subject_verb_agreement", "group": "T0003"}
+{"text": "The sound of footsteps echo through the empty hall.", "edits": [{"start": 23, "end": 27, "replacement": "echoes"}], "category": "subject_verb_agreement", "group": "T0004"}
+{"text": "Each of the windows have a crack in the glass.", "edits": [{"start": 20, "end": 24, "replacement": "has"}], "category": "subject_verb_agreement", "group": "T0005"}
+{"text": "Beyond the gate stand a solitary oak.", "edits": [{"start": 16, "end": 21, "replacement": "stands"}], "category": "subject_verb_agreement", "group": "T0006"}
+{"text": "The twins, along with their father, was waiting outside.", "edits": [{"start": 36, "end": 39, "replacement": "were"}], "category": "subject_verb_agreement", "group": "T0007"}
+{"text": "One of the guards carry a silver whistle.", "edits": [{"start": 18, "end": 23, "replacement": "carries"}], "category": "subject_verb_agreement", "group": "T0008"}
+{"text": "She have never seen the sea so calm.", "edits": [{"start": 4, "end": 8, "replacement": "has"}], "category": "subject_verb_agreement", "group": "T0009"}
+{"text": "There is three candles left in the box.", "edits": [{"start": 6, "end": 8, "replacement": "are"}], "category": "subject_verb_agreement", "group": "T0010"}
+{"text": "He walk to the window and pulled the curtain aside.", "edits": [{"start": 3, "end": 7, "replacement": "walked"}], "category": "verb_tense", "group": "T0011"}
+{"text": "Yesterday, I see a fox crossing the frozen river.", "edits": [{"start": 13, "end": 16, "replacement": "saw"}], "category": "verb_tense", "group": "T0012"}
+{"text": "By dawn, the rain had froze on the rooftops.", "edits": [{"start": 22, "end": 27, "replacement": "frozen"}], "category": "verb_form", "group": "T0013"}
+{"text": "She had wrote his name on the inside cover.", "edits": [{"start": 8, "end": 13, "replacement": "written"}], "category": "verb_form", "group": "T0014"}
+{"text": "The bell had already rang when they arrived.", "edits": [{"start": 21, "end": 25, "replacement": "rung"}], "category": "verb_form", "group": "T0015"}
+{"text": "I should have went with her, he thought.", "edits": [{"start": 14, "end": 18, "replacement": "gone"}], "category": "verb_form", "group": "T0016"}
+{"text": "The horse lay down after it had ran for miles.", "edits": [{"start": 32, "end": 35, "replacement": "run"}], "category": "verb_form", "group": "T0017"}
+{"text": "He has took the key, but left the map.", "edits": [{"start": 7, "end": 11, "replacement": "taken"}], "category": "verb_form", "group": "T0018"}
+{"text": "The candle had began to gutter in the draft.", "edits": [{"start": 15, "end": 20, "replacement": "begun"}], "category": "verb_form", "group": "T0019"}
+{"text": "We were suppose to meet at the bridge.", "edits": [{"start": 8, "end": 15, "replacement": "supposed"}], "category": "verb_form", "group": "T0020"}
+{"text": "Her and I crossed the courtyard together.", "edits": [{"start": 0, "end": 3, "replacement": "She"}], "category": "pronoun_case", "group": "T0021"}
+{"text": "The old keeper gave the keys to she and her brother.", "edits": [{"start": 32, "end": 35, "replacement": "her"}], "category": "pronoun_case", "group": "T0022"}
+{"text": "Between you and I, the king is afraid.", "edits": [{"start": 16, "end": 17, "replacement": "me"}], "category": "pronoun_case", "group": "T0023"}
+{"text": "The owl spread its wings and shook it's feathers.", "edits": [{"start": 35, "end": 39, "replacement": "its"}], "category": "possessive", "group": "T0024"}
+{"text": "The travelers packed there bags before sunrise.", "edits": [{"start": 21, "end": 26, "replacement": "their"}], "category": "homophone", "group": "T0025"}
+{"text": "Your the only one who heard the song.", "edits": [{"start": 0, "end": 4, "replacement": "You're"}], "category": "homophone", "group": "T0026"}
+{"text": "The storm had lost its strength, but the river was still to high.", "edits": [{"start": 57, "end": 64, "replacement": "too high"}], "category": "homophone", "group": "T0027"}
+{"text": "She set the cup down and went threw the door.", "edits": [{"start": 30, "end": 35, "replacement": "through"}], "category": "homophone", "group": "T0028"}
+{"text": "No one knew weather the bridge would hold.", "edits": [{"start": 12, "end": 19, "replacement": "whether"}], "category": "homophone", "group": "T0029"}
+{"text": "The dog wagged its tale when she returned.", "edits": [{"start": 19, "end": 23, "replacement": "tail"}], "category": "homophone", "group": "T0030"}
+{"text": "He could not bare the thought of leaving her behind.", "edits": [{"start": 13, "end": 17, "replacement": "bear"}], "category": "homophone", "group": "T0031"}
+{"text": "Their was a knock at the door.", "edits": [{"start": 0, "end": 5, "replacement": "There"}], "category": "homophone", "group": "T0032"}
+{"text": "She took a deep breathe before answering.", "edits": [{"start": 16, "end": 23, "replacement": "breath"}], "category": "word_form", "group": "T0033"}
+{"text": "He spoke so quiet that she leaned closer.", "edits": [{"start": 12, "end": 17, "replacement": "quietly"}], "category": "adverb", "group": "T0034"}
+{"text": "The trail grew steeper as they climbed higher then the clouds.", "edits": [{"start": 46, "end": 50, "replacement": "than"}], "category": "comparison", "group": "T0035"}
+{"text": "This path is more safer than the road.", "edits": [{"start": 13, "end": 23, "replacement": "safer"}], "category": "comparison", "group": "T0036"}
+{"text": "Of the two brothers, Ren was the tallest.", "edits": [{"start": 33, "end": 40, "replacement": "taller"}], "category": "comparison", "group": "T0037"}
+{"text": "She carried an lantern into the cellar.", "edits": [{"start": 12, "end": 22, "replacement": "a lantern"}], "category": "article", "group": "T0038"}
+{"text": "He found a old coin beneath the hearth.", "edits": [{"start": 9, "end": 14, "replacement": "an old"}], "category": "article", "group": "T0039"}
+{"text": "They waited for a hour in the rain.", "edits": [{"start": 16, "end": 22, "replacement": "an hour"}], "category": "article", "group": "T0040"}
+{"text": "A unicorn stood beside an ruined tower.", "edits": [{"start": 23, "end": 32, "replacement": "a ruined"}], "category": "article", "group": "T0041"}
+{"text": "The children tucked the blanket around themself.", "edits": [{"start": 39, "end": 47, "replacement": "themselves"}], "category": "reflexive", "group": "T0042"}
+{"text": "Mara taught hisself to mend the nets.", "edits": [{"start": 12, "end": 19, "replacement": "herself"}], "category": "reflexive", "group": "T0043"}
+{"text": "The wolves had left a trail of footprint in the snow.", "edits": [{"start": 31, "end": 40, "replacement": "footprints"}], "category": "number", "group": "T0044"}
+{"text": "Three raven circled above the battlefield.", "edits": [{"start": 6, "end": 11, "replacement": "ravens"}], "category": "number", "group": "T0045"}
+{"text": "One of the book was missing its cover.", "edits": [{"start": 11, "end": 15, "replacement": "books"}], "category": "number", "group": "T0046"}
+{"text": "The two woman exchanged a worried glance.", "edits": [{"start": 8, "end": 13, "replacement": "women"}], "category": "number", "group": "T0047"}
+{"text": "The soldiers swords were stacked beside the door.", "edits": [{"start": 4, "end": 19, "replacement": "soldiers' swords"}], "category": "possessive", "group": "T0048"}
+{"text": "The queens crown lay on the table.", "edits": [{"start": 4, "end": 16, "replacement": "queen's crown"}], "category": "possessive", "group": "T0049"}
+{"text": "The fox cleaned it paws beneath the tree.", "edits": [{"start": 16, "end": 23, "replacement": "its paws"}], "category": "possessive", "group": "T0050"}
+{"text": "She reached for the rope, but it slipped from she fingers.", "edits": [{"start": 46, "end": 57, "replacement": "her fingers"}], "category": "possessive", "group": "T0051"}
+{"text": "She returned back to the village at dusk.", "edits": [{"start": 4, "end": 17, "replacement": "returned"}], "category": "redundancy", "group": "T0052"}
+{"text": "Despite of the cold, they continued north.", "edits": [{"start": 0, "end": 10, "replacement": "Despite"}], "category": "preposition", "group": "T0053"}
+{"text": "She insisted to pay for the meal.", "edits": [{"start": 4, "end": 19, "replacement": "insisted on paying"}], "category": "preposition", "group": "T0054"}
+{"text": "He was married with the innkeeper's daughter.", "edits": [{"start": 7, "end": 19, "replacement": "married to"}], "category": "preposition", "group": "T0055"}
+{"text": "The path led them into the edge of the forest.", "edits": [{"start": 18, "end": 31, "replacement": "to the edge"}], "category": "preposition", "group": "T0056"}
+{"text": "If I was the captain, I would turn back.", "edits": [{"start": 5, "end": 8, "replacement": "were"}], "category": "subjunctive", "group": "T0057"}
+{"text": "If he had listened, he would have knew the truth.", "edits": [{"start": 34, "end": 38, "replacement": "known"}], "category": "conditional", "group": "T0058"}
+{"text": "Had she know the cost, she might have refused.", "edits": [{"start": 8, "end": 12, "replacement": "known"}], "category": "conditional", "group": "T0059"}
+{"text": "Unless you do not hurry, we will miss the ferry.", "edits": [{"start": 0, "end": 23, "replacement": "Unless you hurry"}], "category": "negation", "group": "T0060"}
+{"text": "He could hardly see nothing through the fog.", "edits": [{"start": 20, "end": 27, "replacement": "anything"}], "category": "negation", "group": "T0061"}
+{"text": "The letter, which she had found yesterday were unsigned.", "edits": [{"start": 32, "end": 46, "replacement": "yesterday, was"}], "category": "punctuation_agreement", "group": "T0062"}
+{"text": "After the storm passed the villagers emerged from their homes.", "edits": [{"start": 16, "end": 36, "replacement": "passed, the villagers"}], "category": "introductory_comma", "group": "T0063"}
+{"text": "At dawn however the watchman saw smoke on the horizon.", "edits": [{"start": 3, "end": 15, "replacement": "dawn, however,"}], "category": "parenthetical_comma", "group": "T0064"}
+{"text": "The door was locked, she climbed through the window.", "edits": [{"start": 13, "end": 24, "replacement": "locked, so she"}], "category": "comma_splice", "group": "T0065"}
+{"text": "He wanted to shout, he remained silent.", "edits": [{"start": 13, "end": 22, "replacement": "shout, but he"}], "category": "comma_splice", "group": "T0066"}
+{"text": "\"Wait here\" she said, drawing her sword.", "edits": [{"start": 6, "end": 15, "replacement": "here,\" she"}], "category": "dialogue_punctuation", "group": "T0067"}
+{"text": "\"I remember,\" She whispered.", "edits": [{"start": 14, "end": 27, "replacement": "she whispered"}], "category": "dialogue_punctuation", "group": "T0068"}
+{"text": "\"Where are you going.\" he asked.", "edits": [{"start": 15, "end": 22, "replacement": "going?\""}], "category": "dialogue_punctuation", "group": "T0069"}
+{"text": "\"Run!\" she shouted, \"before it wakes!\"", "edits": [{"start": 11, "end": 19, "replacement": "shouted."}], "category": "dialogue_punctuation", "group": "T0070"}
+{"text": "Its a long way to the northern coast.", "edits": [{"start": 0, "end": 3, "replacement": "It's"}], "category": "contraction", "group": "T0071"}
+{"text": "Dont leave the gate open, she warned him.", "edits": [{"start": 0, "end": 4, "replacement": "Don't"}], "category": "contraction", "group": "T0072"}
+{"text": "The knife was dull; its blade couldnt cut the rope.", "edits": [{"start": 30, "end": 37, "replacement": "couldn't"}], "category": "contraction", "group": "T0073"}
+{"text": "She doesnt know where the passage leads.", "edits": [{"start": 4, "end": 10, "replacement": "doesn't"}], "category": "contraction", "group": "T0074"}
+{"text": "The king ordered that every prisoner is released.", "edits": [{"start": 37, "end": 48, "replacement": "be released"}], "category": "subjunctive", "group": "T0075"}
+{"text": "Walking through the ruins, the moon appeared above her.", "edits": [{"start": 0, "end": 55, "replacement": "As she walked through the ruins, the moon appeared above her."}], "category": "dangling_modifier", "group": "T0076"}
+{"text": "The old woman asked him where was the nearest inn.", "edits": [{"start": 24, "end": 49, "replacement": "where the nearest inn was"}], "category": "indirect_question", "group": "T0077"}
+{"text": "She wondered why had he hidden the letter.", "edits": [{"start": 13, "end": 30, "replacement": "why he had hidden"}], "category": "indirect_question", "group": "T0078"}
+{"text": "The door creaked open, revealing a room full of dust and cobweb.", "edits": [{"start": 57, "end": 63, "replacement": "cobwebs"}], "category": "number", "group": "T0079"}
+{"text": "Neither of the answers seem right to him.", "edits": [{"start": 23, "end": 27, "replacement": "seems"}], "category": "subject_verb_agreement", "group": "T0080"}
+{"text": "The news were worse than anyone expected.", "edits": [{"start": 9, "end": 13, "replacement": "was"}], "category": "subject_verb_agreement", "group": "T0081"}
+{"text": "There was fewer travelers on the road that morning.", "edits": [{"start": 6, "end": 15, "replacement": "were fewer"}], "category": "subject_verb_agreement", "group": "T0082"}
+{"text": "The captain and the cook was arguing over the last loaf.", "edits": [{"start": 25, "end": 28, "replacement": "were"}], "category": "subject_verb_agreement", "group": "T0083"}
+{"text": "She did not knew the stranger's name.", "edits": [{"start": 12, "end": 16, "replacement": "know"}], "category": "verb_form", "group": "T0084"}
+{"text": "Let him goes, the priest said.", "edits": [{"start": 8, "end": 12, "replacement": "go"}], "category": "verb_form", "group": "T0085"}
+{"text": "They had been waiting since two hours.", "edits": [{"start": 22, "end": 27, "replacement": "for"}], "category": "preposition", "group": "T0086"}
+{"text": "The child listened careful to every word.", "edits": [{"start": 19, "end": 26, "replacement": "carefully"}], "category": "adverb", "group": "T0087"}
+{"text": "He whispered so softly she could scarce hear him.", "edits": [{"start": 33, "end": 39, "replacement": "scarcely"}], "category": "adverb", "group": "T0088"}
+{"text": "She placed the sword on it's stand.", "edits": [{"start": 24, "end": 28, "replacement": "its"}], "category": "possessive", "group": "T0089"}
+{"text": "The tower stood alone on a island.", "edits": [{"start": 25, "end": 33, "replacement": "an island"}], "category": "article", "group": "T0090"}
+{"text": "When the wolves howled, the horses begun to stamp.", "edits": [{"start": 35, "end": 40, "replacement": "began"}], "category": "verb_form", "group": "T0091"}
+{"text": "He had less arrows than he needed.", "edits": [{"start": 7, "end": 18, "replacement": "fewer arrows"}], "category": "quantity", "group": "T0092"}
+{"text": "The stranger gave her a advice she never forgot.", "edits": [{"start": 22, "end": 30, "replacement": "a piece of advice"}], "category": "countability", "group": "T0093"}
+{"text": "No sooner had she sat down when the bell rang.", "edits": [{"start": 27, "end": 31, "replacement": "than"}], "category": "correlative", "group": "T0094"}
+{"text": "Not only the rain soaked them, but the wind chilled them.", "edits": [{"start": 0, "end": 29, "replacement": "Not only did the rain soak them"}], "category": "correlative", "group": "T0095"}
+{"text": "She asked if he can help her the next morning.", "edits": [{"start": 16, "end": 24, "replacement": "could help"}], "category": "sequence_of_tenses", "group": "T0096"}
+{"text": "He laid awake, listening to the rain.", "edits": [{"start": 3, "end": 13, "replacement": "lay awake"}], "category": "lie_lay", "group": "T0097"}
+{"text": "She carefully lay the sword on the altar.", "edits": [{"start": 14, "end": 27, "replacement": "laid the sword"}], "category": "lie_lay", "group": "T0098"}
+{"text": "The fire had went out by morning.", "edits": [{"start": 13, "end": 17, "replacement": "gone"}], "category": "verb_form", "group": "T0099"}
+{"text": "Its branches swayed, though there was no wind.", "edits": [], "category": "correct_possessive", "group": "T0100"}
+{"text": "It's a long way to the northern coast.", "edits": [], "category": "correct_contraction", "group": "T0071"}
+{"text": "The captain and the cook were arguing over the last loaf.", "edits": [], "category": "correct_agreement", "group": "T0083"}
+{"text": "A bundle of letters was hidden beneath the floor.", "edits": [], "category": "correct_agreement", "group": "T0002"}
+{"text": "Neither the captain nor her sisters know the route.", "edits": [], "category": "correct_agreement", "group": "T0003"}
+{"text": "There are three candles left in the box.", "edits": [], "category": "correct_agreement", "group": "T0010"}
+{"text": "One of the guards carries a silver whistle.", "edits": [], "category": "correct_agreement", "group": "T0008"}
+{"text": "The news was worse than anyone expected.", "edits": [], "category": "correct_agreement", "group": "T0081"}
+{"text": "The sound of footsteps echoes through the empty hall.", "edits": [], "category": "correct_agreement", "group": "T0004"}
+{"text": "She had written his name on the inside cover.", "edits": [], "category": "correct_verb_form", "group": "T0014"}
+{"text": "The bell had already rung when they arrived.", "edits": [], "category": "correct_verb_form", "group": "T0015"}
+{"text": "He lay awake, listening to the rain.", "edits": [], "category": "correct_lie_lay", "group": "T0097"}
+{"text": "She laid the sword on the altar.", "edits": [], "category": "correct_lie_lay", "group": "T0101"}
+{"text": "If I were the captain, I would turn back.", "edits": [], "category": "correct_subjunctive", "group": "T0057"}
+{"text": "If he had listened, he would have known the truth.", "edits": [], "category": "correct_conditional", "group": "T0058"}
+{"text": "The stranger gave her a piece of advice she never forgot.", "edits": [], "category": "correct_countability", "group": "T0093"}
+{"text": "The horse had run for miles.", "edits": [], "category": "correct_verb_form", "group": "T0102"}
+{"text": "The wolves had left a trail of footprints in the snow.", "edits": [], "category": "correct_number", "group": "T0044"}
+{"text": "She carried a lantern into the cellar.", "edits": [], "category": "correct_article", "group": "T0038"}
+{"text": "A unicorn stood beside a ruined tower.", "edits": [], "category": "correct_article", "group": "T0041"}
+{"text": "They waited for an hour in the rain.", "edits": [], "category": "correct_article", "group": "T0040"}
+{"text": "Between you and me, the king is afraid.", "edits": [], "category": "correct_pronoun", "group": "T0023"}
+{"text": "The old keeper gave the keys to her and her brother.", "edits": [], "category": "correct_pronoun", "group": "T0022"}
+{"text": "The soldiers' swords were stacked beside the door.", "edits": [], "category": "correct_possessive", "group": "T0048"}
+{"text": "The queen's crown lay on the table.", "edits": [], "category": "correct_possessive", "group": "T0049"}
+{"text": "\"Wait here,\" she said, drawing her sword.", "edits": [], "category": "correct_dialogue", "group": "T0067"}
+{"text": "\"Run!\" she shouted. \"Before it wakes!\"", "edits": [], "category": "correct_dialogue", "group": "T0070"}
+{"text": "\"Where are you going?\" he asked.", "edits": [], "category": "correct_dialogue", "group": "T0069"}
+{"text": "After the storm passed, the villagers emerged from their homes.", "edits": [], "category": "correct_comma", "group": "T0063"}
+{"text": "The door was locked, so she climbed through the window.", "edits": [], "category": "correct_clause", "group": "T0065"}
+{"text": "She asked where the nearest inn was.", "edits": [], "category": "correct_indirect_question", "group": "T0103"}
+{"text": "No sooner had she sat down than the bell rang.", "edits": [], "category": "correct_correlative", "group": "T0094"}
+{"text": "Not only did the rain soak them, but the wind chilled them.", "edits": [], "category": "correct_correlative", "group": "T0095"}
+{"text": "She had fewer arrows than she needed.", "edits": [], "category": "correct_quantity", "group": "T0104"}
+{"text": "The captain ordered that every prisoner be released.", "edits": [], "category": "correct_subjunctive", "group": "T0105"}
+{"text": "Never again.", "edits": [], "category": "intentional_fragment", "group": "T0106"}
+{"text": "Not a sound from the forest.", "edits": [], "category": "intentional_fragment", "group": "T0107"}
+{"text": "Cold. Wet. Alone.", "edits": [], "category": "intentional_fragments", "group": "T0108"}
+{"text": "And then the stars went out.", "edits": [], "category": "sentence_initial_conjunction", "group": "T0109"}
+{"text": "But she did not turn back.", "edits": [], "category": "sentence_initial_conjunction", "group": "T0110"}
+{"text": "Because he had promised her.", "edits": [], "category": "intentional_fragment", "group": "T0111"}
+{"text": "\"Me? I never touched it.\"", "edits": [], "category": "dialogue_voice", "group": "T0112"}
+{"text": "\"We was there, all right,\" he muttered.", "edits": [], "category": "dialect_dialogue", "group": "T0114"}
+{"text": "\"I don't know nothing about no crown.\"", "edits": [], "category": "dialect_dialogue", "group": "T0115"}
+{"text": "\"You coming or what?\"", "edits": [], "category": "dialogue_ellipsis", "group": "T0116"}
+{"text": "\"If only...\" She turned away.", "edits": [], "category": "dialogue_ellipsis", "group": "T0117"}
+{"text": "\"The door,\" she said, \"is open.\"", "edits": [], "category": "interrupted_dialogue", "group": "T0118"}
+{"text": "\"I remember.\" She turned away.", "edits": [], "category": "dialogue_action_beat", "group": "T0119"}
+{"text": "\"Who is there?\" No answer came.", "edits": [], "category": "dialogue_action_beat", "group": "T0120"}
+{"text": "The dragon, ancient and terrible, slept beneath the mountain.", "edits": [], "category": "appositive", "group": "T0121"}
+{"text": "The door opened. Slowly, silently, impossibly.", "edits": [], "category": "intentional_fragment", "group": "T0122"}
+{"text": "She could hear the sea, or thought she could.", "edits": [], "category": "intentional_ellipsis", "group": "T0123"}
+{"text": "He had had enough of kings and their promises.", "edits": [], "category": "repeated_had", "group": "T0124"}
+{"text": "What she wanted was not gold but a way home.", "edits": [], "category": "parallel_construction", "group": "T0125"}
+{"text": "The more he listened, the less he understood.", "edits": [], "category": "correlative", "group": "T0126"}
+{"text": "One by one, the lights went out.", "edits": [], "category": "idiom", "group": "T0127"}
+{"text": "The children looked at one another.", "edits": [], "category": "reciprocal_pronoun", "group": "T0128"}
+{"text": "The map belonged to whoever found it first.", "edits": [], "category": "whoever_clause", "group": "T0129"}
+{"text": "Whom the queen trusted was her own affair.", "edits": [], "category": "whom_clause", "group": "T0130"}
+{"text": "A series of knocks came from the cellar.", "edits": [], "category": "collective_noun", "group": "T0131"}
+{"text": "The number of footprints was increasing.", "edits": [], "category": "number_agreement", "group": "T0132"}
+{"text": "A number of footprints were visible in the mud.", "edits": [], "category": "number_agreement", "group": "T0133"}
+{"text": "The sheep were already beyond the gate.", "edits": [], "category": "invariant_plural", "group": "T0134"}
+{"text": "The deer was watching her from the trees.", "edits": [], "category": "invariant_singular", "group": "T0135"}
+{"text": "None of the water was drinkable.", "edits": [], "category": "none_agreement", "group": "T0136"}
+{"text": "None of the candles were lit.", "edits": [], "category": "none_agreement", "group": "T0137"}
+{"text": "Each of them had a reason to stay.", "edits": [], "category": "singular_each", "group": "T0138"}
+{"text": "The pair of boots was too large for her.", "edits": [], "category": "pair_agreement", "group": "T0140"}
+{"text": "The scissors were hidden under the cloth.", "edits": [], "category": "pluralia_tantum", "group": "T0141"}
+{"text": "The forest was dark, darker than she remembered.", "edits": [], "category": "stylistic_repetition", "group": "T0142"}
+{"text": "She waited and waited, but he never came.", "edits": [], "category": "stylistic_repetition", "group": "T0143"}
+{"text": "Had she known, she might have refused.", "edits": [], "category": "inverted_conditional", "group": "T0144"}
+{"text": "Were he here, he would know what to do.", "edits": [], "category": "inverted_conditional", "group": "T0145"}
+{"text": "The candlelight made the silver appear almost blue.", "edits": [], "category": "bare_infinitive", "group": "T0146"}
+{"text": "She watched him cross the courtyard.", "edits": [], "category": "bare_infinitive", "group": "T0147"}
+{"text": "He helped her carry the chest upstairs.", "edits": [], "category": "bare_infinitive", "group": "T0148"}
+{"text": "I wish I were brave enough to tell her.", "edits": [], "category": "subjunctive", "group": "T0149"}
+{"text": "The family was gathered around the table.", "edits": [], "category": "collective_noun", "group": "T0150"}
+{"text": "The family were arguing among themselves.", "edits": [], "category": "british_collective", "group": "T0151"}
+{"text": "She realised the colour was fading.", "edits": [], "category": "british_spelling", "group": "T0152"}
+{"text": "He travelled towards the harbour at dawn.", "edits": [], "category": "british_spelling", "group": "T0153"}
+{"text": "The grey wolf lay beneath the centre arch.", "edits": [], "category": "british_spelling", "group": "T0154"}
+{"text": "They sat in silence, each with their own thoughts.", "edits": [], "category": "singular_they", "group": "T0155"}
+{"text": "Someone had left their coat by the door.", "edits": [], "category": "singular_they", "group": "T0156"}
+{"text": "The path wound through the woods.", "edits": [], "category": "irregular_verb", "group": "T0157"}
+{"text": "The wound had begun to heal.", "edits": [], "category": "homograph", "group": "T0158"}
+{"text": "She read the letter again and set it aside.", "edits": [], "category": "homograph", "group": "T0159"}
+{"text": "The lead chest was too heavy to lift.", "edits": [], "category": "homograph", "group": "T0160"}
+{"text": "He rose before dawn to tend the rose garden.", "edits": [], "category": "homograph", "group": "T0161"}
+{"text": "The sea was calm, but its surface concealed a strong current.", "edits": [], "category": "correct_possessive", "group": "T0162"}
+{"text": "Whoever had taken the key knew the house well.", "edits": [], "category": "relative_pronoun", "group": "T0163"}
+{"text": "She was more afraid of staying than of leaving.", "edits": [], "category": "parallel_construction", "group": "T0164"}
+{"text": "The lantern went out, leaving them in darkness.", "edits": [], "category": "participial_clause", "group": "T0165"}
+{"text": "Only after the bells stopped did he speak.", "edits": [], "category": "inversion", "group": "T0166"}
+{"text": "Not until morning would they discover the truth.", "edits": [], "category": "inversion", "group": "T0167"}
+{"text": "There, beneath the roots, lay the missing crown.", "edits": [], "category": "inversion", "group": "T0168"}
+{"text": "What a strange little house!", "edits": [], "category": "exclamation", "group": "T0169"}
+{"text": "\"Well,\" he said, \"that changes things.\"", "edits": [], "category": "interrupted_dialogue", "group": "T0170"}
+{"text": "\"Stop!\" cried Mara.", "edits": [], "category": "dialogue_tag", "group": "T0171"}
+{"text": "The old house had stood empty for years; now a light burned upstairs.", "edits": [], "category": "semicolon", "group": "T0172"}
+{"text": "She had one choice: leave the key or lose the boat.", "edits": [], "category": "colon", "group": "T0173"}
+{"text": "He looked at her - really looked - and finally understood.", "edits": [], "category": "parenthetical_dash", "group": "T0174"}
+{"text": "The book that she had found yesterday was unsigned.", "edits": [], "category": "restrictive_clause", "group": "T0175"}
+{"text": "The book, which she had found yesterday, was unsigned.", "edits": [], "category": "nonrestrictive_clause", "group": "T0176"}
+{"text": "The one thing she feared was the dark.", "edits": [], "category": "singular_agreement", "group": "T0177"}
+{"text": "More than one traveler had vanished on that road.", "edits": [], "category": "more_than_one", "group": "T0178"}
+{"text": "A thousand miles is a long way to walk.", "edits": [], "category": "quantity_as_unit", "group": "T0179"}
+{"text": "Ten years have passed since the fire.", "edits": [], "category": "elapsed_time", "group": "T0180"}
+{"text": "The guard said that the king was dead.", "edits": [], "category": "reported_speech", "group": "T0181"}
+{"text": "The guard said, \"The king is dead.\"", "edits": [], "category": "direct_speech", "group": "T0182"}

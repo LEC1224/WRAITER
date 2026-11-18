@@ -52,23 +52,46 @@ export function checkpointGraph(entries, headRevision) {
   roots.sort(chronological);
   for (const siblings of children.values()) siblings.sort(chronological);
   const currentPath = new Set(currentCheckpointPath(items, headRevision).map(row => row.item.revision));
-  const lanes = new Map(), seen = new Set();
+  const parents = item => [...new Set(item.parentRevisions || [item.parentRevision])].filter(id => id !== item.revision && byRevision.has(id));
+  const lanes = new Map();
   let nextLane = 0;
-  const allocateLane = () => nextLane++;
-  function visit(item, lane) {
-    if (seen.has(item.revision)) return;
-    seen.add(item.revision); lanes.set(item.revision, lane);
-    const siblings = children.get(item.revision) || [];
-    const main = siblings.find(child => currentPath.has(child.revision)) || siblings[0];
-    if (main) visit(main, lane);
-    for (const child of siblings) if (child !== main) visit(child, allocateLane());
+  for (const root of [...roots, ...items]) {
+    if (lanes.has(root.revision)) continue;
+    const stack = [[root, nextLane++]];
+    while (stack.length) {
+      const [item, lane] = stack.pop();
+      if (lanes.has(item.revision)) continue;
+      lanes.set(item.revision, lane);
+      const siblings = children.get(item.revision) || [];
+      const main = siblings.find(child => currentPath.has(child.revision)) || siblings[0];
+      for (const child of siblings) if (child !== main) stack.push([child, nextLane++]);
+      if (main) stack.push([main, lane]);
+    }
   }
-  for (const root of roots) visit(root, allocateLane());
-  // A corrupt cycle has no root. Still show every saved version exactly once.
-  for (const item of items) if (!seen.has(item.revision)) visit(item, allocateLane());
-  const rows = [...seen].map(revision => byRevision.get(revision)).sort(chronological).map((item, row) => ({
-    item, row, lane: lanes.get(item.revision), parentRevision: item.parentRevision !== item.revision && byRevision.has(item.parentRevision) ? item.parentRevision : null,
-    onCurrentPath: currentPath.has(item.revision), current: item.revision === headRevision
+  // Git timestamps have one-second precision. Visit parents first even when
+  // several commits share a timestamp or the writer's clock moved backwards.
+  const ordered = [], seen = new Set(), ancestors = new Set();
+  for (const item of [...items].sort(chronological)) {
+    const stack = [[item, false]];
+    while (stack.length) {
+      const [node, exiting] = stack.pop();
+      if (exiting) { ordered.push(node); continue; }
+      if (seen.has(node.revision)) continue;
+      seen.add(node.revision);
+      stack.push([node, true]);
+      for (const revision of parents(node).reverse()) stack.push([byRevision.get(revision), false]);
+    }
+  }
+  const stack = [headRevision];
+  while (stack.length) {
+    const revision = stack.pop(), item = byRevision.get(revision);
+    if (!item || ancestors.has(revision)) continue;
+    ancestors.add(revision);
+    for (const parent of parents(item)) stack.push(parent);
+  }
+  const rows = ordered.map((item, row) => ({
+    item, row, lane: lanes.get(item.revision), parentRevision: parents(item)[0] || null, parentRevisions: parents(item),
+    onCurrentPath: currentPath.has(item.revision), integrated: ancestors.has(item.revision), current: item.revision === headRevision
   }));
   return { rows, laneCount: Math.max(1, nextLane) };
 }

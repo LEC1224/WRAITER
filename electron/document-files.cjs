@@ -1,7 +1,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { hash, atomicWrite, readLimited, writeSnapshot, validateProject, samePath } = require('./core.cjs');
+const { setTimeout: delay } = require('node:timers/promises');
+const { hash, atomicWrite, readLimited, writeSnapshot, validatedProjectJSON, validateProject, samePath } = require('./core.cjs');
 const FORMATS = ['wraiter', 'odt', 'docx', 'txt', 'md', 'html'];
 const formatOf = target => ({ htm: 'html', markdown: 'md' }[path.extname(target).slice(1).toLowerCase()] || path.extname(target).slice(1).toLowerCase());
 const hashFields = project => ({ title: project.title, chapters: project.chapters, documentStyle: project.documentStyle, language: project.language, layout: project.layout, ...(project.namedStyles?.length ? { namedStyles: project.namedStyles } : {}), ...(project.printLayout ? { printLayout: project.printLayout } : {}) });
@@ -47,14 +48,40 @@ class DocumentFiles {
     const binding = migrateBinding(saved?.binding, saved?.project);
     this.binding = { ...binding, path: target, format: formatOf(target), contentHash: binding?.contentHash || '', fidelity: binding?.fidelity || {}, reviewed: binding?.reviewed || false };
   }
-  async open(target) {
+  async sourceStatus(force = false) {
+    const target = this.store.currentPath;
+    if (!target) return { state: 'unsaved', path: null };
+    try {
+      const stat = await fs.stat(target, { bigint: true });
+      if (!stat.isFile()) return { state: 'unavailable', path: target, message: 'The document path no longer points to a file.' };
+      const key = [target, stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
+      // Poll metadata cheaply; hash again on focus, a new binding or a disk change.
+      if (force || this.sourceCheck?.key !== key) this.sourceCheck = { key, hash: hash(await readLimited(target)) };
+      return { state: this.sourceCheck.hash === this.store.expectedHash ? 'unchanged' : 'changed', path: target };
+    } catch (error) {
+      this.sourceCheck = null;
+      return { state: ['ENOENT', 'ENOTDIR'].includes(error.code) ? 'missing' : 'unavailable', path: target, message: 'The document could not be read. It may be in use by another application.' };
+    }
+  }
+  async open(target, { fresh = false } = {}) {
     const format = formatOf(target);
     if (!FORMATS.includes(format)) throw new Error('Choose an ODT, DOCX, WRAITER, Markdown, HTML or plain text document.');
-    if (format === 'wraiter') { const result = await this.store.open(target); this.binding = null; return { ...result, binding: null }; }
-    const bytes = await readLimited(target), fingerprint = hash(bytes), saved = await this.readSidecar(target);
+    let bytes;
+    for (let attempt = 0; ; attempt++) {
+      try { bytes = await readLimited(target); break; }
+      catch (error) {
+        if (!fresh || attempt >= 3 || !['ENOENT', 'EBUSY', 'EACCES', 'EPERM'].includes(error.code)) throw error;
+        await delay(80 * (attempt + 1));
+      }
+    }
+    const fingerprint = hash(bytes);
+    if (format === 'wraiter') { const result = await this.store.replace(JSON.parse(bytes.toString('utf8')), path.resolve(target), fingerprint); this.binding = null; return { ...result, binding: null }; }
+    // Sidecars can contain recovery-only edits. Refresh must parse the actual
+    // file even when its bytes still match the last saved fingerprint.
+    const saved = fresh ? null : await this.readSidecar(target);
     if (saved?.sourceHash === fingerprint && saved.project) {
       try {
-        validateProject(saved.project);
+        // replace() validates before archiving or writing recovery.
         const result = await this.store.replace(saved.project, path.resolve(target), fingerprint);
         this.binding = { ...migrateBinding(saved.binding, saved.project), path: path.resolve(target), format };
         return { ...result, binding: this.binding };
@@ -88,38 +115,37 @@ class DocumentFiles {
       this.lastSidecarSnapshot = await writeSnapshot(target, data, this.lastSidecarSnapshot);
     }
   }
-  reviewWarnings(project, payload, options = {}) {
+  reviewWarnings(project, payload, options = {}, knownContentHash) {
     const chosen = options.token ? this.targets.get(options.token) : null;
     const format = chosen?.format || this.binding?.format || 'wraiter';
-    if (format === 'wraiter' || (!chosen && this.binding?.contentHash === contentHash(project))) return [];
+    if (format === 'wraiter' || (!chosen && this.binding?.contentHash === (knownContentHash ?? contentHash(project)))) return [];
     const warnings = !chosen && this.binding?.fidelity?.requiresReview && !this.binding.reviewed ? this.binding.fidelity.warnings || ['Some document features cannot be retained in this format.'] : [];
     const acknowledged = !chosen ? this.binding?.reviewedLossWarnings || [] : [];
     return [...new Set([...warnings, ...(payload?.lossWarnings || []).filter(warning => !acknowledged.includes(warning))])];
   }
-  async persist(project, payload, options = {}) {
-    validateProject(project);
+  async persist(project, payload, options = {}, serialized = validatedProjectJSON(project)) {
     if (this.store.project && this.store.project.id !== project.id) throw new Error('This save belongs to another document.');
     const chosen = options.token ? this.targets.get(options.token) : null;
     if (options.token && !chosen) throw new Error('Choose the save destination again.');
     const target = chosen?.path || this.store.currentPath, format = chosen?.format || this.binding?.format || 'wraiter';
     if (!target || format === 'wraiter') {
       const previousBinding = this.binding;
-      if (chosen) {
-        let actual = null;
-        try { actual = hash(await readLimited(target)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-        if (actual !== chosen.expectedHash) throw new Error('The save destination changed after it was chosen. Choose a new destination to preserve both versions.');
-      }
       // A format change cannot pass a native binary path into the JSON writer.
-      const result = await this.store.persist(project, target, Boolean(chosen));
+      // Keep the selected destination fingerprint through recovery staging and replacement.
+      const result = await this.store.persist(project, target, Boolean(chosen), { serialized, expectedTargetHash: chosen?.expectedHash });
       this.binding = null; if (chosen) this.targets.delete(options.token);
       return { ...result, binding: null, previousFormat: previousBinding?.format };
     }
     await this.store.writeRecovery(project, this.store.currentPath, this.store.expectedHash);
     let actual = null, bytes = null;
     try { bytes = await readLimited(target); actual = hash(bytes); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    if (actual !== (chosen ? chosen.expectedHash : this.store.expectedHash)) throw new Error('This file changed outside WRAITER. Your edits are safe in recovery. Save a copy to preserve both versions.');
-    const unchanged = !chosen && this.binding?.contentHash === contentHash(project);
-    if (this.reviewWarnings(project, payload, options).length && !options.reviewed) {
+    if (actual !== (chosen ? chosen.expectedHash : this.store.expectedHash)) throw new Error('This file changed outside WRAITER. Your edits are safe in recovery. Refresh from disk or locate the file to load it, or save a copy to keep both versions.');
+    // This save owns its IPC snapshot. Reuse its fingerprint within this
+    // operation, but never cache it across saves where content may change.
+    let currentContentHash;
+    const fingerprint = () => currentContentHash ??= contentHash(project);
+    const unchanged = !chosen && this.binding?.contentHash === fingerprint();
+    if (this.reviewWarnings(project, payload, options, currentContentHash).length && !options.reviewed) {
       await this.saveSidecar(project); return { path: target, binding: this.binding, recoveryOnly: true, needsReview: true };
     }
     if (!unchanged && !payload) { await this.saveSidecar(project); return { path: target, binding: this.binding, recoveryOnly: true }; }
@@ -139,7 +165,7 @@ class DocumentFiles {
         try { await fs.writeFile(originalBackup, bytes, { flag: 'wx' }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
       }
       if (actual !== hash(data)) await atomicWrite(target, data, true, { expectedHash: actual });
-      this.binding = { path: target, format, contentHash: contentHash(project), fidelity: chosen ? {} : this.binding?.fidelity || {}, reviewed: true, reviewedLossWarnings: [...new Set([...(chosen ? [] : this.binding?.reviewedLossWarnings || []), ...(payload.lossWarnings || [])])], originalBackup };
+      this.binding = { path: target, format, contentHash: fingerprint(), fidelity: chosen ? {} : this.binding?.fidelity || {}, reviewed: true, reviewedLossWarnings: [...new Set([...(chosen ? [] : this.binding?.reviewedLossWarnings || []), ...(payload.lossWarnings || [])])], originalBackup };
       await this.store.writeRecovery(project, target, hash(data));
     }
     await this.saveSidecar(project);

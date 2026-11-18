@@ -1,3 +1,11 @@
+.chapter-select { touch-action: manipulation; }
+.chapter-item-text > [data-chapter-title] { width: fit-content; max-width: 100%; }
+.chapter-item:has(> .outline-rename) [data-chapter-title] { visibility: hidden; }
+.chapter-item > .outline-rename {
+  position: absolute; inset: 5px auto auto 29px; width: calc(100% - 55px); height: 20px; padding: 0 2px;
+  font: inherit; font-size: 12px; color: var(--text); background: var(--panel-raised); border: 1px solid var(--accent); border-radius: 2px; z-index: 2;
+}
+.chapter-item > .outline-rename:focus-visible { outline-width: 1px; outline-offset: 0; }
 .chapter-headings { padding: 0 8px 5px 31px; color: var(--muted); font-size: 11px; }
 .chapter-headings summary, .bookmarks-panel summary { cursor: pointer; }
 .chapter-heading-link { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; padding: 4px 0; color: var(--muted); }

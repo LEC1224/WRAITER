@@ -1,0 +1,100 @@
+{"text": "She walk toward the gate.", "edits": [{"start": 4, "end": 8, "replacement": "walks"}], "category": "agreement"}
+{"text": "The lanterns was already lit.", "edits": [{"start": 13, "end": 16, "replacement": "were"}], "category": "agreement"}
+{"text": "My brother have a map.", "edits": [{"start": 11, "end": 15, "replacement": "has"}], "category": "agreement"}
+{"text": "The ravens circles overhead.", "edits": [{"start": 11, "end": 18, "replacement": "circle"}], "category": "agreement"}
+{"text": "Each of the keys belong to her.", "edits": [{"start": 17, "end": 23, "replacement": "belongs"}], "category": "agreement"}
+{"text": "Neither of the answers make sense.", "edits": [{"start": 23, "end": 27, "replacement": "makes"}], "category": "agreement"}
+{"text": "The stack of letters were damp.", "edits": [{"start": 21, "end": 25, "replacement": "was"}], "category": "agreement"}
+{"text": "The basket of apples were beside the door.", "edits": [{"start": 21, "end": 25, "replacement": "was"}], "category": "agreement"}
+{"text": "The children has gone home.", "edits": [{"start": 13, "end": 16, "replacement": "have"}], "category": "agreement"}
+{"text": "There is three moons tonight.", "edits": [{"start": 6, "end": 8, "replacement": "are"}], "category": "agreement"}
+{"text": "I seen the creature yesterday.", "edits": [{"start": 2, "end": 6, "replacement": "saw"}], "category": "verb_form"}
+{"text": "He has went into the woods.", "edits": [{"start": 7, "end": 11, "replacement": "gone"}], "category": "verb_form"}
+{"text": "She had ran all the way.", "edits": [{"start": 8, "end": 11, "replacement": "run"}], "category": "verb_form"}
+{"text": "They was hiding in the cellar.", "edits": [{"start": 5, "end": 8, "replacement": "were"}], "category": "verb_form"}
+{"text": "We did not knew the answer.", "edits": [{"start": 11, "end": 15, "replacement": "know"}], "category": "verb_form"}
+{"text": "The glass was broke by the wind.", "edits": [{"start": 14, "end": 19, "replacement": "broken"}], "category": "verb_form"}
+{"text": "He begun to laugh.", "edits": [{"start": 3, "end": 8, "replacement": "began"}], "category": "verb_form"}
+{"text": "I have wrote to the captain.", "edits": [{"start": 7, "end": 12, "replacement": "written"}], "category": "verb_form"}
+{"text": "She lay the book on the table yesterday.", "edits": [{"start": 4, "end": 7, "replacement": "laid"}], "category": "verb_form"}
+{"text": "By dawn the snow had froze solid.", "edits": [{"start": 21, "end": 26, "replacement": "frozen"}], "category": "verb_form"}
+{"text": "Their going to leave at dawn.", "edits": [{"start": 0, "end": 5, "replacement": "They’re"}], "category": "homophone"}
+{"text": "The dragon lifted its head, and it spread it’s wings.", "edits": [{"start": 42, "end": 46, "replacement": "its"}], "category": "homophone"}
+{"text": "Please put the sword over their.", "edits": [{"start": 26, "end": 31, "replacement": "there"}], "category": "homophone"}
+{"text": "Your welcome to stay here.", "edits": [{"start": 0, "end": 4, "replacement": "You’re"}], "category": "homophone"}
+{"text": "The soldiers lost there way.", "edits": [{"start": 18, "end": 23, "replacement": "their"}], "category": "homophone"}
+{"text": "The spell had no affect on her.", "edits": [{"start": 17, "end": 23, "replacement": "effect"}], "category": "homophone"}
+{"text": "I would rather wait then rush in.", "edits": [{"start": 20, "end": 24, "replacement": "than"}], "category": "homophone"}
+{"text": "She could not bear the site of blood.", "edits": [{"start": 23, "end": 27, "replacement": "sight"}], "category": "homophone"}
+{"text": "He took a deep breathe before speaking.", "edits": [{"start": 15, "end": 22, "replacement": "breath"}], "category": "homophone"}
+{"text": "The knight tightened the rains on her horse.", "edits": [{"start": 25, "end": 30, "replacement": "reins"}], "category": "homophone"}
+{"text": "She carried a apple in her pocket.", "edits": [{"start": 12, "end": 19, "replacement": "an apple"}], "category": "article"}
+{"text": "He is an skilled healer.", "edits": [{"start": 6, "end": 16, "replacement": "a skilled"}], "category": "article"}
+{"text": "It took a hour to cross the bridge.", "edits": [{"start": 8, "end": 14, "replacement": "an hour"}], "category": "article"}
+{"text": "They found an useful clue.", "edits": [{"start": 11, "end": 20, "replacement": "a useful"}], "category": "article"}
+{"text": "She gave him a honest answer.", "edits": [{"start": 13, "end": 21, "replacement": "an honest"}], "category": "article"}
+{"text": "The scouts returned with two wolf.", "edits": [{"start": 25, "end": 33, "replacement": "two wolves"}], "category": "number"}
+{"text": "Several child watched from the hill.", "edits": [{"start": 0, "end": 13, "replacement": "Several children"}], "category": "number"}
+{"text": "There were many mouse in the barn.", "edits": [{"start": 11, "end": 21, "replacement": "many mice"}], "category": "number"}
+{"text": "Those book belong on the shelf.", "edits": [{"start": 0, "end": 10, "replacement": "Those books"}], "category": "number"}
+{"text": "She had three knife in her pack.", "edits": [{"start": 8, "end": 19, "replacement": "three knives"}], "category": "number"}
+{"text": "Her and Clara walked home.", "edits": [{"start": 0, "end": 13, "replacement": "She and Clara"}], "category": "pronoun"}
+{"text": "The captain spoke to she.", "edits": [{"start": 18, "end": 24, "replacement": "to her"}], "category": "pronoun"}
+{"text": "Him was the last to leave.", "edits": [{"start": 0, "end": 3, "replacement": "He"}], "category": "pronoun"}
+{"text": "Between you and I, the plan is risky.", "edits": [{"start": 8, "end": 17, "replacement": "you and me"}], "category": "pronoun"}
+{"text": "The gift was for he.", "edits": [{"start": 13, "end": 19, "replacement": "for him"}], "category": "pronoun"}
+{"text": "She was more braver than her brother.", "edits": [{"start": 8, "end": 19, "replacement": "braver"}], "category": "comparison"}
+{"text": "This path is the most shortest one.", "edits": [{"start": 17, "end": 30, "replacement": "shortest"}], "category": "comparison"}
+{"text": "He answered the question careful.", "edits": [{"start": 25, "end": 32, "replacement": "carefully"}], "category": "adverb"}
+{"text": "The old door opened sudden.", "edits": [{"start": 20, "end": 26, "replacement": "suddenly"}], "category": "adverb"}
+{"text": "She sang beautiful at the festival.", "edits": [{"start": 9, "end": 18, "replacement": "beautifully"}], "category": "adverb"}
+{"text": "We waited untill the rain stopped.", "edits": [{"start": 10, "end": 16, "replacement": "until"}], "category": "spelling"}
+{"text": "The messenger dissapeared into the fog.", "edits": [{"start": 14, "end": 25, "replacement": "disappeared"}], "category": "spelling"}
+{"text": "She recieved a letter from home.", "edits": [{"start": 4, "end": 12, "replacement": "received"}], "category": "spelling"}
+{"text": "He definately heard a voice.", "edits": [{"start": 3, "end": 13, "replacement": "definitely"}], "category": "spelling"}
+{"text": "The castle was completely abandonned.", "edits": [{"start": 26, "end": 36, "replacement": "abandoned"}], "category": "spelling"}
+{"text": "I opened the box. Inside were a silver ring.", "edits": [{"start": 25, "end": 29, "replacement": "was"}], "category": "context_agreement"}
+{"text": "The wolves gathered at the river. One of them were limping.", "edits": [{"start": 46, "end": 50, "replacement": "was"}], "category": "context_agreement"}
+{"text": "Mira searched the tower. She find the missing journal at last.", "edits": [{"start": 29, "end": 33, "replacement": "found"}], "category": "context_tense"}
+{"text": "The bell rang twice. Then the guards has opened the gate.", "edits": [{"start": 37, "end": 47, "replacement": "opened"}], "category": "context_tense"}
+{"text": "The ship had sailed before we arrived. Its crew were safe, but it had lost it’s mast.", "edits": [{"start": 75, "end": 79, "replacement": "its"}], "category": "context_homophone"}
+{"text": "“I ain’t afraid,” the boy said, though his hands shook.", "edits": [], "category": "dialogue"}
+{"text": "“Where are we?” “Home, I think.”", "edits": [], "category": "dialogue"}
+{"text": "“Run!” she shouted. “Now!”", "edits": [], "category": "dialogue"}
+{"text": "The dragon’s eyes narrowed. “Mine,” he whispered.", "edits": [], "category": "fiction"}
+{"text": "Aurora and Eldrak crossed the misty vale together.", "edits": [], "category": "proper_nouns"}
+{"text": "Vindenore was quiet beneath the violet moons.", "edits": [], "category": "proper_nouns"}
+{"text": "A silver-scaled wyrm slept beneath the mountain.", "edits": [], "category": "fiction"}
+{"text": "No one knew what lay beyond the door.", "edits": [], "category": "natural"}
+{"text": "The number of candles was surprising.", "edits": [], "category": "agreement"}
+{"text": "A number of candles were missing.", "edits": [], "category": "agreement"}
+{"text": "Neither the captain nor the sailors were ready.", "edits": [], "category": "agreement"}
+{"text": "Neither the sailors nor the captain was ready.", "edits": [], "category": "agreement"}
+{"text": "Every one of the doors was locked.", "edits": [], "category": "agreement"}
+{"text": "The news was worse than expected.", "edits": [], "category": "agreement"}
+{"text": "The sheep were grazing by the river.", "edits": [], "category": "irregular_number"}
+{"text": "One fish was caught; two fish escaped.", "edits": [], "category": "irregular_number"}
+{"text": "She had seen the tower before.", "edits": [], "category": "verb_form"}
+{"text": "He had lain awake all night.", "edits": [], "category": "verb_form"}
+{"text": "She laid the sword beside him.", "edits": [], "category": "verb_form"}
+{"text": "It is I who am responsible.", "edits": [], "category": "pronoun"}
+{"text": "The book that she had lost was here.", "edits": [], "category": "relative_clause"}
+{"text": "If I were king, I would open the gates.", "edits": [], "category": "subjunctive"}
+{"text": "I wish he were here.", "edits": [], "category": "subjunctive"}
+{"text": "The wind, which had risen at dusk, finally died.", "edits": [], "category": "punctuation"}
+{"text": "After dinner, they went out into the rain.", "edits": [], "category": "punctuation"}
+{"text": "Its wings were wider than the bridge.", "edits": [], "category": "possessive"}
+{"text": "It’s strange that the door is open.", "edits": [], "category": "contraction"}
+{"text": "They’re waiting over there with their horses.", "edits": [], "category": "homophone"}
+{"text": "You’re welcome to leave your coat here.", "edits": [], "category": "homophone"}
+{"text": "The medicine had a powerful effect.", "edits": [], "category": "homophone"}
+{"text": "The storm might affect our journey.", "edits": [], "category": "homophone"}
+{"text": "She chose an hour before sunrise.", "edits": [], "category": "article"}
+{"text": "It was a useful map, despite its age.", "edits": [], "category": "article"}
+{"text": "The old stone walls were cold and damp.", "edits": [], "category": "natural"}
+{"text": "She looked up. Nothing moved. Then, a flicker of light.", "edits": [], "category": "fragment"}
+{"text": "A pause. A breath. The door opened.", "edits": [], "category": "fragment"}
+{"text": "“Who’s there?” No answer came.", "edits": [], "category": "dialogue"}
+{"text": "The fox watched the fire as if it understood.", "edits": [], "category": "fiction"}
+{"text": "His voice was low, but clear enough to hear.", "edits": [], "category": "natural"}
+{"text": "The captain said that they had already left.", "edits": [], "category": "tense"}

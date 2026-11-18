@@ -77,7 +77,32 @@ class WorkspaceSession {
     await this.checkpoint();
     return this.snapshot({ warning: [...new Set(warnings)].join(' '), archivedPaths });
   }
-  rememberView(view) { this.active.view = cleanView(view); }
+  paneProjects(panes) {
+    const ids = new Set(panes.map(pane => pane.id));
+    return this.entries.filter(entry => entry.id !== this.activeId && ids.has(entry.id) && entry.store.project)
+      .map(entry => ({ id: entry.id, project: entry.store.project, path: entry.store.currentPath, binding: entry.files.binding, view: entry.view }));
+  }
+  focus(id) {
+    const entry = this.entries.find(item => item.id === id);
+    if (!entry?.store.project) throw new Error('That document is not open.');
+    // Focus is an in-memory choice. Recovery and manifest writes run separately.
+    this.activeId = id;
+  }
+  documentEntry(id, projectId) {
+    const entry = this.entries.find(item => item.id === id);
+    if (!entry || (entry.store.project && entry.store.project.id !== projectId)) throw new Error('This save belongs to a document that is no longer open.');
+    return entry;
+  }
+  rememberView(view, panes, id = this.activeId) {
+    const selected = this.entries.find(item => item.id === id);
+    if (!selected) return;
+    selected.view = cleanView(view);
+    if (!Array.isArray(panes)) return;
+    const views = new Map(panes.slice(0, 200).filter(pane => validId(pane?.id)).map(item => [item.id, item.view]));
+    for (const entry of this.entries) {
+      if (entry.id !== id && views.has(entry.id)) entry.view = cleanView(views.get(entry.id));
+    }
+  }
   async persistChat(projectId, chat) {
     const entry = this.entries.find(item => item.store.project?.id === projectId);
     if (!entry) throw new Error('This chat belongs to a project that is no longer open.');
@@ -138,21 +163,26 @@ class WorkspaceSession {
     try { await entry.files.bind(project, source); return entry.reloadOf ? await this.finishReload(entry) : await this.adopt(entry); }
     finally { this.pending.delete(source.openToken); }
   }
-  async reload(project) {
+  async reload(project, target = this.active.store.currentPath) {
     validateProject(project);
     const previous = this.active;
     if (!previous.store.currentPath || previous.store.project?.id !== project.id) throw new Error('This document is no longer attached to the active file.');
+    this.assertSaveTarget(target);
     // Save recovery only: attempting a normal save would hit the very conflict
     // this operation resolves, or overwrite the version the user wants to load.
     await previous.store.writeRecovery(project, previous.store.currentPath, previous.store.expectedHash);
-    const entry = this.entry(); entry.reloadOf = previous.id;
-    const result = await entry.files.open(previous.store.currentPath);
+    // An unsuccessful import may never reach bind(). Retrying invalidates its
+    // token so it cannot later replace this tab with an older import.
+    for (const [token, pending] of this.pending) if (pending.reloadOf === previous.id) this.pending.delete(token);
+    const entry = this.entry(); entry.reloadOf = previous.id; entry.view = { ...previous.view };
+    const result = await entry.files.open(target, { fresh: true });
     if (result.import) { this.pending.set(result.openToken, entry); return result; }
     return this.finishReload(entry);
   }
   async finishReload(entry) {
     const index = this.entries.findIndex(item => item.id === entry.reloadOf), previous = this.entries[index];
     if (!previous || this.activeId !== previous.id) throw new Error('Switch back to the original tab before reloading.');
+    this.assertSaveTarget(entry.store.currentPath);
     if (hash(await readLimited(entry.store.currentPath)) !== entry.store.expectedHash) throw new Error('The file changed while reloading. Load the modified version again.');
     // A new journal identity prevents old undo/recovery events from replaying
     // over the externally edited content, even if the file carries the old ID.

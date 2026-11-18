@@ -1,5 +1,5 @@
 import { documentExtensions } from '../electron/editor-schema.mjs';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Fragment, Slice, Mark } from '@tiptap/pm/model';
 
@@ -10,6 +10,7 @@ import { LocalGrammar, grammarKey } from './local-grammar.js';
 import { AIGrammar } from './ai-grammar.js';
 import { DEFAULT_HOTKEYS, shortcutFromEvent } from './hotkeys.js';
 import { associateHistoryContent, HISTORY_GROUP_BREAK_META, HISTORY_SELECTION_META } from './history.js';
+import { documentSnapshot } from './document-snapshot.js';
 import { Pagination, paginationKey, removePageBreakAtCursor } from './pagination.js';
 import { WordCount, wordCountKey } from './word-count.js';
 import { imageImportExtension } from './image-import.js';
@@ -38,7 +39,7 @@ export default function ManuscriptEditor({ chapter, prefs, tracking, layoutSigna
   const options = useMemo(() => ({
     extensions: [...extensions.map(extension => extension.name === 'image' ? imageControls(extension, current => callbacks.current.canImportImages?.(current) !== false) : extension), imageImportExtension({ onNotice: message => callbacks.current.onNotice?.(message), canInsert: () => callbacks.current.canImportImages?.(editorInstance.current) !== false }), trackedEditor(() => callbacks.current.onAction('tracking-blocked'), !!tracking)], content: initialContent.current,
     editorProps: {
-      attributes: { class: 'manuscript', 'aria-label': 'Manuscript editor', role: 'textbox', 'aria-multiline': 'true', spellcheck: String(prefs.spellcheck), lang: prefs.language },
+      attributes: { class: 'manuscript', 'aria-label': 'Manuscript editor', role: 'textbox', 'aria-multiline': 'true', spellcheck: String(!!prefs.spellcheck && !/^en(?:-|$)/i.test(prefs.language)), 'data-wraiter-spellcheck': String(!!prefs.spellcheck), lang: prefs.language },
       transformCopied: withoutCommentAnchors,
       transformPasted: withoutCommentAnchors,
       handleClick(_view, _position, event) {
@@ -134,7 +135,7 @@ export default function ManuscriptEditor({ chapter, prefs, tracking, layoutSigna
       cancelAnimationFrame(toolbarFrame.current); toolbarFrame.current = 0;
       transaction.setMeta(HISTORY_GROUP_BREAK_META, selectionBoundary.current);
       selectionBoundary.current = false;
-      const content = associateHistoryContent(editor.getJSON(), editor.state.doc);
+      const content = associateHistoryContent(documentSnapshot(editor.state.doc), editor.state.doc);
       callbacks.current.onChange(content, editor, transaction, { appendedTransactions, wordCount: wordCountKey.getState(editor.state) });
     },
     onSelectionUpdate: ({ editor, transaction }) => {
@@ -148,7 +149,7 @@ export default function ManuscriptEditor({ chapter, prefs, tracking, layoutSigna
   const editor = useEditor(options);
   editorInstance.current = editor;
   useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(trackModeKey, !!tracking)); }, [editor, tracking]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!editor) return;
     const captureSelection = ({ transaction }) => transaction.setMeta(HISTORY_SELECTION_META, editor.state.selection.toJSON());
     editor.on('beforeTransaction', captureSelection);
@@ -158,6 +159,6 @@ export default function ManuscriptEditor({ chapter, prefs, tracking, layoutSigna
   useEffect(() => () => cancelAnimationFrame(toolbarFrame.current), []);
   useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(paginationKey, { enabled: prefs.pageMode === 'pages', numbering: { row: prefs.showRowNumbers, page: prefs.showPageNumbers, paragraph: prefs.showParagraphNumbers }, revision: JSON.stringify([prefs.zoom, prefs.measure, prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers, layoutSignature]) }).setMeta('addToHistory', false)); }, [editor, prefs.pageMode, prefs.zoom, prefs.measure, prefs.showRowNumbers, prefs.showPageNumbers, prefs.showParagraphNumbers, layoutSignature]);
   useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(formattingMarksKey, !!prefs.showFormattingMarks).setMeta('addToHistory', false)); }, [editor, prefs.showFormattingMarks]);
-  useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(grammarKey, { enabled: !!prefs.localGrammar, language: prefs.language }).setMeta('addToHistory', false)); }, [editor, prefs.localGrammar, prefs.language]);
+  useEffect(() => { if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(grammarKey, { enabled: !!prefs.localGrammar, spelling: !!prefs.spellcheck, language: prefs.language }).setMeta('addToHistory', false)); }, [editor, prefs.localGrammar, prefs.spellcheck, prefs.language]);
   return <EditorContent editor={editor} />;
 }

@@ -1,0 +1,37 @@
+WRAITER neural grammar resources
+
+Model: deepquillapp/gector-grammar
+Source: https://huggingface.co/deepquillapp/gector-grammar
+Pinned revision: 2232e0ef109dd12e11e2c74b565b7318e36379e4
+Model license declared by its publisher: Apache License 2.0.
+The weights are redistributed without modification. The publisher's complete
+model card is included as MODEL-CARD.md. Apache-2.0.txt contains the license
+text from the upstream GECToR repository.
+
+Upstream components and training attribution, as documented by the publisher:
+- RoBERTa-base encoder, Facebook AI, MIT.
+  https://huggingface.co/FacebookAI/roberta-base
+  https://github.com/facebookresearch/fairseq
+  Its license and copyright notice are in RoBERTa-MIT.txt.
+- GECToR training implementation: gotutiyan/gector at a4a342e (MIT).
+  No training implementation is bundled with WRAITER.
+- Verb-form table: grammarly/gector data/verb-form-vocab.txt at 3d41d28
+  (Apache-2.0). https://github.com/grammarly/gector
+- C4_200M synthetic grammatical-error edits: Felix Stahlberg and Shankar Kumar,
+  2021, Synthetic Data Generation for Grammatical Error Correction with Tagged
+  Corruption Models (BEA). Edits CC BY 4.0; underlying C4 text ODC-BY.
+  https://github.com/google-research-datasets/C4_200M-synthetic-dataset-for-grammatical-error-correction
+- Underlying C4: Colin Raffel et al., 2020, Exploring the Limits of Transfer
+  Learning with a Unified Text-to-Text Transformer (JMLR), ODC-BY.
+  https://www.tensorflow.org/datasets/catalog/c4
+- Fiction training source: Project Gutenberg via sedthh/gutenberg_english,
+  described by the model publisher as US public domain.
+  https://huggingface.co/datasets/sedthh/gutenberg_english
+
+GECToR: Kostiantyn Omelianchuk, Vitaliy Atrasevych, Artem Chernodub, and Oleksandr
+Skurzhanskyi. 2020. GECToR - Grammatical Error Correction: Tag, Not Rewrite.
+https://aclanthology.org/2020.bea-1.16/
+
+Model training corpora are not redistributed with WRAITER. These are source
+attributions from the model publisher, not independent audits of the corpora.
+WRAITER adds its own conservative decoding and suggestion display logic.

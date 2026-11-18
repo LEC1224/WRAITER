@@ -1,7 +1,7 @@
 import { normalizePrintLayout } from './print-layout.js';
 
 export const EXPORT_SETTINGS_KEY = 'wraiter.export-settings.v1';
-export const EXPORT_FORMATS = [ ['docx', 'Word document (.docx)'], ['odt', 'OpenDocument Text (.odt)'], ['pdf', 'PDF · print / standard'], ['pdf-desktop', 'PDF · desktop reading'], ['pdf-mobile', 'PDF · mobile reading'], ['epub', 'EPUB ebook'], ['txt', 'Plain text (.txt)'], ['bbcode', 'BBCode text (.txt)'], ['md', 'Markdown (.md)'], ['html', 'HTML document (.html)'], ['discord', 'Discord chat (.txt)'], ['rich-text', 'Formatted text · Telegram / email (.html)'], ['telegram-md', 'Telegram bot · MarkdownV2 (.txt)'], ['telegram-html', 'Telegram bot · HTML (.txt)'] ];
+export const EXPORT_FORMATS = [ ['docx', 'Word document (.docx)'], ['odt', 'OpenDocument Text (.odt)'], ['pdf', 'PDF · print / standard'], ['pdf-desktop', 'PDF · desktop reading'], ['pdf-mobile', 'PDF · mobile reading'], ['epub', 'EPUB ebook'], ['txt', 'Plain text (.txt)'], ['bbcode', 'BBCode text (.txt)'], ['md', 'Markdown (.md)'], ['html', 'HTML document (.html)'], ['deviantart', 'DeviantArt Literature'], ['discord', 'Discord chat'], ['rich-text', 'Formatted text · Telegram / email'], ['telegram-md', 'Telegram bot · MarkdownV2'], ['telegram-html', 'Telegram bot · HTML'] ];
 const defaults = { format: 'pdf', scope: 'manuscript', destination: 'file', colorMode: 'light', includeTitle: true, includeChapterTitles: true, customPage: false, includeContents: false, includeComments: false, includeTrackedChanges: false };
 
 function normalizeSettings(value) {

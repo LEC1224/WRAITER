@@ -1,37 +1,63 @@
-const { app, BrowserWindow, ipcMain, dialog: electronDialog, Menu, safeStorage, shell, clipboard } = require('electron');
-const { Diagnostics, installDiagnostics } = require('./diagnostics.cjs');
+const { app, BrowserWindow, ipcMain, dialog: electronDialog, Menu, safeStorage, shell, clipboard, ClipboardItem, crashReporter, session, screen } = require('electron');
+const { Diagnostics, installDiagnostics, startNativeCrashReporter } = require('./diagnostics.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { hash, atomicWrite, readLimited, validateProject, validateRequest, DocumentStore, samePath, safeFilename } = require('./core.cjs');
-const providers = require('./providers.cjs');
-const { defaults, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, mergeSettings } = require('./preferences.cjs');
-const { GitHistory } = require('./git-history.cjs');
-const { summarizeCheckpoint, checkpointChanges } = require('./checkpoint-summary.cjs');
-const { listFonts, spellLanguage, menuTemplate } = require('./desktop.cjs');
-const { installContextMenu } = require('./context-menu.cjs');
-const { ReferenceLibrary } = require('./references.cjs');
-const { droppedPath, externalLink } = require('./document-ux.cjs');
-const { DocumentFiles, FORMATS, formatOf } = require('./document-files.cjs');
-const { EditJournal } = require('./edit-journal.cjs');
-const { runWritingAgent } = require('./writing-agent.cjs');
-const { LocalModels } = require('./local-models.cjs');
-const { WorkspaceSession } = require('./workspace-session.cjs');
-const { documentArguments } = require('./file-open.cjs');
-const { runProofread, validateProofreadRequest } = require('./proofreading.cjs');
-const { validateInlineRequest, canReserveInline, cancelInline } = require('./inline-grammar.cjs');
-const { isStore } = require('./distribution.cjs');
 
+// Install diagnostics before loading application modules: a missing/broken
+// module should leave the same evidence as a failure after the window opens.
 if (process.env.WRAITER_USER_DATA) app.setPath('userData', path.resolve(process.env.WRAITER_USER_DATA));
 app.setName('WRAITER');
-const pendingExternalFiles = documentArguments(process.argv, process.cwd(), process.defaultApp);
-const primaryInstance = app.requestSingleInstanceLock({ files: pendingExternalFiles });
+const primaryInstance = app.requestSingleInstanceLock({ argv: process.argv, cwd: process.cwd() });
 if (!primaryInstance) app.quit();
 const diagnostics = new Diagnostics(app.getPath('userData'));
 const { handle, dialog } = primaryInstance
   ? installDiagnostics({ app, ipcMain, dialog: electronDialog, shell, log: diagnostics })
   : { handle: ipcMain.handle.bind(ipcMain), dialog: electronDialog };
-if (primaryInstance) diagnostics.start({ version: app.getVersion(), electron: process.versions.electron, node: process.versions.node, platform: process.platform, arch: process.arch, osRelease: require('node:os').release() });
+if (primaryInstance) {
+  let buildId;
+  try {
+    const syncFS = require('node:fs'), digest = require('node:crypto').createHash('sha256');
+    for (const target of [__filename, path.join(__dirname, 'diagnostics.cjs'), path.join(__dirname, '../dist/index.html')]) digest.update(syncFS.readFileSync(target));
+    buildId = digest.digest('hex').slice(0, 16);
+  } catch { /* A failed application import/load is recorded by the hooks. */ }
+  diagnostics.start({ version: app.getVersion(), buildId, electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node, platform: process.platform, arch: process.arch, osRelease: require('node:os').release(), pid: process.pid, packaged: app.isPackaged });
+  startNativeCrashReporter({ app, crashReporter, log: diagnostics });
+}
+try {
+const { hash, atomicWrite, readLimited, validatedProjectJSON, validateProject, validateRequest, DocumentStore, samePath, safeFilename } = require('./core.cjs');
+const providers = require('./providers.cjs');
+const { defaults, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, mergeSettings } = require('./preferences.cjs');
+const { GitHistory, contentFingerprint } = require('./git-history.cjs');
+const { summarizeCheckpoint, checkpointChanges } = require('./checkpoint-summary.cjs');
+const { StoryHistory } = require('./story-history.cjs');
+const { listFonts, spellLanguage, menuTemplate } = require('./desktop.cjs');
+const { installContextMenu } = require('./context-menu.cjs');
+const { OfflineGrammar } = require('./offline-grammar.cjs');
+const { NeuralGrammar } = require('./neural-grammar.cjs');
+const { seedOfflineDictionaries } = require('./offline-dictionaries.cjs');
+const { ReferenceLibrary } = require('./references.cjs');
+const { droppedPath, externalLink } = require('./document-ux.cjs');
+const { DocumentFiles, FORMATS, formatOf } = require('./document-files.cjs');
+const { EditJournal } = require('./edit-journal.cjs');
+const { JournalAppendQueue } = require('./journal-append-queue.cjs');
+const { runWritingAgent } = require('./writing-agent.cjs');
+const { LocalModels } = require('./local-models.cjs');
+const { WorkspaceSession } = require('./workspace-session.cjs');
+const { WorkspaceLayout, windowOptions } = require('./workspace-layout.cjs');
+const { documentArguments } = require('./file-open.cjs');
+const { runProofread, validateProofreadRequest } = require('./proofreading.cjs');
+const { validateInlineRequest, runInlineProofread, canReserveInline, cancelInline } = require('./inline-grammar.cjs');
+const { isStore } = require('./distribution.cjs');
+const { CloudClient } = require('./cloud-client.cjs');
+
+const pendingExternalFiles = documentArguments(process.argv, process.cwd(), process.defaultApp);
+const offlineGrammar = new OfflineGrammar(app.isPackaged ? path.join(process.resourcesPath, 'offline-grammar') : path.join(__dirname, '../build/offline-grammar/payload'));
+const neuralGrammar = new NeuralGrammar(app.isPackaged ? path.join(process.resourcesPath, 'neural-grammar') : path.join(__dirname, '../build/neural-grammar'));
+let lastNeuralError = 0;
+// Seed the Chromium dictionary cache before the default session is created.
+// Bundled files supplement, but never replace, an existing user cache.
+seedOfflineDictionaries(offlineGrammar.directory, app.getPath('userData'));
 let win, closing = false, closePending = false, closeFinishing = false, closeTimer, store, bootResult, gitHistory, fontList, referenceLibrary, documentFiles, editJournal, localModels, workspace, lastReferenceWarnings = '';
 let externalFilesReady = false;
 function notifyExternalFiles() {
@@ -44,7 +70,7 @@ function queueExternalFiles(files) {
 app.on('second-instance', (_event, commandLine, workingDirectory, additionalData) => {
   const files = Array.isArray(additionalData?.files)
     ? documentArguments([process.execPath, ...additionalData.files], workingDirectory)
-    : documentArguments(commandLine, workingDirectory, process.defaultApp);
+    : documentArguments(Array.isArray(additionalData?.argv) ? additionalData.argv : commandLine, typeof additionalData?.cwd === 'string' ? additionalData.cwd : workingDirectory, process.defaultApp);
   queueExternalFiles(files);
   if (win) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
 });
@@ -58,42 +84,48 @@ let checkpointFallbackQueue = Promise.resolve();
 let prefs = {};
 let reviewMenuState = { tracking: false, blocked: false };
 const activeRequests = new Map();
-let foregroundPending = 0;
-const cancelRequests = async (predicate = () => true) => {
-  const controllers = [...activeRequests.values()].filter(predicate);
+const pendingForegroundRequests = new Set();
+const abortRequests = (predicate = () => true) => {
+  const controllers = [...activeRequests.values(), ...pendingForegroundRequests].filter(predicate);
   for (const controller of controllers) controller.abort();
-  await Promise.all(controllers.map(controller => controller.finished));
+  return controllers;
+};
+const cancelRequests = async predicate => {
+  await Promise.all(abortRequests(predicate).map(controller => controller.finished));
 };
 const cancelAll = () => cancelRequests();
-const cancelForegroundRequests = () => cancelRequests(controller => controller.kind !== 'agent');
 async function reserveForegroundRequest(id, controller, busyMessage) {
-  foregroundPending++;
+  pendingForegroundRequests.add(controller);
   try {
     // Author-initiated writing assistance takes priority over a background label.
     await cancelRequests(active => active.kind === 'checkpoint' || active.kind === 'inline-grammar');
+    controller.signal.throwIfAborted();
     if (activeRequests.size) throw new Error(busyMessage);
     activeRequests.set(id, controller);
-  } finally { foregroundPending--; }
+  } finally { pendingForegroundRequests.delete(controller); }
 }
 async function describeCheckpoint(payload, waitForIdle = false) {
+  return withCheckpointModel((settings, key, provider, signal) => summarizeCheckpoint(payload, settings, key, provider, signal), waitForIdle);
+}
+async function withCheckpointModel(describe, waitForIdle = false) {
   if (waitForIdle && activeRequests.size) {
     let timeout;
     try { await Promise.race([Promise.all([...activeRequests.values()].map(controller => controller.finished)), new Promise(resolve => { timeout = setTimeout(resolve, 30000); })]); }
     finally { clearTimeout(timeout); }
   }
-  const available = prefs.enabled && !activeRequests.size && !foregroundPending;
+  const available = prefs.enabled && !activeRequests.size && !pendingForegroundRequests.size;
   const settings = available ? resolveTask(prefs, 'checkpoint') : null;
   let key = '';
   if (settings) {
-    try { key = await getKey(settings); } catch { return summarizeCheckpoint(payload, null); }
+    try { key = await getKey(settings); } catch { return describe(null); }
   }
-  if (!settings || activeRequests.size || foregroundPending) return summarizeCheckpoint(payload, null);
+  if (!settings || activeRequests.size || pendingForegroundRequests.size) return describe(null);
   const id = `checkpoint-${require('node:crypto').randomUUID()}`;
   const controller = new AbortController(); controller.kind = 'checkpoint';
   let finished; controller.finished = new Promise(resolve => { finished = resolve; });
   const timeout = setTimeout(() => controller.abort(), 180000);
   activeRequests.set(id, controller);
-  try { return await summarizeCheckpoint(payload, settings, key, providers, controller.signal); }
+  try { return await describe(settings, key, providers, controller.signal); }
   finally { clearTimeout(timeout); activeRequests.delete(id); finished(); }
 }
 function queueCheckpointLabel({ id, before, after, revision, label, automatic = false }) {
@@ -114,7 +146,14 @@ function queueCheckpointLabel({ id, before, after, revision, label, automatic = 
   checkpointLabelQueue = work.catch(error => diagnostics.error('checkpoint.label-failed', error));
 }
 const file = name => path.join(app.getPath('userData'), name);
-const serial = fn => { const result = writeQueue.then(async () => { try { return await fn(); } finally { await workspace?.checkpoint(); } }); writeQueue = result.catch(() => {}); return result; };
+const profileLayout = new WorkspaceLayout(app.getPath('userData'), error => diagnostics.error('workspace.layout', error));
+const serial = fn => {
+  journalAppends.barrier();
+  const result = writeQueue.then(async () => { try { return await fn(); } finally { await workspace?.checkpoint(); } });
+  writeQueue = result.catch(() => {});
+  return result;
+};
+const journalAppends = new JournalAppendQueue(serial, (...args) => editJournal.append(...args));
 function syncWorkspace() { store = workspace.active.store; documentFiles = workspace.active.files; }
 const tryRead = async (name, fallback) => { try { return JSON.parse(await fs.readFile(file(name), 'utf8')); } catch (e) { if (e.code !== 'ENOENT') diagnostics.error('preferences.read-failed', e); return fallback; } };
 function publicPrefs() {
@@ -136,20 +175,31 @@ async function rememberPath(target) {
 async function openPath(target) {
   const result = await workspace.open(target); syncWorkspace();
   if (result.project) {
-    gitHistory.record(result.project, 'Opened manuscript').catch(error => diagnostics.error('history.checkpoint-failed', error));
+    recordOpenedCheckpoint(result.project, 'Opened manuscript');
     if (result.recoveredPath) await rememberPath(result.recoveredPath);
     await rememberPath(target);
   }
   return result;
 }
-async function persistDocument(project, payload, events, options) {
-  validateProject(project);
+function recordOpenedCheckpoint(project, label) {
+  // A crash tail must be replayed before a stale recovery snapshot can become
+  // a new Git tip, including a merge recorded just before the app stopped.
+  editJournal.read(project.id, 0).then(({ totalEvents }) => {
+    if (totalEvents <= (project.historySequence || 0)) return gitHistory.record(project, label);
+  }).catch(error => diagnostics.error('history.checkpoint-failed', error));
+}
+async function persistDocument(project, payload, events, { files = documentFiles, saveOptions, automaticCheckpoint = false } = {}) {
+  // Each IPC call owns a fresh snapshot. Validate it before touching the
+  // journal, then use those exact bytes throughout this save and checkpoint.
+  const serialized = validatedProjectJSON(project);
   if (events?.length) await editJournal.append(project.id, events);
   if (project.historySequence != null) {
-    const history = await editJournal.read(project.id);
+    const history = await editJournal.read(project.id, 0);
     if (!Number.isSafeInteger(project.historySequence) || project.historySequence < 0 || project.historySequence > history.totalEvents) throw new Error('The editing history must be saved before its document snapshot.');
   }
-  return documentFiles.persist(project, payload, options);
+  const result = await files.persist(project, payload, saveOptions, serialized);
+  if (automaticCheckpoint) gitHistory.schedule(project, serialized);
+  return result;
 }
 function updateMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(command => win?.webContents.send('command', command), () => win?.close(), prefs.hotkeys, prefs.recent, prefs, reviewMenuState)));
@@ -157,6 +207,9 @@ function updateMenu() {
 function setDocumentLanguage(language) {
   const session = win.webContents.session;
   const resolved = spellLanguage(language, session.availableSpellCheckerLanguages || []);
+  // The English manuscript editor uses WRAITER's checker, while native text
+  // fields and other languages can use the seeded Chromium dictionaries.
+  // Automatic dictionary downloads remain disabled for the whole session.
   if (resolved) session.setSpellCheckerLanguages([resolved]);
   else session.setSpellCheckerLanguages([]);
   return { language, dictionary: resolved, supported: Boolean(resolved) };
@@ -171,8 +224,19 @@ async function providerProbe(draft = {}) {
   const key = typeof draft === 'object' && draft.apiKey?.trim() || (draft.clearKey ? '' : await getKey(settings));
   return providers.probe(settings, key);
 }
+function rememberWindowLayout() {
+  if (!win?.isVisible() || win.isMinimized()) return;
+  profileLayout.rememberWindow({ bounds: win.getNormalBounds(), maximized: win.isMaximized() });
+}
+async function closeWindow() {
+  rememberWindowLayout();
+  await profileLayout.flush();
+  closing = true; win?.close();
+}
 function createWindow() {
-  win = new BrowserWindow({ width: 1450, height: 960, minWidth: 960, minHeight: 650, title: 'WRAITER', icon: path.join(__dirname, '../assets/icon.png'), backgroundColor: '#ececed', frame: true, autoHideMenuBar: false, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true } });
+  const saved = profileLayout.window;
+  const area = (saved ? screen.getDisplayMatching(saved.bounds) : screen.getPrimaryDisplay()).workArea;
+  win = new BrowserWindow({ ...windowOptions(saved, area), title: 'WRAITER', icon: path.join(__dirname, '../assets/icon.png'), backgroundColor: '#ececed', frame: true, autoHideMenuBar: false, show: false, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true } });
   setDocumentLanguage(store.project?.language || prefs.language);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', event => event.preventDefault());
@@ -180,7 +244,12 @@ function createWindow() {
   win.webContents.on('zoom-changed', (_event, direction) => { win.webContents.setZoomFactor(1); win.webContents.send('command', direction === 'in' ? 'zoom-in' : 'zoom-out'); });
   win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   installContextMenu(win, { Menu, ipcMain, getPreferences: () => prefs });
-  win.once('ready-to-show', () => win.show());
+  for (const event of ['resize', 'move', 'maximize', 'unmaximize', 'restore']) win.on(event, rememberWindowLayout);
+  win.once('ready-to-show', () => {
+    if (saved?.maximized) win.maximize();
+    win.show();
+    rememberWindowLayout();
+  });
   win.on('close', event => {
     if (closing) return;
     event.preventDefault();
@@ -190,7 +259,7 @@ function createWindow() {
       if (closing || closeFinishing || !win) return;
       const result = await dialog.showMessageBox(win, { type: 'warning', message: 'The editor is not responding', detail: 'The last successful recovery is preserved. Closing now may lose typing that had not reached autosave.', buttons: ['Keep open', 'Close using last recovery'], defaultId: 0, cancelId: 0 });
       if (closing || closeFinishing || !win) return;
-      if (result.response === 1) { await writeQueue; await cancelAll(); await gitHistory.flush(); await checkpointFallbackQueue; await providers.shutdown?.(); closing = true; win.close(); }
+      if (result.response === 1) { await writeQueue; await cancelAll(); await gitHistory.flush(); await checkpointFallbackQueue; await providers.shutdown?.(); await closeWindow(); }
       else closePending = false;
     }, 10000);
   });
@@ -200,6 +269,10 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   if (!primaryInstance) return;
+  await profileLayout.load();
+  // Set this before creating a window so Chromium cannot fetch dictionaries
+  // from a remote CDN while initializing the first editor.
+  session.defaultSession.setSpellCheckerDictionaryDownloadURL(pathToFileURL(path.join(__dirname, '../assets/spellcheck-cache') + path.sep).href);
   const savedPrefs = await tryRead('settings.json', {});
   if (!Object.hasOwn(savedPrefs, 'setupMode')) {
     const mode = await fs.readFile(path.join(path.dirname(app.getPath('exe')), 'setup-mode.txt'), 'utf8').catch(() => 'simple');
@@ -227,25 +300,115 @@ app.whenReady().then(async () => {
   editJournal = new EditJournal(app.getPath('userData'));
   localModels = new LocalModels(app.getPath('userData'), { notify: value => win?.webContents.send('local-progress', value) });
   providers.configureLocalModels(localModels);
-  gitHistory = new GitHistory(app.getPath('userData'), { onCheckpoint: queueCheckpointLabel });
-  if (store.project) gitHistory.record(store.project, 'Recovered manuscript').catch(error => diagnostics.error('history.checkpoint-failed', error));
+  gitHistory = new GitHistory(app.getPath('userData'), { onCheckpoint: queueCheckpointLabel, hasMergeEvent: async (id, event) => {
+    const { totalEvents } = await editJournal.read(id, 0);
+    if (totalEvents < event.sequence) return false;
+    const page = await editJournal.readPage(id, event.sequence - 1);
+    return JSON.parse(page.text.split('\n')[0]).entry?.id === event.id;
+  } });
+  const storyHistory = new StoryHistory(gitHistory);
+  if (store.project) recordOpenedCheckpoint(store.project, 'Recovered manuscript');
   updateMenu();
   createWindow();
   require('./setup.cjs').registerSetup({ ipcMain: { handle }, app, dialog, shell, win: () => win, draftConnection });
-  handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
+  handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), layout: profileLayout.view, prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
+  const cloud = new CloudClient(app.getPath('userData'), { safeStorage });
+  handle('cloud:status', () => cloud.status());
+  handle('cloud:login', (_e, credentials) => cloud.login(credentials));
+  handle('cloud:logout', () => cloud.logout());
+  handle('cloud:list', () => cloud.list());
+  handle('cloud:vault-status', () => cloud.vaultStatus());
+  handle('cloud:vault-create', (_e, passphrase) => cloud.createVault(passphrase));
+  handle('cloud:vault-unlock', (_e, passphrase) => cloud.unlockVault(passphrase));
+  handle('cloud:vault-recover', (_e, input) => cloud.recoverVault(typeof input === 'string' ? { oldSecret: input, recovery: true } : input));
+  handle('cloud:vault-lock', () => cloud.lockVault());
+  handle('cloud:vault-change', (_e, passphrase) => cloud.changeVaultPassphrase(passphrase));
+  handle('cloud:vault-migrate', () => cloud.migrateLegacy());
+  handle('cloud:upload', (_e, project, asNew = false) => serial(async () => {
+    validateProject(project);
+    if (store.project?.id !== project.id) throw new Error('Switch back to this manuscript before uploading it.');
+    const journal = await editJournal.read(project.id);
+    return cloud.upload(project, journal.events, asNew === true);
+  }));
+  handle('cloud:open', (_e, id) => serial(async () => {
+    const saved = await cloud.get(id); validateProject(saved.project);
+    const project = { ...saved.project, id: require('node:crypto').randomUUID() }; delete project.historySequence;
+    validateProject(project);
+    const result = await workspace.create(project); syncWorkspace();
+    await cloud.link(project.id, id, saved.revision, saved.project.id);
+    gitHistory.record(project, 'Opened cloud copy').catch(error => diagnostics.error('history.checkpoint-failed', error));
+    return result;
+  }));
+
+  handle('offline-dictionary:words', () => win.webContents.session.listWordsInSpellCheckerDictionary());
+  handle('offline-grammar:check', async (_event, request) => {
+    const [rules, neural] = await Promise.all([
+      offlineGrammar.check(request),
+      neuralGrammar.check(request).catch(() => {
+        if (Date.now() - lastNeuralError > 60000) {
+          diagnostics.error('grammar.neural-unavailable', new Error('The local neural grammar model is unavailable.'));
+          lastNeuralError = Date.now();
+        }
+        return request.texts.map(() => []);
+      })
+    ]);
+    return rules.map((hints, index) => [...hints, ...neural[index]]);
+  });
+  handle('offline-dictionary:add', (_event, word) => {
+    if (typeof word !== 'string' || word.length > 100 || !/^\p{L}+(?:[’'-]\p{L}+)*$/u.test(word)) throw new Error('Choose a single word to add to the dictionary.');
+    return win.webContents.session.addWordToSpellCheckerDictionary(word);
+  });
   handle('thesaurus:lookup', (_event, word, language) => require('./thesaurus.cjs').lookup(word, language));
-  handle('workspace:view', (_e, view) => serial(async () => { workspace.rememberView(view); return true; }));
-  handle('workspace:reload', (_e, project, events = []) => serial(async () => {
+  handle('workspace:layout', (_e, layout) => { profileLayout.rememberView(layout); return true; });
+  handle('workspace:layout-projects', () => workspace.paneProjects(profileLayout.view.panes));
+  handle('workspace:view', (_e, view, panes, id) => serial(async () => { workspace.rememberView(view, panes, id); return true; }));
+  let focusCheckpoint;
+  handle('workspace:focus', (_e, id) => {
+    workspace.focus(id); syncWorkspace();
+    clearTimeout(focusCheckpoint);
+    focusCheckpoint = setTimeout(() => serial(() => true).catch(error => diagnostics.error('workspace.focus-checkpoint', error)), 200);
+    focusCheckpoint.unref();
+    return true;
+  });
+  handle('workspace:file-status', (_e, id, projectId, force = false) => serial(async () => {
+    const entry = workspace.documentEntry(id, projectId);
+    return entry.files.sourceStatus(force === true);
+  }));
+  handle('workspace:reload', (_e, project, events = [], options = {}) => serial(async () => {
     await cancelAll();
     validateProject(project);
     if (store.project?.id !== project.id) throw new Error('This reload belongs to another document.');
     if (events.length) await editJournal.append(project.id, events);
-    const result = await workspace.reload(project); syncWorkspace();
+    if (!store.currentPath) throw new Error('Save this document to a file before refreshing it.');
+    await store.writeRecovery(project, store.currentPath, store.expectedHash);
+    let target = store.currentPath;
+    const locate = async () => {
+      let directory = path.dirname(target);
+      while (directory !== path.dirname(directory)) {
+        if (await fs.stat(directory).then(stat => stat.isDirectory()).catch(() => false)) break;
+        directory = path.dirname(directory);
+      }
+      const chosen = await dialog.showOpenDialog(win, { title: `Locate ${path.basename(target)}`, buttonLabel: 'Load selected file', defaultPath: path.join(directory, path.basename(target)), properties: ['openFile'], filters: [{ name: 'Writing documents', extensions: ['odt', 'docx', 'wraiter', 'txt', 'md', 'markdown', 'html', 'htm'] }] });
+      return chosen.canceled ? null : chosen.filePaths[0];
+    };
+    if (options.locate === true) { target = await locate(); if (!target) return null; }
+    let result;
+    try { result = await workspace.reload(project, target); }
+    catch (error) {
+      if (options.locate === true || !['ENOENT', 'ENOTDIR'].includes(error.code)) throw error;
+      target = await locate(); if (!target) return null;
+      result = await workspace.reload(project, target);
+    }
+    syncWorkspace();
     if (result.preservedPath) await rememberPath(result.preservedPath);
+    if (result.project) await rememberPath(result.path);
     return result;
   }));
   handle('workspace:activate', (_e, id, cached = {}) => serial(async () => {
-    await cancelForegroundRequests(); const result = await workspace.activate(id); syncWorkspace();
+    // Provider cleanup can wait on a subprocess or remote acknowledgement.
+    // Signal it now, keeping document writes independent of that teardown.
+    abortRequests(controller => controller.kind !== 'agent');
+    const result = await workspace.activate(id); syncWorkspace();
     // A renderer may retain a bounded warm copy. If its manuscript identity and
     // durable journal position match, avoid cloning the complete novel through
     // Electron IPC merely to confirm that it is unchanged.
@@ -254,15 +417,35 @@ app.whenReady().then(async () => {
   }));
   handle('workspace:close', (_e, id) => serial(async () => { await cancelAll(); const result = await workspace.close(id); syncWorkspace(); if (result.archivedPath) await rememberPath(result.archivedPath); return result; }));
   handle('workspace:reorder', (_e, ids) => serial(() => workspace.reorder(ids)));
+  handle('workspace:file-action', (_e, id, action) => serial(() => {
+    if (!['reveal', 'copy-path', 'copy-name'].includes(action)) throw new Error('Unknown tab file action.');
+    const entry = workspace.entries.find(item => item.id === id);
+    if (!entry) throw new Error('This project tab is no longer open.');
+    const target = entry.store.currentPath;
+    if (!target) throw new Error('Save this document to a file first.');
+    if (action === 'reveal') shell.showItemInFolder(target);
+    else clipboard.writeText(action === 'copy-name' ? path.basename(target) : target);
+    return true;
+  }));
   handle('drop:open', (_e, target) => serial(() => openPath(droppedPath(target))));
   handle('drop:reference', (_e, target) => referenceLibrary.addFiles([droppedPath(target, true)]));
   handle('link:open', (_e, href) => shell.openExternal(externalLink(href)));
   handle('recent:list', () => [...(prefs.recent || [])]);
   handle('recent:clear', () => serial(async () => { const next = { ...prefs, recent: [] }; await atomicWrite(file('settings.json'), JSON.stringify(next)); prefs = next; updateMenu(); return []; }));
-  handle('autosave', (_e, project, payload, events) => serial(async () => { const result = await persistDocument(project, payload, events); gitHistory.schedule(project); return result; }));
+  handle('autosave', (_e, project, payload, events, tabId) => serial(async () => {
+    const files = tabId ? workspace.documentEntry(tabId, project?.id).files : documentFiles;
+    return persistDocument(project, payload, events, { files, automaticCheckpoint: true });
+  }));
   handle('chat:persist', (_e, projectId, chat) => serial(() => workspace.persistChat(projectId, chat)));
   handle('history:load', (_e, projectId) => serial(() => editJournal.read(projectId)));
-  handle('history:append', (_e, projectId, events) => serial(() => editJournal.append(projectId, events)));
+  handle('history:page', (_e, projectId, from, snapshot) => serial(async () => {
+    try { return await editJournal.readPage(projectId, from, snapshot); }
+    catch (error) {
+      if (error.code === 'CORRUPT_JOURNAL') return { corrupt: error.message };
+      throw error;
+    }
+  }));
+  handle('history:append', (_e, projectId, events) => journalAppends.append(projectId, events));
   handle('history:restart', (_e, project, initial, reason) => serial(async () => {
     validateProject(project);
     if (store.project && store.project.id !== project.id) throw new Error('This history belongs to another document.');
@@ -290,7 +473,7 @@ app.whenReady().then(async () => {
       if (choice.response === 1) return { chooseCopy: true };
       options = { ...options, reviewed: true };
     }
-    const result = await persistDocument(project, payload, events, options);
+    const result = await persistDocument(project, payload, events, { saveOptions: options });
     if (result.path) await rememberPath(result.path);
     await gitHistory.record(project, 'Saved document'); return result;
   }));
@@ -384,11 +567,13 @@ app.whenReady().then(async () => {
       const warnings = refreshed.warnings.join(' ');
       if (warnings && warnings !== lastReferenceWarnings) win?.webContents.send('command', `reference-warning:${warnings}`);
       lastReferenceWarnings = warnings;
-      return await providers.generate(settings, await getKey(settings), { ...request, references: refreshed.references }, controller.signal, undefined, message => {
+      const result = await providers.generate(settings, await getKey(settings), { ...request, references: refreshed.references }, controller.signal, undefined, message => {
         if (!controller.signal.aborted && activeRequests.get(request.id) === controller) win?.webContents.send('command', `continuation-notice:${JSON.stringify({ requestId: request.id, message })}`);
       });
+      controller.signal.throwIfAborted();
+      return result;
     }
-    catch (error) { throw new Error(controller.signal.aborted ? 'Request cancelled or timed out.' : error.message); }
+    catch (error) { throw new Error(controller.signal.aborted ? 'Request cancelled or timed out.' : error.message, { cause: error }); }
     finally { clearTimeout(timeout); if (activeRequests.get(request.id) === controller) activeRequests.delete(request.id); finished(); }
   });
   handle('proofread:run', async (_event, request) => {
@@ -400,7 +585,7 @@ app.whenReady().then(async () => {
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
     const timeout = setTimeout(() => controller.abort(), 240000);
     try { await reserveForegroundRequest(request.id, controller, 'Finish or cancel the current AI request first.'); return await runProofread(providers, settings, await getKey(settings), request, controller.signal); }
-    catch (error) { throw new Error(controller.signal.aborted ? 'Proofreading stopped or timed out.' : error.message); }
+    catch (error) { throw new Error(controller.signal.aborted ? 'Proofreading stopped or timed out.' : error.message, { cause: error }); }
     finally { clearTimeout(timeout); if (activeRequests.get(request.id) === controller) activeRequests.delete(request.id); finished(); }
   });
   handle('proofread:inline', async (_event, incoming) => {
@@ -409,7 +594,7 @@ app.whenReady().then(async () => {
     if (store.project && store.project.id !== request.projectId) return { skipped: true };
     // No await between the idle check and reservation: foreground requests set
     // their pending flag before they yield, closing the check/reserve race.
-    if (!canReserveInline(activeRequests, foregroundPending)) return { skipped: true };
+    if (!canReserveInline(activeRequests, pendingForegroundRequests.size)) return { skipped: true };
     const settings = resolveTask(prefs, 'proofread'), controller = new AbortController();
     controller.kind = 'inline-grammar';
     let finished; controller.finished = new Promise(resolve => { finished = resolve; });
@@ -417,11 +602,11 @@ app.whenReady().then(async () => {
     let timedOut = false;
     const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 60000);
     try {
-      return await runProofread(providers, settings, await getKey(settings), request, controller.signal);
+      return await runInlineProofread(providers, settings, await getKey(settings), request, controller.signal);
     } catch (error) {
       if (controller.signal.aborted && !timedOut) return { skipped: true };
-      if (timedOut) throw new Error('AI grammar check timed out. Try a faster proofreading model.');
-      throw new Error(error.message);
+      if (timedOut) throw new Error('AI grammar check timed out. Try a faster proofreading model.', { cause: error });
+      throw new Error(error.message, { cause: error });
     } finally { clearTimeout(timeout); if (activeRequests.get(request.id) === controller) activeRequests.delete(request.id); finished(); }
   });
   handle('proofread:cancel-inline', (_event, id) => cancelInline(activeRequests, id));
@@ -440,7 +625,7 @@ app.whenReady().then(async () => {
       const refs = await referenceLibrary.refresh((request.project.references || []).filter(reference => reference.enabled !== false), { verifyContents: settings.provider === 'codex', signal: controller.signal, maxCharacters: 40 * 1024 * 1024 });
       if (refs.warnings.length) win?.webContents.send('command', `reference-warning:${refs.warnings.join(' ')}`);
       return await runWritingAgent({ ...request, references: refs.references, settings, key: await getKey(settings), signal: controller.signal, onProgress: activity => win?.webContents.send('command', `agent-progress:${JSON.stringify({ requestId: id, ...activity })}`) });
-    } catch (error) { throw new Error(controller.signal.aborted ? 'Assistant stopped. No pending edits were applied.' : error.message); }
+    } catch (error) { throw new Error(controller.signal.aborted ? 'Assistant stopped. No pending edits were applied.' : error.message, { cause: error }); }
     finally { clearTimeout(timeout); if (activeRequests.get(id) === controller) activeRequests.delete(id); finished(); }
   });
   handle('probe', (_e, draft) => providerProbe(draft));
@@ -501,13 +686,59 @@ app.whenReady().then(async () => {
   handle('local:import', (_event, token, name) => { localIdle(); const file = ggufFiles.get(token); if (!file) throw new Error('Choose the GGUF file again.'); return localModels.importGGUF(file, name); });
   handle('shortcuts:capture', (_event, capturing) => { win?.webContents.setIgnoreMenuShortcuts(capturing === true); return true; });
   handle('document:language', (_e, language) => setDocumentLanguage(language));
-  handle('git:list', () => store.project ? gitHistory.list(store.project.id) : { available: true, entries: [] });
+  handle('git:list', (_e, projectId) => {
+    const project = projectId ? workspace.entries.find(entry => entry.store.project?.id === projectId)?.store.project : store.project;
+    return project ? storyHistory.list(project.id) : { available: true, entries: [] };
+  });
   handle('git:revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.revision(store.project.id, revision); });
   handle('git:activate-revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.activateRevision(store.project.id, revision); });
   handle('git:label', (_e, revision, metadata) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.updateLabel(store.project.id, revision, metadata); });
   handle('checkpoint:summarize', (_e, payload) => {
     if (!store.project || payload?.after?.id !== store.project.id) throw new Error('The requested manuscript is no longer open.');
     return describeCheckpoint(payload);
+  });
+  handle('git:prepare-merge', (_e, tabId, projectId, sourceRevision) => serial(async () => {
+    const target = workspace.documentEntry(tabId, projectId).store.project;
+    const context = await gitHistory.prepareMerge(projectId, sourceRevision);
+    return { ...context, targetFingerprint: contentFingerprint(target), targetSequence: target.historySequence };
+  }));
+  handle('git:advise-merge', async (_e, tabId, projectId, expected, requestId) => {
+    if (!prefs.enabled) throw new Error('Enable AI writing assistance in Settings → Connections to suggest a merge.');
+    if (typeof requestId !== 'string' || !/^story-merge-[a-f0-9-]{36}$/.test(requestId)) throw new Error('Invalid merge request.');
+    const target = workspace.documentEntry(tabId, projectId).store.project;
+    if (target.historySequence !== expected.targetSequence || contentFingerprint(target) !== expected.targetFingerprint) throw new Error('The draft changed. Reopen the merge.');
+    const controller = new AbortController(); controller.kind = 'story-merge'; controller.requestId = requestId;
+    let finished; controller.finished = new Promise(resolve => { finished = resolve; });
+    const timeout = setTimeout(() => controller.abort(), 240000);
+    try {
+      await reserveForegroundRequest(requestId, controller, 'Finish the current AI request before suggesting a merge.');
+      const context = await gitHistory.prepareMerge(projectId, expected.sourceRevision);
+      if (context.headRevision !== expected.headRevision || context.branch !== expected.branch) throw new Error('The path changed. Reopen the merge.');
+      const { incomingWriting, suggestStoryPlacements } = await import('./story-merge.mjs');
+      const candidates = incomingWriting(context.base, target, context.source);
+      if (!candidates.length) throw new Error('This version has no new or revised passages to place. Use Normal merge for its other changes.');
+      const settings = resolveTask(prefs, 'chat'), key = await getKey(settings);
+      return await suggestStoryPlacements(target, candidates, prompt => providers.generateStructured(settings, key, prompt, controller.signal), controller.signal);
+    } finally { clearTimeout(timeout); if (activeRequests.get(requestId) === controller) activeRequests.delete(requestId); finished(); }
+  });
+  handle('git:cancel-advice', (_e, requestId) => cancelRequests(controller => controller.kind === 'story-merge' && controller.requestId === requestId));
+  handle('git:apply-merge', (_e, tabId, context, project, event, title) => serial(async () => {
+    validateProject(project);
+    const targetStore = workspace.documentEntry(tabId, project.id).store, target = targetStore.project;
+    const { totalEvents } = await editJournal.read(project.id, 0);
+    if (target.historySequence !== context.targetSequence || contentFingerprint(target) !== context.targetFingerprint || totalEvents !== target.historySequence) throw new Error('The draft changed. Reopen the merge to review it again.');
+    if (project.historySequence !== totalEvents + (event ? 1 : 0) || (event && (event.kind !== 'edit' || event.entry?.kind !== 'project' || event.sequence !== project.historySequence))) throw new Error('The merge does not match the editing journal.');
+    const label = 'Merge · ' + String(title || 'Writing branch').replace(/[\x00-\x1f]+/g, ' ').slice(0, 180);
+    const result = await gitHistory.commitMerge(target, project, context, label, event, saved => editJournal.append(project.id, [saved]));
+    queueCheckpointLabel({ id: project.id, before: target, after: project, revision: result.revision, label });
+    return result;
+  }));
+  handle('checkpoint:story-passage', (_e, projectId, groupId) => {
+    const project = store.project;
+    if (project?.id !== projectId) throw new Error('The requested manuscript is no longer open.');
+    if (!prefs.enabled) return { status: 'disabled' };
+    return storyHistory.describe(project, groupId, describe => withCheckpointModel((settings, key, provider, signal) =>
+      !settings && !activeRequests.size && !pendingForegroundRequests.size ? { status: 'unavailable' } : describe(settings, key, provider, signal)));
   });
   handle('git:snapshot', async (_e, project, label) => {
     const result = await serial(async () => {
@@ -521,14 +752,14 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog(win, { title: 'Choose codex.exe', properties: ['openFile'], filters: [{ name: 'Codex executable', extensions: ['exe'] }] });
     return result.canceled ? null : result.filePaths[0];
   });
-  handle('export:clipboard', (_e, payload) => {
-    if (!payload || !['txt', 'md', 'html', 'bbcode', 'discord', 'telegram-md', 'telegram-html', 'rich-text'].includes(payload.format)) throw new Error('This format cannot be exported to clipboard.');
+  handle('export:clipboard', async (_e, payload) => {
+    if (!payload || !['txt', 'md', 'html', 'bbcode', 'discord', 'telegram-md', 'telegram-html', 'rich-text', 'deviantart'].includes(payload.format)) throw new Error('This format cannot be exported to clipboard.');
     const validText = value => typeof value === 'string' && Buffer.byteLength(value) <= 100 * 1024 * 1024;
     if (!validText(payload.data)) throw new Error('Invalid or oversized clipboard content.');
-    if (payload.format === 'rich-text') {
+    if (['rich-text', 'deviantart'].includes(payload.format)) {
       if (!validText(payload.clipboardHTML) || !validText(payload.clipboardText)) throw new Error('Invalid formatted clipboard content.');
-      clipboard.write({ text: payload.clipboardText, html: payload.clipboardHTML });
-    } else clipboard.writeText(payload.data);
+      await clipboard.write([new ClipboardItem({ 'text/plain': payload.clipboardText, 'text/html': payload.clipboardHTML })]);
+    } else await clipboard.writeText(payload.data);
     return true;
   });
   handle('export:preview-pdf', async (_e, payload) => {
@@ -600,7 +831,7 @@ app.whenReady().then(async () => {
     if (closing) return true;
     if (closeFinishing) return false;
     closeFinishing = true; clearTimeout(closeTimer);
-    try { if (project) await serial(async () => { await persistDocument(project, payload, events); gitHistory.schedule(project); }); else await writeQueue; }
+    try { if (project) await serial(() => persistDocument(project, payload, events, { automaticCheckpoint: true })); else await writeQueue; }
     catch (error) {
       const result = await dialog.showMessageBox(win, { type: 'warning', message: 'The latest save needs attention', detail: error.message, buttons: ['Keep writing', 'Close anyway'], defaultId: 0, cancelId: 0 });
       if (result.response === 0) { closePending = false; closeFinishing = false; return false; }
@@ -609,10 +840,40 @@ app.whenReady().then(async () => {
     await gitHistory.flush();
     await checkpointFallbackQueue;
     await providers.shutdown?.();
-    closing = true; win?.close(); return true;
+    await closeWindow(); return true;
   });
   ipcMain.on('review:state', (_event, state) => { if (typeof state?.tracking === 'boolean' && typeof state?.blocked === 'boolean' && (state.tracking !== reviewMenuState.tracking || state.blocked !== reviewMenuState.blocked)) { reviewMenuState = { tracking: state.tracking, blocked: state.blocked }; updateMenu(); } });
   ipcMain.on('window', (_e, action) => { if (action === 'minimize') win.minimize(); else if (action === 'maximize') win.isMaximized() ? win.unmaximize() : win.maximize(); else if (action === 'close') win.close(); });
 });
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { for (const controller of activeRequests.values()) controller.abort(); });
+let grammarQuitPending = false, grammarQuitComplete = false;
+app.on('before-quit', event => {
+  if (grammarQuitComplete) return;
+  event.preventDefault();
+  // Finish the existing save/close flow before permanently stopping engines.
+  // A cancelled close must leave the open editor fully functional.
+  if (win && !closing) { win.close(); return; }
+  if (grammarQuitPending) return;
+  grammarQuitPending = true;
+  offlineGrammar.stop();
+  for (const controller of activeRequests.values()) controller.abort();
+  neuralGrammar.stop({ permanent: true }).then(stopped => {
+    grammarQuitComplete = true;
+    if (stopped) app.quit();
+    else {
+      // Documents have finished saving. If native teardown exceeds its bound,
+      // exit the process instead of force-terminating a live native worker.
+      diagnostics.error('grammar.neural-shutdown-timeout', new Error('The local neural grammar model did not stop in time.'));
+      app.exit(0);
+    }
+  });
+});
+} catch (error) {
+  // Electron's entry-module loader can emit uncaughtException directly rather
+  // than passing through Node's monitor. Record synchronous boot failures here.
+  if (primaryInstance) {
+    diagnostics.error('app.startup-failed', error);
+    diagnostics.incident('app.startup-failed', error);
+  }
+  throw error;
+}

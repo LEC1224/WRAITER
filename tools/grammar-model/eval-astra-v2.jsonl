@@ -1,0 +1,120 @@
+{"text":"The carpenter could plane the boards before noon.","edits":[],"category":"context"}
+{"text":"Both sleeve of his coat were soaked through.","edits":[{"start":5,"end":11,"replacement":"sleeves"}],"category":"number"}
+{"text":"Two pale moths was circling the kitchen lamp.","edits":[{"start":15,"end":18,"replacement":"were"}],"category":"agreement"}
+{"text":"They crossed an wooden bridge above the ravine.","edits":[{"start":13,"end":22,"replacement":"a wooden"}],"category":"article"}
+{"text":"A candle stands on the table. It have burned almost to the wick.","edits":[{"start":33,"end":37,"replacement":"has"}],"category":"agreement"}
+{"text":"She insisted to carry the wounded boy herself.","edits":[{"start":4,"end":21,"replacement":"insisted on carrying"}],"category":"complement"}
+{"text":"The woman who own the mill had vanished overnight.","edits":[{"start":14,"end":17,"replacement":"owns"}],"category":"agreement"}
+{"text":"Someone had wrote a warning on the cellar wall.","edits":[{"start":12,"end":17,"replacement":"written"}],"category":"verb_form"}
+{"text":"“Ain’t no use waiting here.” The driver pulled down his cap.","edits":[],"category":"dialogue"}
+{"text":"The handle of the kitchen doors was warm to the touch.","edits":[],"category":"agreement"}
+{"text":"An one-eyed merchant sat beneath the awning.","edits":[{"start":0,"end":11,"replacement":"A one-eyed"}],"category":"article"}
+{"text":"The scissors were lying beside a length of blue ribbon.","edits":[],"category":"agreement"}
+{"text":"They found little evidence of a struggle in the room.","edits":[],"category":"countability"}
+{"text":"The horse was shake with cold when she found it.","edits":[{"start":14,"end":19,"replacement":"shaking"}],"category":"verb_form"}
+{"text":"The bridge might collapses before dawn.","edits":[{"start":17,"end":26,"replacement":"collapse"}],"category":"verb_form"}
+{"text":"The house listened. So did the road, and every dark window along it.","edits":[],"category":"creative"}
+{"text":"Each of the prisoners have been given a blanket.","edits":[{"start":22,"end":26,"replacement":"has"}],"category":"agreement"}
+{"text":"She asked who was guarding the north entrance.","edits":[],"category":"word_order"}
+{"text":"He avoided to look at the empty chair.","edits":[{"start":11,"end":18,"replacement":"looking"}],"category":"verb_form"}
+{"text":"The child asked whether could he keep the little shell.","edits":[{"start":24,"end":32,"replacement":"he could"}],"category":"word_order"}
+{"text":"We waited for a hour beside the abandoned well.","edits":[{"start":14,"end":20,"replacement":"an hour"}],"category":"article"}
+{"text":"It has been six weeks since anyone opened that door.","edits":[],"category":"context"}
+{"text":"The portrait that she had hidden it behind the cupboard was gone.","edits":[{"start":26,"end":35,"replacement":"hidden"}],"category":"relative"}
+{"text":"They brought too much suitcases for the little wagon.","edits":[{"start":17,"end":21,"replacement":"many"}],"category":"countability"}
+{"text":"The messenger prevented him to enter the chamber.","edits":[{"start":14,"end":36,"replacement":"prevented him from entering"}],"category":"complement"}
+{"text":"“Where is the black key?” he asked.","edits":[],"category":"word_order"}
+{"text":"A little smoke. A little light. Enough.","edits":[],"category":"fragment"}
+{"text":"“You was right about the rain,” he admitted.","edits":[],"category":"dialogue"}
+{"text":"They had ate the last of the bread before the rain began.","edits":[{"start":9,"end":12,"replacement":"eaten"}],"category":"verb_form"}
+{"text":"The clerk gave us three important informations about the crossing.","edits":[{"start":34,"end":46,"replacement":"pieces of information"}],"category":"countability"}
+{"text":"She counted four candle holders on the mantelpiece.","edits":[],"category":"number"}
+{"text":"Never had she heard the valley so quiet.","edits":[],"category":"word_order"}
+{"text":"The letter was addressed to they, although nobody knew why.","edits":[{"start":28,"end":32,"replacement":"them"}],"category":"pronoun"}
+{"text":"The weather did not affect the timing of their departure.","edits":[],"category":"context"}
+{"text":"She asked the ferryman to borrow her his spare oar.","edits":[{"start":26,"end":36,"replacement":"lend her"}],"category":"word_choice"}
+{"text":"The boy who his bicycle was stolen came to the station.","edits":[{"start":8,"end":15,"replacement":"whose"}],"category":"relative"}
+{"text":"The eastern passage was colder then the one we had left.","edits":[{"start":31,"end":35,"replacement":"than"}],"category":"word_choice"}
+{"text":"There was too many sand in the lock for the key to turn.","edits":[{"start":14,"end":23,"replacement":"much sand"}],"category":"countability"}
+{"text":"We had very few water left after the climb.","edits":[{"start":12,"end":21,"replacement":"little water"}],"category":"countability"}
+{"text":"The poison had no affect on the roots.","edits":[{"start":18,"end":24,"replacement":"effect"}],"category":"word_choice"}
+{"text":"“What you looking at?” The stranger stepped closer.","edits":[],"category":"dialogue"}
+{"text":"She was accustomed to broken locks and borrowed keys.","edits":[],"category":"context"}
+{"text":"No fire in the grate. No shoes by the bed. Only the coat, hanging where he had left it.","edits":[],"category":"fragment"}
+{"text":"“Them birds know something we don’t,” her grandfather said.","edits":[],"category":"dialogue"}
+{"text":"The porter took us to a room and left we there.","edits":[{"start":38,"end":40,"replacement":"us"}],"category":"pronoun"}
+{"text":"The news from the islands was worse than they had feared.","edits":[],"category":"agreement"}
+{"text":"Of the three rooms, this one was the most smallest.","edits":[{"start":37,"end":50,"replacement":"smallest"}],"category":"comparison"}
+{"text":"He knew that that was the last train of the evening.","edits":[],"category":"context"}
+{"text":"If only the road had ended there. If only.","edits":[],"category":"fragment"}
+{"text":"“We was only looking,” the boy said, dropping his eyes.","edits":[],"category":"dialogue"}
+{"text":"Down came the rain, hard enough to flatten the grass.","edits":[],"category":"word_order"}
+{"text":"The silver clasp was stole while everyone slept.","edits":[{"start":21,"end":26,"replacement":"stolen"}],"category":"verb_form"}
+{"text":"She took a apple from the basket and closed the lid.","edits":[{"start":9,"end":16,"replacement":"an apple"}],"category":"article"}
+{"text":"Had he arrived a minute later, the boat would have gone.","edits":[],"category":"word_order"}
+{"text":"The knock came again. Three taps. A pause. Then nothing.","edits":[],"category":"fragment"}
+{"text":"The stories that she tells always end at the same river.","edits":[],"category":"agreement"}
+{"text":"He wanted to know where were the missing pages.","edits":[{"start":24,"end":46,"replacement":"the missing pages were"}],"category":"word_order"}
+{"text":"Him had been waiting at the station since sunrise.","edits":[{"start":0,"end":3,"replacement":"He"}],"category":"pronoun"}
+{"text":"Each of the three rooms contained two narrow bed.","edits":[{"start":45,"end":48,"replacement":"beds"}],"category":"number"}
+{"text":"Under the stairs, behind the old trunk: a second pair of boots.","edits":[],"category":"fragment"}
+{"text":"I could not remember what was her name.","edits":[{"start":26,"end":38,"replacement":"her name was"}],"category":"word_order"}
+{"text":"He found a rope which he could use to lower the basket.","edits":[],"category":"context"}
+{"text":"After closing the shop, she begun the long walk home.","edits":[{"start":28,"end":33,"replacement":"began"}],"category":"verb_form"}
+{"text":"The guard asked which door he should open.","edits":[],"category":"word_order"}
+{"text":"The train has departed two hours ago, taking the letter with it.","edits":[{"start":10,"end":22,"replacement":"departed"}],"category":"tense"}
+{"text":"She has returned the borrowed horse yesterday afternoon.","edits":[{"start":4,"end":16,"replacement":"returned"}],"category":"tense"}
+{"text":"He would saw through the branch while she held the ladder.","edits":[],"category":"context"}
+{"text":"He was capable to open the lock with a bent nail.","edits":[{"start":7,"end":22,"replacement":"capable of opening"}],"category":"complement"}
+{"text":"The children stared at the stranger. Them recognized his voice.","edits":[{"start":37,"end":41,"replacement":"They"}],"category":"pronoun"}
+{"text":"“I weren’t going to take it,” she said in the broad dialect of the valley.","edits":[],"category":"dialogue"}
+{"text":"Mara asked how long had they been waiting outside.","edits":[{"start":20,"end":28,"replacement":"they had"}],"category":"word_order"}
+{"text":"The last boat gone. The tide turning. And still he waited.","edits":[],"category":"fragment"}
+{"text":"At the window stood a woman in a coat too large for her.","edits":[],"category":"fragment"}
+{"text":"He asked, “Why had the door been painted shut?”","edits":[],"category":"word_order"}
+{"text":"I knew what was bothering her, but I said nothing.","edits":[],"category":"word_order"}
+{"text":"She wondered why had the gate been left open.","edits":[{"start":17,"end":29,"replacement":"the gate had"}],"category":"word_order"}
+{"text":"Several child waited outside the apothecary’s door.","edits":[{"start":8,"end":13,"replacement":"children"}],"category":"number"}
+{"text":"A green door at the end of the passage. That was all she remembered.","edits":[],"category":"fragment"}
+{"text":"“She don’t owe you nothing,” the ferryman muttered.","edits":[],"category":"dialogue"}
+{"text":"The old ferry, which it took them all morning to repair, was ready at last.","edits":[],"category":"context"}
+{"text":"The boy asked to borrow the boat for an hour.","edits":[],"category":"context"}
+{"text":"It was the guards, not the captain, who opened the gate.","edits":[],"category":"agreement"}
+{"text":"The bread and the cheese were wrapped separately.","edits":[],"category":"agreement"}
+{"text":"They returned to ruined houses and deserted streets.","edits":[],"category":"context"}
+{"text":"You could heard the water through the locked door.","edits":[{"start":10,"end":15,"replacement":"hear"}],"category":"verb_form"}
+{"text":"Their survival depended of the little stove in the corner.","edits":[{"start":15,"end":26,"replacement":"depended on"}],"category":"complement"}
+{"text":"She did not knew what lay beneath the cloth.","edits":[{"start":12,"end":16,"replacement":"know"}],"category":"verb_form"}
+{"text":"The lid of the old trunks were covered in dust.","edits":[{"start":26,"end":30,"replacement":"was"}],"category":"agreement"}
+{"text":"They carried the broken furnitures into the courtyard.","edits":[{"start":24,"end":34,"replacement":"furniture"}],"category":"countability"}
+{"text":"How strange the room looked without its curtains.","edits":[],"category":"word_order"}
+{"text":"The only thing missing from the room was the pair of red shoes.","edits":[],"category":"agreement"}
+{"text":"What she needed was a few quiet minutes.","edits":[],"category":"agreement"}
+{"text":"Ten miles was farther than he could walk before dark.","edits":[],"category":"agreement"}
+{"text":"His parting advise was to keep away from the west tower.","edits":[{"start":12,"end":18,"replacement":"advice"}],"category":"word_choice"}
+{"text":"She set six empty bottle along the windowsill.","edits":[{"start":18,"end":24,"replacement":"bottles"}],"category":"number"}
+{"text":"The captain has told us what happened two nights ago.","edits":[],"category":"context"}
+{"text":"One of the windows were open when they returned.","edits":[{"start":19,"end":23,"replacement":"was"}],"category":"agreement"}
+{"text":"The ledger contained eleven name, all written in red.","edits":[{"start":28,"end":32,"replacement":"names"}],"category":"number"}
+{"text":"Only after sunset did the second bell begin to ring.","edits":[],"category":"word_order"}
+{"text":"The captain and the navigator was arguing on opposite sides of the cabin.","edits":[{"start":30,"end":33,"replacement":"were"}],"category":"agreement"}
+{"text":"The guard handed she a folded note without speaking.","edits":[{"start":17,"end":20,"replacement":"her"}],"category":"pronoun"}
+{"text":"A row of lamps stood along the edge of the quay.","edits":[],"category":"agreement"}
+{"text":"Not fear, exactly. Something colder and more patient.","edits":[],"category":"fragment"}
+{"text":"She hoped to effect a reconciliation before winter.","edits":[],"category":"context"}
+{"text":"“Had I but known,” the priest said, “I would have barred the door.”","edits":[],"category":"dialogue"}
+{"text":"The footprints beyond the broken fence leads into the orchard.","edits":[{"start":39,"end":44,"replacement":"lead"}],"category":"agreement"}
+{"text":"Three stone arches supported the roof of the hall.","edits":[],"category":"number"}
+{"text":"We could hear the storm, but its approach did not effect her plans.","edits":[{"start":50,"end":56,"replacement":"affect"}],"category":"word_choice"}
+{"text":"What it was was a promise, though she never called it that.","edits":[],"category":"context"}
+{"text":"Two pieces of advice stayed with her long after the journey.","edits":[],"category":"countability"}
+{"text":"Because she had promised. Because somebody had to stay.","edits":[],"category":"fragment"}
+{"text":"The path became more narrower as they climbed.","edits":[{"start":16,"end":29,"replacement":"narrower"}],"category":"comparison"}
+{"text":"A owl watched them from the crooked chimney.","edits":[{"start":0,"end":5,"replacement":"An owl"}],"category":"article"}
+{"text":"She had had no reason to suspect the boy until then.","edits":[],"category":"context"}
+{"text":"The keys that opens the iron gate were missing.","edits":[{"start":14,"end":19,"replacement":"open"}],"category":"agreement"}
+{"text":"“There be worse things in those woods,” the hunter whispered.","edits":[],"category":"dialogue"}
+{"text":"She has lived beside the river since the bridge fell three years ago.","edits":[],"category":"context"}
+{"text":"He tried to lifted the fallen beam without waking her.","edits":[{"start":12,"end":18,"replacement":"lift"}],"category":"verb_form"}
+{"text":"Those silver buttons belongs to my father’s coat.","edits":[{"start":21,"end":28,"replacement":"belong"}],"category":"agreement"}
+{"text":"“I seen him go through that door,” said the old man.","edits":[],"category":"dialogue"}

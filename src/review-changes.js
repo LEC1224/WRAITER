@@ -1,5 +1,6 @@
 import { EditorState, Selection } from '@tiptap/pm/state';
 import { trackedRanges, resolveTrackedChanges } from '../electron/tracked-changes.mjs';
+import { readParsedDocument } from './document-cache.js';
 
 const cache = new WeakMap();
 // Context uses the proposed reading so a neighbouring edit never appears as
@@ -20,7 +21,7 @@ export function projectChanges(project, schema) {
   return project.chapters.flatMap(chapter => {
     let changes = cache.get(chapter.content);
     if (!changes) {
-      const doc = schema.nodeFromJSON(chapter.content);
+      const doc = readParsedDocument(chapter.content, schema);
       changes = trackedRanges(doc).map(change => {
         const from = Math.min(...change.ranges.map(range => range.from)), to = Math.max(...change.ranges.map(range => range.to));
         const original = readingBetween(doc, from, to, change.id), proposed = readingBetween(doc, from, to);

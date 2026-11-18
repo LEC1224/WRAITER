@@ -4,6 +4,7 @@ import { XML_HEADER, xmlEscape as esc, addStructure } from './package.js';
 import { titleOptions } from './scope.js';
 import { imageDimensions } from '../document-ux.js';
 import { normalizePrintLayout, pageDimensions } from '../print-layout.js';
+import { highlightedRun } from '../highlight-appearance.js';
 
 const namespaces = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:dc="http://purl.org/dc/elements/1.1/"';
 const mime = 'application/vnd.oasis.opendocument.text';
@@ -68,10 +69,10 @@ export async function toODT(project, options = {}) {
   const revisions = [];
   const sharedComments = new Map((project.comments || []).filter(comment => options.includeComments || (options.nativeSave && comment.origin === 'odt')).map(comment => [comment.id, comment]));
   let annotationIndex = 0;
-  function inline(node) {
+  function inline(node, header = false) {
     if (node.type === 'hardBreak') return '<text:line-break/>';
     if (node.type === 'note') { const index = ++noteIndex; return `<text:note text:id="note${index}" text:note-class="${node.attrs?.kind === 'endnote' ? 'endnote' : 'footnote'}"><text:note-citation>${index}</text:note-citation><text:note-body><text:p>${preservedText(node.attrs?.text || '')}</text:p></text:note-body></text:note>`; }
-    if (node.type !== 'text') return (node.content || []).map(inline).join('');
+    if (node.type !== 'text') return (node.content || []).map(child => inline(child, header)).join('');
     const marks = node.marks || [], textStyle = marks.find(mark => mark.type === 'textStyle')?.attrs || {}, props = {};
     if (marks.some(m => m.type === 'bold')) props['fo:font-weight'] = 'bold';
     if (marks.some(m => m.type === 'italic')) props['fo:font-style'] = 'italic';
@@ -85,6 +86,8 @@ export async function toODT(project, options = {}) {
     if (textStyle.color) props['fo:color'] = cssColour(textStyle.color);
     const highlight = marks.find(m => m.type === 'highlight');
     if (highlight || textStyle.backgroundColor) props['fo:background-color'] = cssColour(highlight?.attrs?.color || textStyle.backgroundColor || '#ffff00');
+    const appearance = !options.nativeSave && highlightedRun(marks, header ? '#f2f2f2' : undefined);
+    if (appearance) { props['fo:background-color'] = appearance.background; props['fo:color'] = appearance.color; }
     let result = preservedText(node.text);
     if (Object.keys(props).length) result = `<text:span text:style-name="${style('text', null, props)}">${result}</text:span>`;
     const named = marks.find(m => m.type === 'namedStyle')?.attrs?.id;
@@ -122,11 +125,12 @@ export async function toODT(project, options = {}) {
       if (quote) { props['fo:margin-left'] ||= '18pt'; props['fo:margin-right'] ||= '18pt'; }
       const level = Math.min(6, Math.max(1, Number(attrs.level) || 1)), heading = node.type === 'heading';
       const styleName = style('paragraph', props, header ? { 'fo:font-weight': 'bold' } : null, officeStyleId(attrs.namedStyle) || (heading ? `Heading_20_${level}` : quote ? 'Wraiter_Quote' : 'Standard'), attrs.tabStops || []);
-      return heading ? `<text:h text:style-name="${styleName}" text:outline-level="${level}">${children.map(inline).join('')}</text:h>` : `<text:p text:style-name="${styleName}">${children.map(inline).join('')}</text:p>`;
+      const text = children.map(child => inline(child, header)).join('');
+      return heading ? `<text:h text:style-name="${styleName}" text:outline-level="${level}">${text}</text:h>` : `<text:p text:style-name="${styleName}">${text}</text:p>`;
     }
     if (node.type === 'image') return `<text:p>${imageNodes.get(node) || esc(`[Image omitted: ${attrs.alt || 'unsupported format'}]`)}</text:p>`;
     if (node.type === 'horizontalRule') return '<text:p text:style-name="Wraiter_Rule"/>';
-    if (node.type === 'codeBlock') return `<text:p text:style-name="Wraiter_Code">${children.map(inline).join('')}</text:p>`;
+    if (node.type === 'codeBlock') return `<text:p text:style-name="Wraiter_Code">${children.map(child => inline(child, header)).join('')}</text:p>`;
     if (node.type === 'blockquote') return children.map(child => block(child, true, depth)).join('');
     if (['bulletList', 'orderedList'].includes(node.type)) {
       const ordered = node.type === 'orderedList', start = Math.max(1, Number(attrs.start) || 1);

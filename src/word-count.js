@@ -1,5 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { ReplaceStep } from '@tiptap/pm/transform';
 import { wordCount } from './document.js';
 
 export const wordCountKey = new PluginKey('wraiterWordCount');
@@ -34,6 +35,27 @@ function wordsAt(doc, indices) {
   return count;
 }
 
+function wordWindow(node, start, end) {
+  let from = Math.max(0, start - 4), to = Math.min(node.content.size, end + 4);
+  // Keep full Unicode code points at the edges of the bounded window.
+  const at = position => node.textBetween(position, position + 1, ' ', ' ').charCodeAt(0);
+  if (from > 0 && at(from) >= 0xdc00 && at(from) <= 0xdfff && at(from - 1) >= 0xd800 && at(from - 1) <= 0xdbff) from--;
+  if (to < node.content.size && at(to - 1) >= 0xd800 && at(to - 1) <= 0xdbff && at(to) >= 0xdc00 && at(to) <= 0xdfff) to++;
+  return wordCount(node.textBetween(from, to, ' ', ' '));
+}
+
+function localWordDelta(before, after, step, oldRanges, newRanges) {
+  if (!(step instanceof ReplaceStep) || step.slice.openStart || step.slice.openEnd || oldRanges.length !== 1 || newRanges.length !== 1) return null;
+  let inline = true; step.slice.content.forEach(node => { if (!node.isInline) inline = false; });
+  if (!inline) return null;
+  const [oldStart, oldEnd] = oldRanges[0], [newStart, newEnd] = newRanges[0];
+  const oldFrom = before.resolve(oldStart), oldTo = before.resolve(oldEnd), newFrom = after.resolve(newStart), newTo = after.resolve(newEnd);
+  if (!oldFrom.sameParent(oldTo) || !newFrom.sameParent(newTo) || !oldFrom.parent.isTextblock || !newFrom.parent.isTextblock || oldFrom.parent.type !== newFrom.parent.type || oldFrom.start() !== newFrom.start() || oldFrom.parentOffset !== newFrom.parentOffset) return null;
+  // Word starts depend on the preceding two code points. Two code points on
+  // each side cover joins/splits involving apostrophes and hyphens as well.
+  return wordWindow(newFrom.parent, newFrom.parentOffset, newTo.parentOffset) - wordWindow(oldFrom.parent, oldFrom.parentOffset, oldTo.parentOffset);
+}
+
 export function updateWordCount(previous, transaction) {
   if (!transaction.docChanged) return previous;
   let count = previous;
@@ -45,7 +67,8 @@ export function updateWordCount(previous, transaction) {
       oldRanges.push([oldStart, oldEnd]); newRanges.push([newStart, newEnd]);
     });
     if (!oldRanges.length) return;
-    count += wordsAt(after, affectedChildren(after, newRanges)) - wordsAt(before, affectedChildren(before, oldRanges));
+    const delta = localWordDelta(before, after, step, oldRanges, newRanges);
+    count += delta ?? wordsAt(after, affectedChildren(after, newRanges)) - wordsAt(before, affectedChildren(before, oldRanges));
   });
   return count;
 }

@@ -25,6 +25,11 @@ function ResultsList({ results, activeId, disabled, onActivate, replacement, pre
 export default function SearchPanel({ query, onQueryChange, replacement, onReplacementChange, scope = 'manuscript', onScopeChange, options = {}, onOptionsChange, results = [], activeResult, onActivate, onReplace, onReplaceAll, onClose, busy = false, focusRequest = 0 }) {
   const input = useRef(), panel = useRef();
   const [preview, setPreview] = useState(null), [applying, setApplying] = useState(false), [error, setError] = useState('');
+  const previewChapters = useMemo(() => {
+    const chapters = new Set();
+    for (const result of preview?.results || []) chapters.add(result.chapterId);
+    return chapters.size;
+  }, [preview]);
   const activeId = typeof activeResult === 'string' ? activeResult : activeResult?.id;
   const activeIndex = results.findIndex(result => result.id === activeId);
   const disabled = busy || applying;
@@ -60,7 +65,7 @@ export default function SearchPanel({ query, onQueryChange, replacement, onRepla
       <div className="manuscript-search-actions"><button type="button" className="secondary-button" title="Replace the current match" disabled={!results.length || disabled} onClick={() => onReplace(results[activeIndex >= 0 ? activeIndex : 0], replacement)}>Replace</button><button type="button" className="secondary-button" disabled={!results.length || disabled} onClick={() => { setPreview({ results, replacement }); setError(''); }} title="Review every proposed replacement in the chosen search scope before changing text.">Preview replace all</button></div>
     </div>
     {preview ? <div className="search-replace-preview" role="region" aria-label="Replace all preview">
-      <p>Replace {preview.results.length} match{preview.results.length === 1 ? '' : 'es'} in {groupSearchResults(preview.results).length} chapter{groupSearchResults(preview.results).length === 1 ? '' : 's'}? You can undo the replacements together.</p>
+      <p>Replace {preview.results.length} match{preview.results.length === 1 ? '' : 'es'} in {previewChapters} chapter{previewChapters === 1 ? '' : 's'}? You can undo the replacements together.</p>
       <ResultsList results={preview.results} replacement={preview.replacement} preview />
       {error && <p role="alert">{error}</p>}<div className="manuscript-search-actions"><button type="button" className="secondary-button" disabled={disabled} onClick={() => setPreview(null)}>Cancel preview</button><button type="button" className="primary-button" disabled={disabled} onClick={confirmReplace} title="Apply every replacement in this preview as one undo step.">{applying ? 'Replacing…' : `Replace all ${preview.results.length}`}</button></div>
     </div> : <ResultsList results={results} query={query} activeId={activeId} disabled={disabled} onActivate={onActivate} />}

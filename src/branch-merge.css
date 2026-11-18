@@ -1,0 +1,21 @@
+.merge-endpoints { display:flex; align-items:center; gap:16px; padding-bottom:14px; margin-bottom:16px; border-bottom:1px solid var(--line); }
+.merge-endpoints span { display:grid; gap:4px; flex:1; min-width:0; overflow-wrap:anywhere; }
+.merge-endpoints small, .merge-result small { color:var(--muted); }
+.branch-merge-dialog h3 { font-size:15px; margin:18px 0 10px; }
+.merge-conflict { border:1px solid var(--line); display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:10px 0; padding:10px; min-width:0; }
+.merge-conflict legend { font-weight:600; }
+.merge-conflict label { min-width:0; }
+.merge-conflict label span { display:flex; align-items:center; gap:6px; }
+.branch-merge-dialog pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:180px; overflow:auto; background:var(--workspace); padding:9px; font:inherit; }
+.merge-result li { padding:4px 0; }
+.branch-merge-dialog summary { cursor:pointer; }
+.branch-merge-dialog .modal-footer small { margin-right:auto; color:var(--muted); }
+.story-placement { padding:0 0 12px; border-bottom:1px solid var(--line); }
+.story-placement h4 { margin:14px 0 3px; }
+.story-placement p { margin:5px 0 12px; }
+.story-position { display:flex; flex-wrap:wrap; gap:10px; }
+.story-position label { display:grid; gap:5px; font-size:12px; min-width:0; }
+.story-position input { max-width:80px; }
+.story-adaptation { display:flex; align-items:flex-start; gap:9px; margin:8px 0; padding:9px; background:var(--workspace); }
+.story-adaptation span { display:grid; gap:4px; overflow-wrap:anywhere; }
+.story-adaptation del { color:var(--muted); }

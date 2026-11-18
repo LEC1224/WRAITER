@@ -13,16 +13,20 @@ function compiledRegex(query, caseSensitive) {
   if (regexCache.size > 30) regexCache.clear(); regexCache.set(key, value); return value;
 }
 export const searchPatternError = (query, options = {}) => options.regex && query && !compiledRegex(query, !!options.caseSensitive) ? 'Invalid or unsupported regular expression. Patterns use RE2 syntax; lookaround and backreferences are not supported.' : '';
-function* matchesIn(text, query, options) {
+function prepareMatcher(query, options) {
+  return options.regex ? compiledRegex(query, !!options.caseSensitive) : new RegExp(pattern(query, options), options.caseSensitive ? 'gu' : 'giu');
+}
+function* matchesIn(text, query, options, prepared = prepareMatcher(query, options)) {
   if (options.regex) {
-    const compiled = compiledRegex(query, !!options.caseSensitive); if (!compiled) return;
-    const matcher = compiled.matcher(text);
+    if (!prepared) return;
+    const matcher = prepared.matcher(text);
     while (matcher.find()) {
       const value = matcher.group(); if (!value.length) continue;
       yield { 0: value, index: matcher.start(), captures: Array.from({ length: matcher.groupCount() + 1 }, (_, i) => matcher.group(i) || '') };
     }
   } else {
-    const expression = new RegExp(pattern(query, options), options.caseSensitive ? 'gu' : 'giu');
+    const expression = prepared;
+    expression.lastIndex = 0;
     let match; while ((match = expression.exec(text))) yield match;
   }
 }
@@ -41,7 +45,7 @@ function hasFormatting(doc, from, to, format) {
 }
 const wordCharacter = /[\p{L}\p{N}\p{M}\p{Pc}'\u2019\u200c\u200d]/u;
 const leafText = node => node.type.name === 'hardBreak' ? '\n' : '\uFFFC';
-const documentCache = new WeakMap(), searchCache = new WeakMap(), textBlockCache = new WeakMap();
+const documentCache = new WeakMap(), searchCache = new WeakMap(), textBlockCache = new WeakMap(), regexBlockCache = new WeakMap();
 function textForBlock(node) {
   let text = textBlockCache.get(node);
   if (text === undefined) { text = node.textBetween(0, node.content.size, '', leafText); textBlockCache.set(node, text); }
@@ -64,26 +68,61 @@ function characterAfter(text, position) {
   return position < text.length ? String.fromCodePoint(text.codePointAt(position)) : '';
 }
 
+// A document edit replaces only its changed textblock. Regex matching can be
+// comparatively expensive, so keep complete results relative to immutable
+// blocks and adjust their positions when the surrounding document moves.
+function regexMatchesForBlock(node, text, query, options, matcher, signature, maximum) {
+  const cached = regexBlockCache.get(node);
+  if (cached?.signature === signature) return cached.matches;
+  const matches = []; let complete = true;
+  for (const match of matchesIn(text, query, options, matcher)) {
+    if (matches.length >= maximum) { complete = false; break; }
+    const end = match.index + match[0].length;
+    if (options.wholeWord && (wordCharacter.test(characterBefore(text, match.index)) || wordCharacter.test(characterAfter(text, end)))) continue;
+    if (match[0].includes('\uFFFC') || !hasFormatting(node, match.index, end, options.format)) continue;
+    matches.push({ from: match.index, to: end, captures: match.captures, snippet: searchSnippet(text, match.index, end) });
+  }
+  if (complete) regexBlockCache.set(node, { signature, matches });
+  return matches;
+}
+
 // Matches stay in ProseMirror's original UTF-16 positions even when a phrase
 // spans differently formatted runs. The optional single-character wildcard is
 // deliberately limited, so user patterns cannot trigger regex backtracking.
 export function findTextMatches(doc, query, maximum = 2000, options = {}) {
   if (maximum && typeof maximum === 'object') { options = maximum; maximum = 2000; }
+  return findMatches(doc, query, maximum, options, false);
+}
+
+// Build snippets while visiting each block. Resolving both endpoints from the
+// document for every hit repeatedly walks the chapter's top-level children.
+function findMatches(doc, query, maximum, options, includeSnippets) {
   if (!query || !doc || maximum <= 0) return [];
-  const matches = [];
+  const matches = [], matcher = prepareMatcher(query, options);
+  if (!matcher) return matches;
+  const signature = options.regex ? JSON.stringify([query, !!options.caseSensitive, !!options.wholeWord, options.format || '']) : null;
   doc.descendants((node, pos) => {
     if (matches.length >= maximum) return false;
     if (!node.isTextblock) return;
     const text = textForBlock(node);
-    for (const match of matchesIn(text, query, options)) {
+    if (options.regex) {
+      for (const match of regexMatchesForBlock(node, text, query, options, matcher, signature, maximum - matches.length)) {
+        if (matches.length >= maximum) break;
+        matches.push({ from: pos + 1 + match.from, to: pos + 1 + match.to, captures: match.captures, ...(includeSnippets ? { snippet: match.snippet } : {}) });
+      }
+      return false;
+    }
+    for (const match of matchesIn(text, query, options, matcher)) {
       if (matches.length >= maximum) break;
       const end = match.index + match[0].length;
       if (options.wholeWord && (wordCharacter.test(characterBefore(text, match.index)) || wordCharacter.test(characterAfter(text, end)))) continue;
       // Inline objects use one placeholder position. A search must not replace
       // a picture just because its placeholder happens to occur in a query.
       if (match[0].includes('\uFFFC')) continue;
-      if (!hasFormatting(doc, pos + 1 + match.index, pos + 1 + end, options.format)) continue;
-      matches.push({ from: pos + 1 + match.index, to: pos + 1 + end, ...(match.captures ? { captures: match.captures } : {}) });
+      // The match is wholly inside this block, so checking its local text
+      // avoids walking from the chapter root for every formatted result.
+      if (!hasFormatting(node, match.index, end, options.format)) continue;
+      matches.push({ from: pos + 1 + match.index, to: pos + 1 + end, ...(match.captures ? { captures: match.captures } : {}), ...(includeSnippets ? { snippet: searchSnippet(text, match.index, end) } : {}) });
     }
     return false;
   });
@@ -103,12 +142,10 @@ export function matchesTextRange(doc, from, to, query, options = {}) {
   return hasFormatting(doc, from, to, options.format) && (!options.wholeWord || !(wordCharacter.test(characterBefore(text, match.index)) || wordCharacter.test(characterAfter(text, end.parentOffset))));
 }
 
-function searchSnippet(doc, from, to) {
-  const start = doc.resolve(from), end = doc.resolve(to), paragraph = start.parent;
-  const text = textForBlock(paragraph);
-  const before = text.slice(Math.max(0, start.parentOffset - 44), start.parentOffset);
-  const after = text.slice(end.parentOffset, end.parentOffset + 44);
-  return { before: (start.parentOffset > 44 ? '…' : '') + before, match: text.slice(start.parentOffset, end.parentOffset), after: after + (end.parentOffset + 44 < text.length ? '…' : '') };
+function searchSnippet(text, from, to) {
+  const before = text.slice(Math.max(0, from - 44), from);
+  const after = text.slice(to, to + 44);
+  return { before: (from > 44 ? '…' : '') + before, match: text.slice(from, to), after: after + (to + 44 < text.length ? '…' : '') };
 }
 
 // activeDoc is optional and lets callers search the current editor tree before
@@ -122,7 +159,7 @@ export function findManuscriptMatches(project, query, { scope = 'manuscript', ch
     const signature = JSON.stringify([query, caseSensitive, wholeWord, wildcard, regex, format]);
     let cached = searchCache.get(doc);
     if (cached?.signature !== signature) {
-      cached = { signature, matches: findTextMatches(doc, query, Infinity, { caseSensitive, wholeWord, wildcard, regex, format }).map(match => ({ ...match, snippet: searchSnippet(doc, match.from, match.to) })) };
+      cached = { signature, matches: findMatches(doc, query, Infinity, { caseSensitive, wholeWord, wildcard, regex, format }, true) };
       searchCache.set(doc, cached);
     }
     for (const match of cached.matches) {
@@ -146,14 +183,38 @@ export class SearchReplaceError extends Error {
   constructor(message = 'The manuscript changed after this preview. Search again before replacing.') { super(message); this.name = 'SearchReplaceError'; }
 }
 
-function replacementMarks(doc, match) {
-  const marks = [...(doc.nodeAt(match.from)?.marks || doc.resolve(match.from).marks())];
-  // Notes survive a replacement that crosses a comment's start or end. Their
-  // metadata stays in the project; deleting the passage can leave a detached note.
-  doc.nodesBetween(match.from, match.to, node => {
-    for (const mark of node.marks) if (mark.type.name === 'commentAnchor' && !marks.some(existing => existing.eq(mark))) marks.push(mark);
+// Walk the chapter once in document order. Re-resolving each hit from the root
+// repeatedly scans large chapters, even though results are already sorted.
+function prepareReplacements(doc, ordered, replacement) {
+  let previousEnd = -1;
+  for (const match of ordered) {
+    if (!Number.isInteger(match.from) || !Number.isInteger(match.to) || match.from < 0 || match.to <= match.from || match.to > doc.content.size || match.from < previousEnd || typeof match.text !== 'string') throw new SearchReplaceError('The search preview contains an invalid or overlapping match. Search again before replacing.');
+    previousEnd = match.to;
+  }
+  const prepared = [], ancestors = []; let index = 0;
+  doc.descendants((node, pos) => {
+    while (ancestors.length && pos >= ancestors.at(-1).end) ancestors.pop();
+    if (!node.isTextblock) { if (!node.isLeaf) ancestors.push({ node, end: pos + node.nodeSize }); return; }
+    const start = pos + 1, end = start + node.content.size;
+    while (index < ordered.length && ordered[index].from <= end) {
+      const match = ordered[index++], from = match.from - start, to = match.to - start;
+      if (from < 0 || to > node.content.size || node.textBetween(from, to, '', leafText) !== match.text || match.text.includes('\uFFFC')) throw new SearchReplaceError();
+      const value = replacementForMatch(match, replacement);
+      if (value === match.text) continue;
+      const marks = [...(node.nodeAt(from)?.marks || node.resolve(from).marks())];
+      // Preserve every overlapping comment anchor across a mixed-format match.
+      const addAnchors = current => {
+        for (const mark of current.marks) if (mark.type.name === 'commentAnchor' && !marks.some(existing => existing.eq(mark))) marks.push(mark);
+      };
+      for (const ancestor of ancestors) addAnchors(ancestor.node);
+      addAnchors(node);
+      node.nodesBetween(from, to, addAnchors);
+      prepared.push({ from: match.from, to: match.to, value, marks });
+    }
+    return false;
   });
-  return marks;
+  if (index !== ordered.length) throw new SearchReplaceError();
+  return prepared;
 }
 
 // Validate the entire preview before changing any chapter. Applying replacements
@@ -167,18 +228,10 @@ export function replaceManuscriptMatches(project, results, replacement, { schema
     const chapter = project.chapters.find(item => item.id === group.chapterId);
     if (!chapter) throw new SearchReplaceError();
     const doc = schema.nodeFromJSON(chapter.content), ordered = [...group.results].sort((a, b) => a.from - b.from);
-    let previousEnd = -1;
-    for (const match of ordered) {
-      if (!Number.isInteger(match.from) || !Number.isInteger(match.to) || match.from < 0 || match.to <= match.from || match.to > doc.content.size || match.from < previousEnd || typeof match.text !== 'string') throw new SearchReplaceError('The search preview contains an invalid or overlapping match. Search again before replacing.');
-      const start = doc.resolve(match.from), end = doc.resolve(match.to);
-      if (!start.sameParent(end) || !start.parent.isTextblock || doc.textBetween(match.from, match.to, '', leafText) !== match.text || match.text.includes('\uFFFC')) throw new SearchReplaceError();
-      previousEnd = match.to;
-    }
+    const prepared = prepareReplacements(doc, ordered, replacement);
     const transform = new Transform(doc);
-    for (const match of ordered.reverse()) {
-      const value = replacementForMatch(match, replacement);
-      if (value === match.text) continue;
-      const content = value ? schema.text(value, replacementMarks(doc, match)) : null;
+    for (const match of prepared.reverse()) {
+      const content = match.value ? schema.text(match.value, match.marks) : null;
       transform.replaceWith(match.from, match.to, content || []);
     }
     transform.doc.check();

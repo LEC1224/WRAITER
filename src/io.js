@@ -10,6 +10,7 @@ import { exportScope, titleOptions } from './formats/scope.js';
 import { addStructure, readStructure, loadOfficePackage } from './formats/package.js';
 import { formatLosses } from './formats/losses.js';
 import { chatDocument, chatFormats } from './formats/chat.js';
+import { deviantArtDocument } from './formats/deviantart.js';
 import { stripCommentAnchors } from '../electron/comments.mjs';
 import { acceptTrackedJSON } from '../electron/tracked-changes.mjs';
 import { prepareDocxRevisions, restoreDocxRevisions, restoreDocxComments } from './docx-revisions.js';
@@ -19,6 +20,7 @@ import { officeStyleId, docxStyleDefinitions } from './formats/named-office.js';
 import { printLayoutCSS, normalizePrintLayout, pageDimensions } from './print-layout.js';
 import { odtPageLayout, docxPageLayout } from './formats/page-layout.js';
 import { withExportContents } from './formats/contents.js';
+import { applyPublicationHighlights, highlightedRun, DARK_PAGE } from './highlight-appearance.js';
 export { exportScope } from './formats/scope.js';
 
 const escape = text => String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -670,6 +672,7 @@ export function publicationHTML(project, extensions, options = {}) {
   const notes = [];
   const body = project.chapters.map(c => {
     const container = document.createElement('div'); container.innerHTML = safeHTML(generateHTML(c.content, extensions));
+    if (!options.nativeSave) applyPublicationHighlights(container, dark ? DARK_PAGE : undefined);
     for (const marker of container.querySelectorAll('[data-wraiter-note]')) { notes.push({ kind: marker.getAttribute('data-note-kind'), text: marker.getAttribute('data-note-text') || '' }); marker.textContent = `[${notes.length}]`; }
     return `<section data-wraiter-chapter="${escape(c.id)}" data-title="${escape(c.title)}">${titles.includeChapterTitles ? `<h1 data-wraiter-chapter-title="true">${escape(c.title)}</h1>` : ''}${container.innerHTML}</section>`;
   }).join('') + (notes.length && options.renderNotes ? `<section class="document-notes"><h1>Notes</h1><ol>${notes.map(note => `<li>${escape(note.text)}</li>`).join('')}</ol></section>` : '');
@@ -722,7 +725,9 @@ async function toDocx(project, options = {}) {
       if (node.type !== 'text') return inlines(node.content, header);
       const marks = node.marks || [], style = marks.find(m => m.type === 'textStyle')?.attrs || {};
       const highlight = colour(marks.find(m => m.type === 'highlight')?.attrs?.color || (marks.some(m => m.type === 'highlight') ? 'yellow' : style.backgroundColor));
-      const runOptions = { style: officeStyleId(marks.find(m => m.type === 'namedStyle')?.attrs?.id), text: node.text, bold: header || marks.some(m => m.type === 'bold') || undefined, italics: marks.some(m => m.type === 'italic') || undefined, underline: marks.some(m => m.type === 'underline') ? {} : undefined, strike: marks.some(m => m.type === 'strike'), superScript: marks.some(m => m.type === 'superscript'), subScript: marks.some(m => m.type === 'subscript'), font: marks.some(m => m.type === 'code') ? 'Consolas' : style.fontFamily || undefined, size: fontSize(style.fontSize), color: colour(style.color), shading: highlight ? { type: ShadingType.CLEAR, fill: highlight } : undefined };
+      const appearance = !options.nativeSave && highlightedRun(marks, header ? '#f2f2f2' : undefined);
+      const fill = appearance ? colour(appearance.background) : highlight;
+      const runOptions = { style: officeStyleId(marks.find(m => m.type === 'namedStyle')?.attrs?.id), text: node.text, bold: header || marks.some(m => m.type === 'bold') || undefined, italics: marks.some(m => m.type === 'italic') || undefined, underline: marks.some(m => m.type === 'underline') ? {} : undefined, strike: marks.some(m => m.type === 'strike'), superScript: marks.some(m => m.type === 'superscript'), subScript: marks.some(m => m.type === 'subscript'), font: marks.some(m => m.type === 'code') ? 'Consolas' : style.fontFamily || undefined, size: fontSize(style.fontSize), color: colour(appearance ? appearance.color : style.color), shading: fill ? { type: ShadingType.CLEAR, fill } : undefined };
       const revision = options.includeTrackedChanges && marks.find(mark => mark.type === 'trackedChange');
       if (revision && !revisionIds.has(revision.attrs.id)) revisionIds.set(revision.attrs.id, revisionIds.size + 1);
       const run = revision ? new (revision.attrs.kind === 'delete' ? DeletedTextRun : InsertedTextRun)({ ...runOptions, id: revisionIds.get(revision.attrs.id), author: revision.attrs.author, date: revision.attrs.date }) : new TextRun(runOptions);
@@ -826,9 +831,14 @@ export async function exportPayload(source, format, extensions, options = {}) {
   const scoped = retainChanges || retainComments ? { ...exportedScope, chapters: exportedScope.chapters.map(chapter => ({ ...chapter, content: (retainComments ? value => value : stripCommentAnchors)(retainChanges ? chapter.content : acceptTrackedJSON(chapter.content)) })) } : publicationProject(exportedScope), titles = titleOptions(options);
   const project = options.includeContents && ['pdf', 'docx', 'odt'].includes(format) && options.scope !== 'selection' ? withExportContents(scoped, titles) : scoped;
   const lossWarnings = formatLosses(project, format);
+  if (format === 'deviantart') {
+    const clipboard = deviantArtDocument(project, titles);
+    return { format, title: project.title, data: clipboard.clipboardHTML, ...clipboard, lossWarnings };
+  }
   if (format === 'rich-text') {
     const html = (titles.includeTitle ? `<h1>${escape(project.title)}</h1>` : '') + project.chapters.map(chapter => (titles.includeChapterTitles ? `<h2>${escape(chapter.title)}</h2>` : '') + safeHTML(generateHTML(chapter.content, extensions))).join('');
     const container = document.createElement('div'); container.innerHTML = html;
+    if (!options.nativeSave) applyPublicationHighlights(container);
     for (const img of container.querySelectorAll('img')) img.replaceWith(document.createTextNode(`[Image: ${img.alt || 'image omitted'}]`));
     const fragment = container.innerHTML;
     const text = [...(titles.includeTitle ? [project.title] : []), ...project.chapters.flatMap(chapter => [...(titles.includeChapterTitles ? [chapter.title] : []), nodeText(chapter.content, '\n', true)])].join('\n\n');
@@ -838,7 +848,11 @@ export async function exportPayload(source, format, extensions, options = {}) {
   if (['pdf', 'html'].includes(format)) { const html = publicationHTML(project, extensions, { ...options, renderNotes: format === 'pdf' }); return { format, title: project.title, html, data: textEncoding(html, options), lossWarnings, ...(format === 'pdf' ? { pdfOptions: { preferCSSPageSize: true, printBackground: true, displayHeaderFooter: false }, pdfPreset: options.pdfPreset || 'standard' } : {}) }; }
   if (format === 'docx') { const result = await toDocx(project, options); return { format, title: project.title, ...result, lossWarnings: result.warning ? [result.warning] : [] }; }
   if (format === 'odt') { const result = await toODT(project, options); return { format, title: project.title, ...result, lossWarnings: result.warning ? [result.warning] : [] }; }
-  if (format === 'epub') { const result = await toEPUB(project, chapter => safeHTML(generateHTML(chapter.content, extensions)), options); return { format, title: project.title, ...result, lossWarnings: result.warning ? [result.warning] : [] }; }
+  if (format === 'epub') { const result = await toEPUB(project, chapter => {
+    const container = document.createElement('div'); container.innerHTML = safeHTML(generateHTML(chapter.content, extensions));
+    if (!options.nativeSave) applyPublicationHighlights(container);
+    return container.innerHTML;
+  }, options); return { format, title: project.title, ...result, lossWarnings: result.warning ? [result.warning] : [] }; }
   if (format === 'txt') return { format, title: project.title, lossWarnings, data: textEncoding([...(titles.includeTitle ? [project.title] : []), ...project.chapters.flatMap(chapter => [...(titles.includeChapterTitles ? [chapter.title] : []), nodeText(chapter.content, '\n', true)])].join('\n\n'), options), warning: 'Plain text preserves manuscript wording without formatting; images become labelled placeholders.' };
   if (!['md', 'bbcode'].includes(format)) throw new Error(`Unsupported export format: ${format}`);
   return { format, title: project.title, lossWarnings, data: textEncoding(`${titles.includeTitle ? `${format === 'md' ? '# ' : ''}${inlineMarkup({ text: project.title }, format)}\n\n` : ''}${project.chapters.map(c => `${titles.includeChapterTitles ? `${format === 'md' ? '## ' : ''}${inlineMarkup({ text: c.title }, format)}\n\n` : ''}${blockMarkup(c.content, format)}`).join('\n')}`, options), warning: format === 'md' ? 'Markdown does not preserve fonts, colours, underlining, page layout, or merged table cells. Tables use their first row as a header; embedded images may not display in every Markdown reader.' : 'BBCode preserves basic emphasis, lists, and links. Fonts, colours, page layout, and table structure are simplified; images become placeholders. Numbered lists start at 1.' };

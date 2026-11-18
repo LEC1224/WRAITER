@@ -95,10 +95,12 @@ export default function AIGrammarHints({ grammar, editor }) {
   }, [grammar.selected, editor]);
   if (!grammar.enabled) return null;
   const { status, selected } = grammar;
-  const text = status.kind === 'checking' ? 'Checking paragraph…' : status.kind === 'ready' ? status.count ? `${status.count} AI grammar hint${status.count === 1 ? '' : 's'}` : 'No AI grammar hints' : status.kind === 'error' ? 'AI grammar unavailable · Retry' : status.kind === 'paused' ? 'AI grammar paused' : status.kind === 'unsupported' ? 'AI grammar · place cursor in a plain paragraph' : 'AI grammar · waiting for typing pause';
+  const count = status.count ? `${status.count} AI hint${status.count === 1 ? '' : 's'} in this chapter · ` : '';
+  const progress = status.total ? ` (${status.checked}/${status.total} passages)` : '';
+  const text = count + (status.kind === 'checking' || status.kind === 'waiting' ? 'Checking manuscript…' + progress : status.kind === 'ready' ? 'AI check finished' + progress : status.kind === 'error' ? 'AI grammar unavailable · Retry' : status.kind === 'paused' ? 'AI grammar paused' : status.kind === 'unsupported' ? 'No supported text to check' : 'AI grammar ready');
   return <>
-    <div className="ai-grammar-status"><Sparkles size={13} /><button type="button" disabled={!status.count && status.kind !== 'error'} title={status.message || 'Checks the current plain paragraph (up to 4,000 characters) using your proofreading connection. Paragraphs with notes or tracked changes are skipped. Hover an underline for an explanation, or click to apply or ignore.'} onClick={status.kind === 'error' ? grammar.retry : grammar.review}>{text}</button></div>
-    {!selected && status.kind === 'ready' && status.count > 0 && <GrammarHover editor={editor} />}
+    <div className="ai-grammar-status"><Sparkles size={13} /><button type="button" disabled={!status.count && status.kind !== 'error'} title={status.message || 'Checks your current chapter first, then the rest of this manuscript. Code, paragraphs with embedded notes or pending tracked changes, and individual sentences over 4,000 characters are skipped. Existing hints remain available during checks. Hover to read an explanation, right-click for a quick correction, or click to review.'} onClick={status.kind === 'error' ? grammar.retry : grammar.review}>{text}</button></div>
+    {!selected && status.count > 0 && <GrammarHover editor={editor} />}
     {selected && <div ref={ref} className="ai-grammar-popover" role="dialog" aria-label="AI grammar suggestion">
       <div className="ai-grammar-popover-heading"><strong><Sparkles size={14} />AI grammar suggestion</strong><button type="button" className="icon-button" aria-label="Close grammar suggestion" onClick={grammar.close} title="Close this suggestion without changing the text."><X size={14} /></button></div>
       <p className="ai-grammar-change"><del>{selected.original}</del> → <ins>{selected.replacement || '(remove)'}</ins></p>
