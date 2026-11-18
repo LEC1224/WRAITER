@@ -56,7 +56,13 @@ test('Codex forks a clean reference base, rehashes changed text, and rejects mod
 test('Codex cancellation interrupts the active turn and leaves the connection usable', async t => {
   const client = await bridge(t); const controller = new AbortController();
   const work = client.complete({ model: 'test-model' }, { system: 'Synthetic.', user: 'HANG_REQUEST' }, [], controller.signal);
-  setTimeout(() => controller.abort(), 60);
+  // Cancel an actual running turn even when the fixture process starts slowly.
+  const deadline = Date.now() + 10000;
+  while (!(await client.rpc('test/records', {})).records.some(item => item.method === 'turn/start')) {
+    assert.ok(Date.now() < deadline, 'The mock provider did not start its turn');
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  controller.abort();
   await assert.rejects(work, /cancelled|abort/i);
   assert.equal((await client.accountStatus()).signedIn, true);
   const records = (await client.rpc('test/records', {})).records;
