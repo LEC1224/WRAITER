@@ -8,7 +8,7 @@ const providers = require('./providers.cjs');
 const { defaults, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, mergeSettings } = require('./preferences.cjs');
 const { GitHistory, contentFingerprint } = require('./git-history.cjs');
 const { summarizeCheckpoint, checkpointChanges } = require('./checkpoint-summary.cjs');
-const { describeRange } = require('./checkpoint-ranges.cjs');
+const { StoryHistory } = require('./story-history.cjs');
 const { listFonts, spellLanguage, menuTemplate } = require('./desktop.cjs');
 const { installContextMenu } = require('./context-menu.cjs');
 const { ReferenceLibrary } = require('./references.cjs');
@@ -277,6 +277,7 @@ app.whenReady().then(async () => {
     const page = await editJournal.readPage(id, event.sequence - 1);
     return JSON.parse(page.text.split('\n')[0]).entry?.id === event.id;
   } });
+  const storyHistory = new StoryHistory(gitHistory);
   if (store.project) recordOpenedCheckpoint(store.project, 'Recovered manuscript');
   updateMenu();
   createWindow();
@@ -602,7 +603,7 @@ app.whenReady().then(async () => {
   handle('document:language', (_e, language) => setDocumentLanguage(language));
   handle('git:list', (_e, projectId) => {
     const project = projectId ? workspace.entries.find(entry => entry.store.project?.id === projectId)?.store.project : store.project;
-    return project ? gitHistory.list(project.id) : { available: true, entries: [] };
+    return project ? storyHistory.list(project.id) : { available: true, entries: [] };
   });
   handle('git:revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.revision(store.project.id, revision); });
   handle('git:activate-revision', (_e, revision) => { if (!store.project) throw new Error('Open a manuscript first.'); return gitHistory.activateRevision(store.project.id, revision); });
@@ -647,12 +648,12 @@ app.whenReady().then(async () => {
     queueCheckpointLabel({ id: project.id, before: target, after: project, revision: result.revision, label });
     return result;
   }));
-  handle('checkpoint:range', (_e, projectId, revisions) => {
+  handle('checkpoint:story-passage', (_e, projectId, groupId) => {
     const project = store.project;
     if (project?.id !== projectId) throw new Error('The requested manuscript is no longer open.');
-    const work = checkpointLabelQueue.then(() => describeRange(gitHistory, project, revisions, withCheckpointModel));
-    checkpointLabelQueue = work.catch(() => {});
-    return work;
+    if (!prefs.enabled) return { status: 'disabled' };
+    return storyHistory.describe(project, groupId, describe => withCheckpointModel((settings, key, provider, signal) =>
+      !settings && !activeRequests.size && !pendingForegroundRequests.size ? { status: 'unavailable' } : describe(settings, key, provider, signal)));
   });
   handle('git:snapshot', async (_e, project, label) => {
     const result = await serial(async () => {

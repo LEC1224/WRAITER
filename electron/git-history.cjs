@@ -306,4 +306,4 @@ class GitHistory {
     });
   }
 }
-module.exports = { GitHistory, contentFingerprint, gitEnvironment, textOf, shouldCheckpoint };
+module.exports = { GitHistory, contentFingerprint, gitEnvironment, manuscriptText, textOf, shouldCheckpoint };

@@ -24,7 +24,7 @@ contextBridge.exposeInMainWorld('wraiter', {
   localStatus: invoke('local:status'), configureLocal: invoke('local:configure'), localFolder: invoke('local:folder'), startLocal: invoke('local:start'), stopLocal: invoke('local:stop'), unloadLocal: invoke('local:unload'), localRelease: invoke('local:release'), installLocal: invoke('local:install'), cancelLocal: invoke('local:cancel'), localCatalogInfo: invoke('local:catalog-info'), pullLocal: invoke('local:pull'), chooseGGUF: invoke('local:choose-gguf'), importGGUF: invoke('local:import'),
   onLocalProgress: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('local-progress', listener); return () => ipcRenderer.removeListener('local-progress', listener); },
   listGitHistory: invoke('git:list'), getGitRevision: invoke('git:revision'), commitGitSnapshot: invoke('git:snapshot'), activateGitRevision: invoke('git:activate-revision'), updateGitCheckpointLabel: invoke('git:label'), summarizeCheckpoint: invoke('checkpoint:summarize'),
-  describeCheckpointRange: invoke('checkpoint:range'),
+  describeStoryPassage: invoke('checkpoint:story-passage'),
   prepareGitMerge: invoke('git:prepare-merge'), applyGitMerge: invoke('git:apply-merge'),
   adviseGitMerge: invoke('git:advise-merge'), cancelGitMergeAdvice: invoke('git:cancel-advice'),
   chooseCodex: invoke('choose-codex'), reveal: invoke('reveal'), finishClose: invoke('finish-close'),
