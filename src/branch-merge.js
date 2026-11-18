@@ -1,33 +1,12 @@
-import { diffArrays } from 'diff';
+import { changedRanges, sameValue } from '../electron/merge-ranges.mjs';
+export { sameValue } from '../electron/merge-ranges.mjs';
 import { nodeText } from './document.js';
+import { editorialSchema } from '../electron/editor-schema.mjs';
 
 const privateFields = new Set(['id', 'format', 'version', 'createdAt', 'updatedAt', 'historySequence', 'snapshots', 'chats', 'activeChatId', 'binding', 'fileBinding', 'nativeBinding']);
 const collections = new Set(['chapters', 'bookmarks', 'comments', 'references', 'namedStyles']);
 const keys = (...values) => [...new Set(values.flatMap(value => Object.keys(value || {})))].filter(key => !['__proto__', 'constructor', 'prototype'].includes(key));
-const signatures = new WeakMap();
 const wordsAndSpacing = text => text.match(/[\p{L}\p{M}\p{N}]+|[^\S\r\n]+|./gsu) || [];
-function signature(value) {
-  if (!value || typeof value !== 'object') return JSON.stringify(value);
-  if (!signatures.has(value)) signatures.set(value, JSON.stringify(value, (_, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item));
-  return signatures.get(value);
-}
-export const sameValue = (a, b) => a === b || signature(a) === signature(b);
-
-// Changed ranges use coordinates in the common ancestor. Insertions at a
-// boundary can coexist with an edit on either side of that boundary.
-export function changedRanges(base, variant) {
-  const diff = diffArrays(base, variant, { comparator: sameValue, timeout: 250, maxEditLength: 8000 });
-  if (!diff) return [{ start: 0, end: base.length, insert: variant }];
-  const result = [];
-  let position = 0, range = null;
-  for (const part of diff) {
-    if (!part.added && !part.removed) { position += part.count; range = null; continue; }
-    if (!range) { range = { start: position, end: position, insert: [] }; result.push(range); }
-    if (part.added) range.insert = part.value;
-    else { position += part.count; range.end = position; }
-  }
-  return result;
-}
 
 function applyRanges(base, start, end, ranges) {
   const result = [];
@@ -98,7 +77,13 @@ export function mergeDrafts(base, current, incoming, choices = {}) {
     if (field === 'text' && [original, ours, theirs].every(item => typeof item === 'string' && item.length < 100000)) return sequence(path, label, wordsAndSpacing(original), wordsAndSpacing(ours), wordsAndSpacing(theirs), true).join('');
     if (field === 'content' && [original, ours, theirs].every(Array.isArray)) return sequence(path, label, original, ours, theirs);
     if ([original, ours, theirs].every(item => item && typeof item === 'object' && !Array.isArray(item)) && original.type === ours.type && original.type === theirs.type) {
-      return Object.fromEntries(keys(original, ours, theirs).map(key => [key, value([...path, key], label, original[key], ours[key], theirs[key])]).filter(([, item]) => item !== undefined));
+      const start = conflicts.length;
+      const merged = Object.fromEntries(keys(original, ours, theirs).map(key => [key, value([...path, key], label, original[key], ours[key], theirs[key])]).filter(([, item]) => item !== undefined));
+      if (original.type === 'doc') {
+        try { editorialSchema.nodeFromJSON(merged).check(); }
+        catch { conflicts.length = start; return choose(path, label + ' · chapter structure', ours, theirs); }
+      }
+      return merged;
     }
     return choose(path, label, ours, theirs);
   }

@@ -35,3 +35,10 @@ test('delete/edit decisions retain the chosen chapter and opposing deletions nev
   assert.equal(mergeDrafts(base, ours, theirs, { [review.conflicts[0].id]: 'incoming' }).project.chapters[1].content.content[0].content[0].text, 'Edited');
   assert.ok(mergeDrafts(base, ours, project(b)).conflicts.length);
 });
+test('independent removals that would leave an invalid rich-text document require a choice', () => {
+  const base = project(chapter('One', 'First.', 'Last.'));
+  const ours = project(chapter('One', 'First.')), theirs = project(chapter('One', 'Last.'));
+  const review = mergeDrafts(base, ours, theirs);
+  assert.equal(review.conflicts.length, 1);
+  assert.deepEqual(text(mergeDrafts(base, ours, theirs, { [review.conflicts[0].id]: 'incoming' })), ['Last.']);
+});
