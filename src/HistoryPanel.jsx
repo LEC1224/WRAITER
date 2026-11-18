@@ -26,7 +26,7 @@ function ChangeText({ label, text }) {
   if (!text) return null;
   return <div className="history-change"><strong>{label}</strong><pre>{text.length > 12000 ? text.slice(0, 12000) + '\n[Preview limited to 12,000 characters; the complete edit is saved.]' : text}</pre></div>;
 }
-function EditDetails({ entry }) {
+export function EditDetails({ entry }) {
   if (entry.kind === 'steps') {
     const added = fragments(entry.forward), removed = fragments(entry.inverse);
     const formats = [...new Set(entry.forward.map(step => step.mark?.type || (step.stepType === 'attr' ? step.attr : '')).filter(Boolean))];

@@ -208,6 +208,33 @@ export function createHistory(project, saved = {}) {
 function verifyCurrent(journal, project) {
   if (project.id !== journal.projectId || projectFingerprint(project, journal.headFingerprint) !== journal.headFingerprint) throw new HistoryMismatchError();
 }
+
+// A checkpoint sequence refers to a particular journal. A repaired journal
+// may reuse those numbers, so verify both snapshots before displaying events.
+export function checkpointEvents(journal, before, after, parentRevision) {
+  if (!journal || !before || journal.projectId !== after.id) return null;
+  const start = before.historySequence ?? 1, end = after.historySequence;
+  const fingerprintAt = seq => journal.events[seq - 1]?.afterFingerprint || journal.events[seq - 1]?.fingerprint;
+  const matches = (project, fingerprint) => fingerprint && projectFingerprint(project, fingerprint) === fingerprint;
+  if (!Number.isSafeInteger(end) || !Number.isSafeInteger(start) || start < 1 || end < start || end > journal.sequence || !matches(before, fingerprintAt(start)) || !matches(after, fingerprintAt(end))) return null;
+  const events = journal.events.slice(start, end);
+  // A restore forks Git but appends to the same chronological editing journal.
+  // Omit the abandoned path between the selected parent and the return to it.
+  const fork = events.findLastIndex(event => event.kind === 'edit' && event.entry.label === 'Restore checkpoint ' + parentRevision?.slice(0, 8) && matches(before, event.afterFingerprint));
+  const entries = new Map();
+  return events.slice(fork + 1).map(event => {
+    if (event.kind === 'edit') return { sequence: event.sequence, entry: event.entry };
+    if (!entries.size) for (const entry of journal.entries) entries.set(entry.id, entry);
+    const original = entries.get(event.entryId);
+    if (!original) return null;
+    const entry = { ...original, timestamp: event.timestamp, label: (event.kind === 'undo' ? 'Undo · ' : 'Redo · ') + original.label };
+    if (event.kind === 'undo') {
+      if (entry.kind === 'steps') [entry.forward, entry.inverse] = [entry.inverse, entry.forward];
+      else entry.patches = entry.patches.map(patch => ({ ...patch, before: patch.after, after: patch.before, hasAfter: patch.hadBefore, hadBefore: patch.hasAfter }));
+    }
+    return { sequence: event.sequence, entry };
+  }).filter(Boolean).reverse();
+}
 function appendEntry(journal, entry) {
   return replayEvent(journal, { version: 1, kind: 'edit', sequence: journal.sequence + 1, timestamp: entry.timestamp, beforeFingerprint: entry.beforeFingerprint, afterFingerprint: entry.afterFingerprint, entry });
 }

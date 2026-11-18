@@ -8,6 +8,7 @@ const providers = require('./providers.cjs');
 const { defaults, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, mergeSettings } = require('./preferences.cjs');
 const { GitHistory } = require('./git-history.cjs');
 const { summarizeCheckpoint, checkpointChanges } = require('./checkpoint-summary.cjs');
+const { describeRange } = require('./checkpoint-ranges.cjs');
 const { listFonts, spellLanguage, menuTemplate } = require('./desktop.cjs');
 const { installContextMenu } = require('./context-menu.cjs');
 const { ReferenceLibrary } = require('./references.cjs');
@@ -81,6 +82,9 @@ async function reserveForegroundRequest(id, controller, busyMessage) {
   } finally { pendingForegroundRequests.delete(controller); }
 }
 async function describeCheckpoint(payload, waitForIdle = false) {
+  return withCheckpointModel((settings, key, provider, signal) => summarizeCheckpoint(payload, settings, key, provider, signal), waitForIdle);
+}
+async function withCheckpointModel(describe, waitForIdle = false) {
   if (waitForIdle && activeRequests.size) {
     let timeout;
     try { await Promise.race([Promise.all([...activeRequests.values()].map(controller => controller.finished)), new Promise(resolve => { timeout = setTimeout(resolve, 30000); })]); }
@@ -90,15 +94,15 @@ async function describeCheckpoint(payload, waitForIdle = false) {
   const settings = available ? resolveTask(prefs, 'checkpoint') : null;
   let key = '';
   if (settings) {
-    try { key = await getKey(settings); } catch { return summarizeCheckpoint(payload, null); }
+    try { key = await getKey(settings); } catch { return describe(null); }
   }
-  if (!settings || activeRequests.size || pendingForegroundRequests.size) return summarizeCheckpoint(payload, null);
+  if (!settings || activeRequests.size || pendingForegroundRequests.size) return describe(null);
   const id = `checkpoint-${require('node:crypto').randomUUID()}`;
   const controller = new AbortController(); controller.kind = 'checkpoint';
   let finished; controller.finished = new Promise(resolve => { finished = resolve; });
   const timeout = setTimeout(() => controller.abort(), 180000);
   activeRequests.set(id, controller);
-  try { return await summarizeCheckpoint(payload, settings, key, providers, controller.signal); }
+  try { return await describe(settings, key, providers, controller.signal); }
   finally { clearTimeout(timeout); activeRequests.delete(id); finished(); }
 }
 function queueCheckpointLabel({ id, before, after, revision, label, automatic = false }) {
@@ -594,6 +598,13 @@ app.whenReady().then(async () => {
   handle('checkpoint:summarize', (_e, payload) => {
     if (!store.project || payload?.after?.id !== store.project.id) throw new Error('The requested manuscript is no longer open.');
     return describeCheckpoint(payload);
+  });
+  handle('checkpoint:range', (_e, projectId, revisions) => {
+    const project = store.project;
+    if (project?.id !== projectId) throw new Error('The requested manuscript is no longer open.');
+    const work = checkpointLabelQueue.then(() => describeRange(gitHistory, project, revisions, withCheckpointModel));
+    checkpointLabelQueue = work.catch(() => {});
+    return work;
   });
   handle('git:snapshot', async (_e, project, label) => {
     const result = await serial(async () => {

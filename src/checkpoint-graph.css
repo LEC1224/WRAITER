@@ -1,0 +1,16 @@
+.revision-zoom { display:inline-flex; align-items:center; flex-shrink:0; border:1px solid var(--line-strong); border-radius:5px; }
+.revision-zoom button { display:grid; place-items:center; width:30px; min-height:30px; color:var(--text); }
+.revision-zoom span { min-width:85px; text-align:center; font-size:12px; }
+.revision-toolbar .checkpoint-graph-tools { flex-wrap:wrap; }
+.checkpoint-graph-card.revision-group { border-style:dashed; box-shadow:3px 3px 0 var(--panel), 4px 4px 0 var(--line-strong); }
+.checkpoint-graph-lines path.merge-edge { stroke:var(--accent); stroke-dasharray:5 3; }
+.revision-card-state { margin-top:auto; margin-bottom:5px; font-size:11px; color:var(--muted); }
+.checkpoint-graph-card.current .revision-card-state { color:var(--accent); font-weight:600; }
+.revision-card-state + .checkpoint-graph-card-footer { margin-top:0; }
+.checkpoint-inspect { overflow:auto; min-height:0; }
+.checkpoint-inspect details { border-top:1px solid var(--line); padding:10px 4px; }
+.checkpoint-inspect summary { cursor:pointer; font-size:13px; }
+.checkpoint-inspect summary small { color:var(--muted); margin-left:8px; }
+.checkpoint-diff { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; }
+.checkpoint-diff ins { background:var(--accent-faint); text-decoration:underline; }
+.checkpoint-diff del { color:var(--muted); }
