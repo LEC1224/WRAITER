@@ -8,7 +8,7 @@ const COLUMN = 302, ROW = 170, LEFT = 24, TOP = 24, CARD_WIDTH = 270, CARD_HEIGH
 const levels = ['Overview', 'Closer view', 'Every version'];
 const date = value => new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
-export default function CheckpointGraph({ history, projectId, journal, onPreview, onRestore }) {
+export default function CheckpointGraph({ history, projectId, journal, onPreview, onRestore, onMerge }) {
   const [query, setQuery] = useState(''), [detail, setDetail] = useState(0), [expanded, setExpanded] = useState(new Set());
   const [plans, setPlans] = useState({}), [inspect, setInspect] = useState(null);
   const scroller = useRef(null), requested = useRef(new Set()), focusRevision = useRef(history.headRevision);
@@ -103,6 +103,7 @@ export default function CheckpointGraph({ history, projectId, journal, onPreview
                 <button className="text-button" onClick={() => onPreview(item)}><Eye size={13}/>Preview</button>
                 <button className="text-button" onClick={() => setInspect(item)}>Inspect edits</button>
                 {!row.current && <button className="text-button" onClick={() => onRestore(item)}>Continue here</button>}
+                {!row.integrated && onMerge && <button className="text-button" onClick={() => onMerge(item)}><GitMerge size={13}/>Merge…</button>}
               </>}
             </div>
           </article>;

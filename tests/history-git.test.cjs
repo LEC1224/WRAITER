@@ -108,3 +108,46 @@ test('an automatic checkpoint calls the summary hook without blocking the commit
   assert.equal(notified.before.chapters[0].content.content[0].content[0].text, 'The exact same text.');
   assert.equal(notified.after.chapters[0].content.content[0].content[0].text, substantial.chapters[0].content.content[0].content[0].text);
 });
+
+test('reviewed merge keeps the live target and source as real Git parents and rejects stale previews', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'wraiter-git-merge-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const git = new GitHistory(dir), base = manuscript();
+  const root = await git.record(base, 'Root');
+  const source = await git.record({ ...base, subtitle: 'The crossing' }, 'Crossing');
+  await git.activateRevision(base.id, root.revision);
+  const target = { ...base, notes: 'New path' };
+  const old = await git.prepareMerge(base.id, source.revision);
+  await git.record(target, 'Other path');
+  await assert.rejects(git.commitMerge(target, target, old, 'Merge', null), /changed/);
+  const review = await git.prepareMerge(base.id, source.revision);
+  assert.equal(review.baseRevision, root.revision);
+  const live = { ...target, title: 'Unsaved title' }, next = { ...live, subtitle: 'The crossing' };
+  const result = await git.commitMerge(live, next, review, 'Merge crossing', null);
+  const saved = await new GitHistory(dir).list(base.id);
+  assert.equal(saved.headRevision, result.revision);
+  assert.deepEqual(saved.entries.find(item => item.revision === result.revision).parentRevisions, result.parentRevisions);
+  assert.equal(result.parentRevisions[1], source.revision);
+  assert.equal((await git.revision(base.id, result.parentRevisions[0])).title, 'Unsaved title');
+  assert.deepEqual(await git.revision(base.id, result.revision), next);
+  await assert.rejects(git.prepareMerge(base.id, source.revision), /already included/);
+});
+
+test('interrupted merges follow the durable edit journal on restart', async t => {
+  for (const durable of [false, true]) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'wraiter-merge-recovery-'));
+    t.after(() => fs.rm(dir, { recursive: true, force: true }));
+    const git = new GitHistory(dir), base = manuscript();
+    const root = await git.record(base, 'Root'), source = await git.record({ ...base, notes: 'Incoming' }, 'Incoming');
+    await git.activateRevision(base.id, root.revision);
+    const target = { ...base, subtitle: 'Local' };
+    const first = await git.record(target, 'Target'), preview = await git.prepareMerge(base.id, source.revision);
+    const event = { sequence: 12, entry: { id: 'merge-edit' } };
+    await assert.rejects(git.commitMerge(target, { ...target, notes: 'Incoming' }, preview, 'Merge', event, async () => { throw Error('Interrupted'); }), /Interrupted/);
+    const recovered = new GitHistory(dir, { hasMergeEvent: async (id, value) => { assert.equal(id, base.id); assert.deepEqual(value, { id: 'merge-edit', sequence: 12 }); return durable; } });
+    const tree = await recovered.list(base.id);
+    if (durable) assert.deepEqual(tree.entries.find(row => row.revision === tree.headRevision).parentRevisions, [first.revision, source.revision]);
+    else assert.equal(tree.headRevision, first.revision);
+    assert.equal((await recovered.record(await recovered.revision(base.id, tree.headRevision))).committed, false);
+  }
+});

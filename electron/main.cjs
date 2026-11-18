@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
 const { hash, atomicWrite, readLimited, validatedProjectJSON, validateProject, validateRequest, DocumentStore, samePath, safeFilename } = require('./core.cjs');
 const providers = require('./providers.cjs');
 const { defaults, TASKS, PROVIDERS, validateSettings, resolveTask, keySlot, mergeSettings } = require('./preferences.cjs');
-const { GitHistory } = require('./git-history.cjs');
+const { GitHistory, contentFingerprint } = require('./git-history.cjs');
 const { summarizeCheckpoint, checkpointChanges } = require('./checkpoint-summary.cjs');
 const { describeRange } = require('./checkpoint-ranges.cjs');
 const { listFonts, spellLanguage, menuTemplate } = require('./desktop.cjs');
@@ -152,11 +152,18 @@ async function rememberPath(target) {
 async function openPath(target) {
   const result = await workspace.open(target); syncWorkspace();
   if (result.project) {
-    gitHistory.record(result.project, 'Opened manuscript').catch(error => diagnostics.error('history.checkpoint-failed', error));
+    recordOpenedCheckpoint(result.project, 'Opened manuscript');
     if (result.recoveredPath) await rememberPath(result.recoveredPath);
     await rememberPath(target);
   }
   return result;
+}
+function recordOpenedCheckpoint(project, label) {
+  // A crash tail must be replayed before a stale recovery snapshot can become
+  // a new Git tip, including a merge recorded just before the app stopped.
+  editJournal.read(project.id, 0).then(({ totalEvents }) => {
+    if (totalEvents <= (project.historySequence || 0)) return gitHistory.record(project, label);
+  }).catch(error => diagnostics.error('history.checkpoint-failed', error));
 }
 async function persistDocument(project, payload, events, { files = documentFiles, saveOptions, automaticCheckpoint = false } = {}) {
   // Each IPC call owns a fresh snapshot. Validate it before touching the
@@ -264,8 +271,13 @@ app.whenReady().then(async () => {
   editJournal = new EditJournal(app.getPath('userData'));
   localModels = new LocalModels(app.getPath('userData'), { notify: value => win?.webContents.send('local-progress', value) });
   providers.configureLocalModels(localModels);
-  gitHistory = new GitHistory(app.getPath('userData'), { onCheckpoint: queueCheckpointLabel });
-  if (store.project) gitHistory.record(store.project, 'Recovered manuscript').catch(error => diagnostics.error('history.checkpoint-failed', error));
+  gitHistory = new GitHistory(app.getPath('userData'), { onCheckpoint: queueCheckpointLabel, hasMergeEvent: async (id, event) => {
+    const { totalEvents } = await editJournal.read(id, 0);
+    if (totalEvents < event.sequence) return false;
+    const page = await editJournal.readPage(id, event.sequence - 1);
+    return JSON.parse(page.text.split('\n')[0]).entry?.id === event.id;
+  } });
+  if (store.project) recordOpenedCheckpoint(store.project, 'Recovered manuscript');
   updateMenu();
   createWindow();
   require('./setup.cjs').registerSetup({ ipcMain: { handle }, app, dialog, shell, win: () => win, draftConnection });
@@ -599,6 +611,22 @@ app.whenReady().then(async () => {
     if (!store.project || payload?.after?.id !== store.project.id) throw new Error('The requested manuscript is no longer open.');
     return describeCheckpoint(payload);
   });
+  handle('git:prepare-merge', (_e, tabId, projectId, sourceRevision) => serial(async () => {
+    const target = workspace.documentEntry(tabId, projectId).store.project;
+    const context = await gitHistory.prepareMerge(projectId, sourceRevision);
+    return { ...context, targetFingerprint: contentFingerprint(target), targetSequence: target.historySequence };
+  }));
+  handle('git:apply-merge', (_e, tabId, context, project, event, title) => serial(async () => {
+    validateProject(project);
+    const targetStore = workspace.documentEntry(tabId, project.id).store, target = targetStore.project;
+    const { totalEvents } = await editJournal.read(project.id, 0);
+    if (target.historySequence !== context.targetSequence || contentFingerprint(target) !== context.targetFingerprint || totalEvents !== target.historySequence) throw new Error('The draft changed. Reopen the merge to review it again.');
+    if (project.historySequence !== totalEvents + (event ? 1 : 0) || (event && (event.kind !== 'edit' || event.entry?.kind !== 'project' || event.sequence !== project.historySequence))) throw new Error('The merge does not match the editing journal.');
+    const label = 'Merge · ' + String(title || 'Writing branch').replace(/[\x00-\x1f]+/g, ' ').slice(0, 180);
+    const result = await gitHistory.commitMerge(target, project, context, label, event, saved => editJournal.append(project.id, [saved]));
+    queueCheckpointLabel({ id: project.id, before: target, after: project, revision: result.revision, label });
+    return result;
+  }));
   handle('checkpoint:range', (_e, projectId, revisions) => {
     const project = store.project;
     if (project?.id !== projectId) throw new Error('The requested manuscript is no longer open.');

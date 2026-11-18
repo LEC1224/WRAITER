@@ -6,6 +6,8 @@ const { randomUUID } = require('node:crypto');
 const { hash, validatedProjectJSON, validateProject, atomicWrite, readLimited } = require('./core.cjs');
 
 const execute = promisify(execFile);
+const gitIdentity = ['-c', 'user.name=WRAITER', '-c', 'user.email=history@wraiter.local'];
+const validRevision = revision => typeof revision === 'string' && /^[a-f0-9]{40}$/.test(revision);
 // A private repository for each manuscript avoids touching the author's folders or Git identity.
 // No remotes, hooks, credentials, inherited Git directory overrides, or shell commands are used.
 function gitEnvironment(directory) {
@@ -58,6 +60,8 @@ class GitHistory {
     this.executable = options.executable || 'git';
     this.debounce = options.debounce ?? 20000;
     this.onCheckpoint = options.onCheckpoint;
+    this.hasMergeEvent = options.hasMergeEvent;
+    this.unfinishedMerges = new Set();
     this.queue = Promise.resolve(); this.pending = new Map(); this.initialized = new Set(); this.lastHashes = new Map(); this.lastProjects = new Map(); this.lastError = '';
   }
   repository(id) {
@@ -80,10 +84,11 @@ class GitHistory {
   }
   async initialize(id) {
     const directory = this.repository(id);
-    if (this.initialized.has(id)) return directory;
+    if (this.initialized.has(id) && !this.unfinishedMerges.has(id)) return directory;
     await fs.mkdir(directory, { recursive: true });
     await fs.mkdir(path.join(this.directory, 'disabled-hooks'), { recursive: true });
     await this.run(directory, ['init', '--quiet']);
+    await this.finishPendingMerge(id, directory);
     try {
       const previous = JSON.parse(await this.run(directory, ['show', 'HEAD:manuscript.json']));
       validateProject(previous);
@@ -107,13 +112,9 @@ class GitHistory {
       const before = this.lastProjects.get(snapshot.id) || null;
       if (!explicit && this.lastHashes.get(snapshot.id) === fingerprint) return { committed: false };
       if (options.automatic && !shouldCheckpoint(before, snapshot)) return { committed: false, belowThreshold: true };
-      await atomicWrite(path.join(directory, 'manuscript.json'), serialized + '\n');
-      // This companion is deliberately readable in ordinary git diff/log tools.
-      const plain = [snapshot.title, ...snapshot.chapters.flatMap(chapter => ['\n# ' + chapter.title, textOf(chapter.content)])].join('\n') + '\n';
-      await atomicWrite(path.join(directory, 'manuscript.txt'), plain);
-      await this.run(directory, ['add', '--', 'manuscript.json', 'manuscript.txt']);
+      await this.stageSnapshot(directory, snapshot, serialized);
       const message = String(label || 'Saved manuscript').replace(/[\r\n\x00-\x1f]+/g, ' ').trim().slice(0, 500) || 'Saved manuscript';
-      await this.run(directory, ['-c', 'user.name=WRAITER', '-c', 'user.email=history@wraiter.local', 'commit', '--quiet', '--allow-empty', '-m', message, '--', 'manuscript.json', 'manuscript.txt']);
+      await this.run(directory, [...gitIdentity, 'commit', '--quiet', '--allow-empty', '-m', message, '--', 'manuscript.json', 'manuscript.txt']);
       this.lastHashes.set(snapshot.id, fingerprint); this.lastProjects.set(snapshot.id, snapshot); this.lastError = '';
       return { committed: true, revision: (await this.run(directory, ['rev-parse', 'HEAD'])).trim(), before };
     });
@@ -176,13 +177,88 @@ class GitHistory {
     });
   }
   async revision(id, revision) {
-    if (typeof revision !== 'string' || !/^[a-f0-9]{40}$/.test(revision)) throw new Error('Invalid Git revision.');
     await this.queue;
     const directory = await this.initialize(id);
+    return this.readRevision(directory, id, revision);
+  }
+  async readRevision(directory, id, revision) {
+    if (!validRevision(revision)) throw new Error('Invalid Git revision.');
     const value = JSON.parse(await this.run(directory, ['show', `${revision}:manuscript.json`]));
     validateProject(value);
     if (value.id !== id) throw new Error('This revision belongs to a different manuscript.');
     return value;
+  }
+  async stageSnapshot(directory, snapshot, serialized = validatedProjectJSON(snapshot)) {
+    await atomicWrite(path.join(directory, 'manuscript.json'), serialized + '\n');
+    const plain = [snapshot.title, ...snapshot.chapters.flatMap(chapter => ['\n# ' + chapter.title, textOf(chapter.content)])].join('\n') + '\n';
+    await atomicWrite(path.join(directory, 'manuscript.txt'), plain);
+    await this.run(directory, ['add', '--', 'manuscript.json', 'manuscript.txt']);
+  }
+  async mergeContext(directory, sourceRevision) {
+    if (!validRevision(sourceRevision)) throw new Error('Choose a saved version to merge.');
+    const headRevision = (await this.run(directory, ['rev-parse', 'HEAD'])).trim();
+    const branch = (await this.run(directory, ['symbolic-ref', 'HEAD'])).trim();
+    const base = (await this.run(directory, ['merge-base', '--all', headRevision, sourceRevision])).trim().split(/\s+/);
+    if (base.includes(sourceRevision)) throw new Error('That version is already included in the current path.');
+    if (base.length !== 1 || !validRevision(base[0])) throw new Error('These versions need a single common starting checkpoint.');
+    return { headRevision, sourceRevision, branch, baseRevision: base[0] };
+  }
+  async prepareMerge(id, sourceRevision) {
+    await this.flush(id);
+    return this.serialize(async () => {
+      const directory = await this.initialize(id), context = await this.mergeContext(directory, sourceRevision);
+      const base = await this.readRevision(directory, id, context.baseRevision);
+      const source = await this.readRevision(directory, id, sourceRevision);
+      return { ...context, base, source };
+    });
+  }
+  async finishPendingMerge(id, directory, confirmed = false) {
+    const file = path.join(directory, '.git', 'wraiter-pending-merge.json');
+    let marker;
+    try { marker = JSON.parse(await fs.readFile(file, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return; throw error; }
+    const { branch, headRevision, revision, event } = marker;
+    if (!validRevision(headRevision) || !validRevision(revision) || typeof branch !== 'string' || !branch.startsWith('refs/heads/')) throw new Error('The pending merge record is unreadable.');
+    const actual = (await this.run(directory, ['rev-parse', branch])).trim();
+    if (actual !== headRevision && actual !== revision) throw new Error('The branch changed while completing its merge.');
+    if (actual !== revision && (confirmed || !event || await this.hasMergeEvent?.(id, event))) {
+      await this.run(directory, ['update-ref', branch, revision, headRevision]);
+    } else if (actual === headRevision) {
+      await this.run(directory, ['restore', '--source=HEAD', '--staged', '--worktree', '--', 'manuscript.json', 'manuscript.txt']);
+    }
+    await fs.unlink(file);
+    this.unfinishedMerges.delete(id);
+  }
+  async commitMerge(target, merged, expected, label, event, appendEvent) {
+    if (target.id !== merged.id) throw new Error('The manuscript changed. Review the merge again.');
+    const serialized = validatedProjectJSON(merged), id = target.id;
+    await this.flush(id);
+    return this.serialize(async () => {
+      const directory = await this.initialize(id);
+      const context = await this.mergeContext(directory, expected.sourceRevision);
+      if (['headRevision', 'branch', 'baseRevision'].some(key => context[key] !== expected[key])) throw new Error('The current path changed. Review the merge again.');
+      const commit = async (snapshot, parents, message, json) => {
+        await this.stageSnapshot(directory, snapshot, json);
+        const tree = (await this.run(directory, ['write-tree'])).trim();
+        return (await this.run(directory, [...gitIdentity, 'commit-tree', tree, ...parents.flatMap(parent => ['-p', parent]), '-m', message])).trim();
+      };
+      let first = context.headRevision, marked = false;
+      try {
+        if (this.lastHashes.get(id) !== contentFingerprint(target)) first = await commit(target, [first], 'Draft before merge');
+        const revision = await commit(merged, [first, context.sourceRevision], label, serialized);
+        const marker = { branch: context.branch, headRevision: context.headRevision, revision, event: event && { sequence: event.sequence, id: event.entry.id } };
+        await atomicWrite(path.join(directory, '.git', 'wraiter-pending-merge.json'), JSON.stringify(marker));
+        marked = true; this.unfinishedMerges.add(id);
+        // The fsynced undo event is the decision point. After an interruption
+        // initialization finishes the same ref update or restores the old index.
+        if (event) await appendEvent(event);
+        await this.finishPendingMerge(id, directory, true);
+        this.lastProjects.set(id, merged); this.lastHashes.set(id, contentFingerprint(merged)); this.lastError = '';
+        return { revision, parentRevisions: [first, context.sourceRevision] };
+      } catch (error) {
+        if (!marked) await this.run(directory, ['restore', '--source=HEAD', '--staged', '--worktree', '--', 'manuscript.json', 'manuscript.txt']);
+        throw error;
+      }
+    });
   }
   // Selecting an older point creates a new named branch. The old branch tip
   // remains reachable, including when the app closes before any new edit.

@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('wraiter', {
   onLocalProgress: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('local-progress', listener); return () => ipcRenderer.removeListener('local-progress', listener); },
   listGitHistory: invoke('git:list'), getGitRevision: invoke('git:revision'), commitGitSnapshot: invoke('git:snapshot'), activateGitRevision: invoke('git:activate-revision'), updateGitCheckpointLabel: invoke('git:label'), summarizeCheckpoint: invoke('checkpoint:summarize'),
   describeCheckpointRange: invoke('checkpoint:range'),
+  prepareGitMerge: invoke('git:prepare-merge'), applyGitMerge: invoke('git:apply-merge'),
   chooseCodex: invoke('choose-codex'), reveal: invoke('reveal'), finishClose: invoke('finish-close'),
   window: action => ipcRenderer.send('window', action),
   onEditorMenu: callback => {
