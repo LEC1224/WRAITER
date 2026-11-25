@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld('wraiter', {
   personalGrammarExceptions: invoke('grammar-exceptions:list'), addPersonalGrammarException: invoke('grammar-exceptions:add'),
   removePersonalGrammarException: invoke('grammar-exceptions:remove'),
   updatePersonalGrammarException: invoke('grammar-exceptions:edit'),
+  removeOfflineDictionaryWord: invoke('offline-dictionary:remove'), updateOfflineDictionaryWord: invoke('offline-dictionary:edit'),
+  onOfflineDictionaryChanged(callback) {
+    const listener = () => callback();
+    ipcRenderer.on('offline-dictionary:changed', listener);
+    return () => ipcRenderer.removeListener('offline-dictionary:changed', listener);
+  },
   localStatus: invoke('local:status'), configureLocal: invoke('local:configure'), localFolder: invoke('local:folder'), startLocal: invoke('local:start'), stopLocal: invoke('local:stop'), unloadLocal: invoke('local:unload'), localRelease: invoke('local:release'), installLocal: invoke('local:install'), cancelLocal: invoke('local:cancel'), localCatalogInfo: invoke('local:catalog-info'), pullLocal: invoke('local:pull'), chooseGGUF: invoke('local:choose-gguf'), importGGUF: invoke('local:import'),
   onLocalProgress: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('local-progress', listener); return () => ipcRenderer.removeListener('local-progress', listener); },
   listGitHistory: invoke('git:list'), getGitRevision: invoke('git:revision'), commitGitSnapshot: invoke('git:snapshot'), activateGitRevision: invoke('git:activate-revision'), updateGitCheckpointLabel: invoke('git:label'), summarizeCheckpoint: invoke('checkpoint:summarize'),

@@ -4,6 +4,7 @@ import { useLoggedSurface, reportError } from './diagnostics.js';
 import { DEFAULT_HOTKEYS, HOTKEY_LABELS, shortcutFromEvent, shortcutConflicts, formatShortcut } from './hotkeys.js';
 import { LANGUAGES } from './languages.js';
 import LocalModels from './LocalModels.jsx';
+import PersonalDictionary from './PersonalDictionary.jsx';
 
 const api = window.wraiter;
 const isWeb = api?.platform === 'web';
@@ -20,6 +21,7 @@ function NumberField({ label, value, min, max, step = 1, onChange, help, disable
 }
 
 export default function Settings({ initialTab, initialTask, prefs, updatePrefs, onClose, notify, fonts = [], Modal }) {
+  const [dictionaryOpen, setDictionaryOpen] = useState(false);
   const [tab, setTab] = useState(['general', 'appearance', 'grammar', 'language', 'connections', 'local', 'ai', 'hotkeys', 'logging'].includes(initialTab) ? initialTab : 'appearance');
   const [draft, setDraft] = useState(() => ({ logCleanupEnabled: true, logRetentionMonths: 1, logNativeCrashDumps: false, translationSuggestions: 3, correctionSuggestions: 1, rephraseSuggestions: 3, ...prefs, taskProfiles: Object.fromEntries(TASKS.map(([task]) => [task, profileFor(prefs, task)])), hotkeys: { ...DEFAULT_HOTKEYS, ...(prefs.hotkeys || {}) } }));
   const [logStatus, setLogStatus] = useState(null);
@@ -111,6 +113,7 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
   }
 
   const tabs = [['general', 'General', SlidersHorizontal], ['appearance', 'Appearance', Sun], ['grammar', 'Spelling and grammar', Check], ['language', 'Languages', Globe2], ['connections', 'Connections', Plug], ...(!isWeb ? [['local', 'Local models', Download]] : []), ['ai', 'Writing AI', SlidersHorizontal], ['hotkeys', 'Shortcuts', Keyboard], ...(!isWeb ? [['logging', 'Logging', FileText]] : [])];
+  if (dictionaryOpen) return <PersonalDictionary Modal={Modal} language={draft.language} onClose={() => setDictionaryOpen(false)} />;
   return <Modal title="Settings" onClose={saving ? () => {} : onClose} wide>
     <div className="settings-tabs" role="tablist" aria-label="Settings categories">{tabs.map(([id, label, Icon]) => <button type="button" key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'selected' : ''} onClick={() => { setCapturing(''); setTab(id); }}><Icon size={15} />{label}</button>)}</div>
     <div className="settings-content" role="tabpanel" aria-label={tabs.find(([id]) => id === tab)?.[1]}>
@@ -137,6 +140,7 @@ export default function Settings({ initialTab, initialTask, prefs, updatePrefs, 
       {tab === 'grammar' && <><h3>Spelling and grammar</h3>
         <label className="check-label"><input type="checkbox" checked={!!draft.spellcheck} onChange={event => set('spellcheck', event.target.checked)} />Underline spelling mistakes with the local dictionary</label>
         <label className="check-label"><input type="checkbox" checked={!!draft.localGrammar} onChange={event => set('localGrammar', event.target.checked)} />Local grammar hints while typing (English and Swedish)</label><p className="small-muted">Checks English grammar, agreement, punctuation and common word mix-ups, with a smaller set of Swedish grammar checks, on this computer. Right-click an underline for suggestions; intentional wording can stay. Spelling dictionaries for English and several other languages are bundled for offline use.</p>
+        <button type="button" className="secondary-button" onClick={() => setDictionaryOpen(true)}>Personal dictionary…</button>
         <label className="check-label"><input type="checkbox" checked={!!draft.aiGrammar} onChange={event => set('aiGrammar', event.target.checked)} />AI grammar hints while typing</label>
         <p className="small-muted"><strong>AI-heavy:</strong> Automatically checks text throughout this manuscript, including pasted text and chapters you have not opened. Starts promptly and rechecks edits after about half a second, with the current chapter first. This can use many AI requests and tokens: cloud providers may charge or use your allowance, {isWeb ? 'through your own API account.' : 'and local models use your computer’s resources.'}</p>
         <p className="small-muted">Uses your proofreading connection. Only manuscript passages are sent, without notes, comments, reference material or chapter titles. Unchanged results are reused. Suggestions never change text automatically; turn this off to stop background checks.</p>

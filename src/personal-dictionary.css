@@ -1,0 +1,9 @@
+.dictionary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.dictionary-actions input { flex: 1 1 10rem; min-width: 0; }
+.dictionary-list { list-style: none; padding: 0; margin: 0; }
+.dictionary-list li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.dictionary-list li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.dictionary-list small { display: block; color: var(--muted); }
+.dictionary-form label { display: grid; gap: 4px; margin: 8px 0; }
+.dictionary-fields { display: flex; gap: 12px; flex-wrap: wrap; }
+.dictionary-fields label { flex: 1 1 10rem; }

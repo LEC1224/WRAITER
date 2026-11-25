@@ -72,6 +72,7 @@ import { captureParagraphLayout } from './paragraph-layout.js';
 import { trackModeKey, suggestText } from './tracked-editor.js';
 import Thesaurus from './Thesaurus.jsx';
 import LocalGrammarDialog from './LocalGrammarDialog.jsx';
+import PersonalDictionary from './PersonalDictionary.jsx';
 import useInlineGrammar from './useInlineGrammar.js';
 import AIGrammarHints from './AIGrammarHints.jsx';
 import { grammarCorrectionTransaction, grammarHintForMenu, grammarMenuPreview } from './ai-grammar.js';
@@ -1478,6 +1479,7 @@ export default function App() {
       complete: () => askAI(current?.state.selection.empty ? 'continue' : 'rewrite'), correct: () => askAI('correct'), rewrite: () => askAI('rewrite'), accept: () => acceptGhost(), dismiss: () => rejectSuggestion(),
       comments: () => showComments(), 'add-comment': () => showComments(true), 'copy-format': copyFormat, 'paste-format': pasteFormat, 'clear-format': clearFormatting,
       'context-assistant': () => { setFocus(false); setPanel('assist'); setAssistantFocus(value => value + 1); }, 'stop-ai': () => dismiss(),
+      'personal-dictionary': () => setModal({ type: 'personal-dictionary' }),
       'page-setup': () => setModal({ type: 'page-setup' }), proofread: () => setModal({ type: 'proofread' }), 'local-grammar': () => setModal({ type: 'local-grammar' }), thesaurus: () => setModal({ type: 'thesaurus', word: current && !current.isDestroyed ? current.state.doc.textBetween(current.state.selection.from, current.state.selection.to, ' ') : '' }), statistics: () => setModal({ type: 'statistics' }),
       'toggle-ai': () => { dismiss(); updatePrefs({ enabled: !prefsRef.current.enabled }); }, 'toggle-continuous': () => updatePrefs({ continuous: !prefsRef.current.continuous })
     };
@@ -1883,6 +1885,7 @@ export default function App() {
     {modal?.type === 'statistics' && <StatisticsDialog Modal={Modal} project={project} onClose={() => setModal(null)} />}
     {modal?.type === 'tab-stops' && <TabStops Modal={Modal} target={modal.target} onClose={() => setModal(null)} />}
     {modal?.type === 'local-grammar' && <LocalGrammarDialog Modal={Modal} editor={editor} language={documentLanguage} onClose={() => setModal(null)} />}
+    {modal?.type === 'personal-dictionary' && <PersonalDictionary Modal={Modal} language={documentLanguage} onClose={() => setModal(null)} />}
     {modal?.type === 'page-setup' && <PageSetupDialog Modal={Modal} project={project} onClose={() => setModal(null)} onApply={printLayout => { updateProject({ printLayout }, 'Page setup'); setModal(null); }} />}
     {modal?.type === 'named-styles' && <NamedStyles Modal={Modal} styles={project.namedStyles || []} onClose={() => setModal(null)} onSave={style => { const current = projectRef.current; const list = current.namedStyles || []; updateProject({ namedStyles: list.some(item => item.id === style.id) ? list.map(item => item.id === style.id ? style : item) : [...list, style] }, `Save style ${style.name}`); }} onClear={() => { clearNamedStyles(editorRef.current); setModal(null); }} onApply={style => { if (!style || !applyNamedStyle(editorRef.current, style)) { notify('Select text or place the cursor in a paragraph to apply the style.'); return; } setModal(null); }} />}
     {modal?.type === 'thesaurus' && <Thesaurus Modal={Modal} api={api} initial={modal.word} language={documentLanguage} onClose={() => setModal(null)} />}

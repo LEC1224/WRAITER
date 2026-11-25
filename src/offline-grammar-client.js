@@ -2,9 +2,9 @@ import { passageQueue } from './grammar-passage-queue.js';
 
 // A single shared worker prevents a second 20 MB grammar engine from being
 // loaded for every chapter or multitask pane.
-let worker, nextId = 0, wordsPromise, dictionaryVersion = 0;
-const addedThisSession = new Set();
-const waiting = new Map(), listeners = new Set();
+let worker, nextId = 0, dictionaryVersion = 0;
+const waiting = new Map();
+const profiles = new WeakMap(), offline = {};
 
 const basicQueue = passageQueue(), deepQueue = passageQueue();
 
@@ -27,24 +27,60 @@ function getWorker() {
 }
 
 export function currentDictionaryVersion() { return dictionaryVersion; }
-export function subscribeDictionary(listener) { listeners.add(listener); return () => listeners.delete(listener); }
+function dictionaryProfile() {
+  const api = globalThis.window?.wraiter || offline;
+  if (!profiles.has(api)) {
+    const state = { api, listeners: new Set(), reading: null, updates: Promise.resolve() };
+    profiles.set(api, state);
+    // Chromium can also add a word directly from its native spelling menu.
+    api.onOfflineDictionaryChanged?.(() => queueDictionaryUpdate(state).catch(() => {}));
+  }
+  return profiles.get(api);
+}
+export function subscribeDictionary(listener) {
+  const { listeners } = dictionaryProfile();
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+function readDictionary(state) {
+  if (!state.reading) {
+    const request = Promise.resolve().then(() => state.api.offlineDictionaryWords?.() ?? []).then(words => {
+      if (!Array.isArray(words)) throw new Error('Could not read the personal dictionary.');
+      return [...new Set(words.filter(word => typeof word === 'string'))];
+    });
+    state.reading = request;
+    request.catch(() => { if (state.reading === request) state.reading = null; });
+  }
+  return state.reading;
+}
 export function personalDictionary() {
-  if (!wordsPromise) wordsPromise = Promise.resolve(globalThis.window?.wraiter?.offlineDictionaryWords?.() || [])
-    .then(words => [...new Set([...(Array.isArray(words) ? words.filter(word => typeof word === 'string') : []), ...addedThisSession])])
-    .catch(() => [...addedThisSession]);
-  return wordsPromise;
+  const state = dictionaryProfile();
+  return state.updates.then(() => readDictionary(state));
 }
-export async function addPersonalWord(word) {
-  if (!globalThis.window?.wraiter?.addOfflineDictionaryWord) throw new Error('The personal dictionary is unavailable.');
-  const added = await globalThis.window.wraiter.addOfflineDictionaryWord(word);
-  if (!added) throw new Error('The word could not be saved to the personal dictionary.');
-  addedThisSession.add(word);
-  wordsPromise = undefined; dictionaryVersion++;
-  for (const listener of listeners) listener();
+function queueDictionaryUpdate(state, change) {
+  const request = state.updates.then(change).then(async () => {
+    state.reading = null;
+    const words = await readDictionary(state);
+    dictionaryVersion++;
+    for (const listener of state.listeners) listener(words);
+    return words;
+  });
+  state.updates = request.catch(() => {});
+  return request;
 }
+function changeDictionaryWord(command, ...args) {
+  const state = dictionaryProfile();
+  return queueDictionaryUpdate(state, async () => {
+    if (!state.api[command]) throw new Error('The personal dictionary is unavailable.');
+    if (!await state.api[command](...args)) throw new Error('Could not update the personal dictionary.');
+  });
+}
+export function addPersonalWord(word) { return changeDictionaryWord('addOfflineDictionaryWord', word); }
+export function updatePersonalWord(previous, word) { return changeDictionaryWord('updateOfflineDictionaryWord', previous, word); }
+export function removePersonalWord(word) { return changeDictionaryWord('removeOfflineDictionaryWord', word); }
 export function checkOffline(texts, language, version, signal) {
   return basicQueue(signal, async () => {
-    const words = await personalDictionary();
+    const words = await personalDictionary().catch(() => []);
     signal?.throwIfAborted();
     const target = getWorker(), id = ++nextId;
     const cancel = () => { if (target === worker && waiting.has(id)) target.postMessage({ cancel: id }); };

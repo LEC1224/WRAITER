@@ -35,6 +35,7 @@ function menuTemplate(send, close, shortcuts = {}, recent = [], prefs = {}, revi
   })) };
   const spellingMenu = { label: 'Spelling and grammar', submenu: [
     item('Spelling and grammar settings…', 'settings-grammar'),
+    item('Personal dictionary…', 'personal-dictionary'),
     { label: 'Highlight spelling mistakes', type: 'checkbox', checked: prefs.spellcheck !== false, click: () => send('toggle-spellcheck') },
     separator,
     item('&Proofread…', 'proofread'), item('Local grammar review…', 'local-grammar'), item('Correct selected text', 'correct'),

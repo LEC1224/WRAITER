@@ -7,6 +7,7 @@ import { runBrowserAI } from './ai.js';
 import { readRecovery, saveRecovery } from './recovery.js';
 import { sealDocument, openGrammarDictionary, sealGrammarDictionary } from '../cloud-vault.js';
 import { grammarExceptionStore } from '../../electron/grammar-exceptions.mjs';
+import { updateWordList, validateNewWord } from '../../electron/personal-spelling.mjs';
 import { readCloudDocument } from './vault-client.js';
 
 const TASKS = ['continue', 'correct', 'rewrite', 'proofread', 'chat', 'checkpoint'];
@@ -53,6 +54,20 @@ export function createBrowserAdapter({ user, vaultKey, sessionTag = getRequestSe
     },
     lock: run => navigator.locks.request(dictionarySlot, run)
   });
+  let settingsQueue = Promise.resolve();
+  function queueSettings(operation) {
+    const result = settingsQueue.then(operation);
+    settingsQueue = result.catch(() => {});
+    return result;
+  }
+  async function changeDictionaryWord(previous, next) {
+    return queueSettings(async () => {
+      const personalDictionary = updateWordList(prefs.personalDictionary || [], previous, next);
+      await request('/api/settings', { method: 'PUT', body: cleanSettings({ ...prefs, personalDictionary }) });
+      prefs = { ...prefs, personalDictionary };
+      return true;
+    });
+  }
   const profile = task => cloudProfile({ ...prefs, ...(prefs.taskProfiles?.[task] || {}) });
   const signature = value => `${value.provider}|${String(value.baseUrl || '').replace(/\/+$/, '')}`;
   const publicPrefs = () => ({ ...prefs, hasKey: keys.has(signature(profile('continue'))), taskHasKey: Object.fromEntries(TASKS.map(task => [task, PROVIDERS.has((prefs.taskProfiles?.[task] || prefs).provider) && keys.has(signature({ ...prefs, ...prefs.taskProfiles?.[task] }))])), recent: order.map(id => `cloud:${id}`) });
@@ -180,11 +195,17 @@ export function createBrowserAdapter({ user, vaultKey, sessionTag = getRequestSe
     async appendEditHistory(id, events) { const entry = entries.get(id); if (!entry) throw new Error('This editing history belongs to another document.'); append(entry, events); await preserve(entry); return { sequence: entry.journal.length }; },
     async restartEditHistory(project, initial) { const entry = entries.get(project.id); if (!entry) throw new Error('Open the document first.'); download(JSON.stringify({ project: entry.project, journal: entry.journal }), `${filename(project.title)} - preserved history.wraiter`); entry.journal = [initial]; entry.project = { ...project, historySequence: 1 }; await preserve(entry); return { sequence: 1, preservedPath: 'your downloaded preserved-history file and browser recovery' }; },
     async settings(update = {}) {
-      const target = update.apiKeyTask || 'continue', selected = { ...prefs, ...prefs.taskProfiles?.[target], ...('provider' in update ? { provider: update.provider, baseUrl: update.baseUrl || '' } : {}) };
-      if (update.clearKey) keys.delete(signature(selected)); if (update.apiKey?.trim()) keys.set(signature(selected), update.apiKey.trim());
-      prefs = { ...prefs, ...cleanSettings(update), setupComplete: true, tutorialComplete: true, distribution: 'web' };
-      for (const item of [prefs, ...Object.values(prefs.taskProfiles || {})]) cloudProfile({ ...prefs, ...item });
-      await request('/api/settings', { method: 'PUT', body: cleanSettings(prefs) }); return publicPrefs();
+      return queueSettings(async () => {
+        const target = update.apiKeyTask || 'continue', selected = { ...prefs, ...prefs.taskProfiles?.[target], ...('provider' in update ? { provider: update.provider, baseUrl: update.baseUrl || '' } : {}) };
+        if (update.clearKey) keys.delete(signature(selected)); if (update.apiKey?.trim()) keys.set(signature(selected), update.apiKey.trim());
+        // The Settings form may predate dictionary edits made from its nested manager.
+        const { personalDictionary: _savedWords, ...editable } = update;
+        const next = { ...prefs, ...cleanSettings(editable), setupComplete: true, tutorialComplete: true, distribution: 'web' };
+        for (const item of [next, ...Object.values(next.taskProfiles || {})]) cloudProfile({ ...next, ...item });
+        await request('/api/settings', { method: 'PUT', body: cleanSettings(next) });
+        prefs = next;
+        return publicPrefs();
+      });
     },
     async exportFile(payload) {
       if (payload.format === 'pdf') return api.previewPDF(payload);
@@ -268,7 +289,14 @@ export function createBrowserAdapter({ user, vaultKey, sessionTag = getRequestSe
     async openLink(url) { if (!/^(https?:|mailto:)/i.test(url)) throw new Error('Unsupported link.'); window.open(url, '_blank', 'noopener,noreferrer'); return true; },
     async tabFileAction(id, action) { const project = entries.get(id)?.project; if (!project) throw new Error('Open the document first.'); if (action === 'reveal') onLibrary?.(); else await navigator.clipboard.writeText(action === 'copy-name' ? project.title : `${location.origin}/?document=${entries.get(id).cloudId}`); return true; },
     async listFonts() { return ['Arial', 'Cambria', 'Calibri', 'Georgia', 'Times New Roman', 'Verdana', 'Tahoma', 'Courier New', 'Trebuchet MS', 'serif', 'sans-serif', 'monospace']; },
-    async offlineDictionaryWords() { return prefs.personalDictionary || []; }, async addOfflineDictionaryWord(word) { const words = [...new Set([...(prefs.personalDictionary || []), word])]; await api.settings({ personalDictionary: words }); return true; },
+    async offlineDictionaryWords() { await settingsQueue; return prefs.personalDictionary || []; },
+    addOfflineDictionaryWord: word => changeDictionaryWord(null, word),
+    removeOfflineDictionaryWord: word => changeDictionaryWord(word, null),
+    updateOfflineDictionaryWord(previous, next) {
+      if (typeof previous !== 'string') throw new Error('Choose the saved word to edit.');
+      validateNewWord(next);
+      return changeDictionaryWord(previous, next);
+    },
     personalGrammarExceptions: grammarExceptions.list,
     addPersonalGrammarException: grammarExceptions.add,
     updatePersonalGrammarException: grammarExceptions.edit,

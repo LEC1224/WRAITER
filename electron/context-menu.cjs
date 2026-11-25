@@ -117,7 +117,9 @@ function installContextMenu(window, { Menu, ipcMain, getPreferences = () => ({})
     Menu.buildFromTemplate(contextMenuTemplate(params, context, {
       command: command => contents.send('editor-menu:action', { id, command }),
       replaceMisspelling: word => contents.replaceMisspelling(word),
-      addToDictionary: word => contents.session.addWordToSpellCheckerDictionary(word)
+      addToDictionary: word => {
+        if (contents.session.addWordToSpellCheckerDictionary(word)) contents.send('offline-dictionary:changed');
+      }
     }, getPreferences().hotkeys)).popup({ window });
   }
   function dispose() {

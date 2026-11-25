@@ -340,7 +340,9 @@ app.whenReady().then(async () => {
     return result;
   }));
 
-  handle('offline-dictionary:words', () => win.webContents.session.listWordsInSpellCheckerDictionary());
+  const { nativeSpellingDictionary } = await import('./personal-spelling.mjs');
+  const spellingDictionary = nativeSpellingDictionary(session.defaultSession);
+  handle('offline-dictionary:words', () => spellingDictionary.list());
   const { grammarExceptionStore, maximumExceptionBytes } = await import('./grammar-exceptions.mjs');
   const exceptionFile = file('grammar-exceptions.json');
   const grammarExceptions = grammarExceptionStore({
@@ -367,10 +369,9 @@ app.whenReady().then(async () => {
     ]);
     return rules.map((hints, index) => [...hints, ...neural[index]]);
   });
-  handle('offline-dictionary:add', (_event, word) => {
-    if (typeof word !== 'string' || word.length > 100 || !/^\p{L}+(?:[’'-]\p{L}+)*$/u.test(word)) throw new Error('Choose a single word to add to the dictionary.');
-    return win.webContents.session.addWordToSpellCheckerDictionary(word);
-  });
+  handle('offline-dictionary:add', (_event, word) => spellingDictionary.add(word));
+  handle('offline-dictionary:remove', (_event, word) => spellingDictionary.remove(word));
+  handle('offline-dictionary:edit', (_event, previous, word) => spellingDictionary.edit(previous, word));
   handle('thesaurus:lookup', (_event, word, language) => require('./thesaurus.cjs').lookup(word, language));
   handle('workspace:layout', (_e, layout) => { profileLayout.rememberView(layout); return true; });
   handle('workspace:layout-projects', () => workspace.paneProjects(profileLayout.view.panes));

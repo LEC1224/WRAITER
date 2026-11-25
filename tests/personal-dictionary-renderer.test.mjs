@@ -4,6 +4,7 @@ import { editorialSchema as schema } from '../electron/editor-schema.mjs';
 import { grammarExceptionStore } from '../electron/grammar-exceptions.mjs';
 import { documentGrammar } from '../src/local-grammar.js';
 import { addGrammarException, loadGrammarExceptions, removeGrammarException, updateGrammarException } from '../src/personal-grammar-exceptions.js';
+import { addPersonalWord, currentDictionaryVersion, personalDictionary, removePersonalWord, subscribeDictionary, updatePersonalWord } from '../src/offline-grammar-client.js';
 
 function useBridge(t, bridge) {
   const original = globalThis.window;
@@ -70,4 +71,29 @@ test('a change from another browser window updates already cached manuscript hin
   await bridge.removePersonalGrammarException(entry);
   await externalChange();
   assert.equal(documentGrammar(doc).length, 1);
+});
+
+test('native menu adds and concurrent word edits refresh the word list and spelling caches', async t => {
+  const words = new Set(['OldWord']), snapshots = [];
+  let nativeChange;
+  useBridge(t, {
+    offlineDictionaryWords: () => [...words],
+    onOfflineDictionaryChanged: listener => { nativeChange = listener; },
+    addOfflineDictionaryWord(word) { words.add(word); return true; },
+    updateOfflineDictionaryWord(before, after) { if (!words.delete(before)) return false; words.add(after); return true; },
+    removeOfflineDictionaryWord: word => words.delete(word)
+  });
+  t.after(subscribeDictionary(entries => snapshots.push(entries)));
+  const version = currentDictionaryVersion();
+  assert.deepEqual(await personalDictionary(), ['OldWord']);
+  words.add('NativeWord');
+  nativeChange();
+  assert.deepEqual(await personalDictionary(), ['OldWord', 'NativeWord']);
+  await Promise.all([addPersonalWord('NewWord'), updatePersonalWord('NewWord', 'Renamed'), removePersonalWord('Renamed')]);
+  assert.deepEqual(snapshots.map(list => list.at(-1)), ['NativeWord', 'NewWord', 'Renamed', 'NativeWord']);
+  await assert.rejects(removePersonalWord('Missing'));
+  assert.equal(currentDictionaryVersion(), version + 4);
+  assert.deepEqual(await personalDictionary(), ['OldWord', 'NativeWord']);
+  globalThis.window.wraiter = { offlineDictionaryWords: () => ['OtherProfile'] };
+  assert.deepEqual(await personalDictionary(), ['OtherProfile']);
 });
