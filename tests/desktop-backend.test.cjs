@@ -132,6 +132,28 @@ test('Git checkpoints flush the latest edit and isolate manuscript identifiers',
   assert.equal((await history.list('two')).entries.length, 1);
   await assert.rejects(history.revision('two', listing.entries[0].revision));
 });
+test('checkpoint flushes keep the captured document and preserve edits arriving for another tab', async t => {
+  const directory = await temporary(t), history = new GitHistory(directory, { debounce: 60000 });
+  const first = draft('one'), second = draft('two'), { promise: started, resolve: start } = Promise.withResolvers();
+  const { promise: paused, resolve: resume } = Promise.withResolvers();
+  const initialize = history.initialize.bind(history);
+  t.mock.method(history, 'initialize', async id => {
+    if (id === first.id) { start(); await paused; }
+    return initialize(id);
+  });
+  history.schedule(first); history.schedule(second);
+  const flushing = history.flush();
+  await started;
+  first.notes = 'Changed after the checkpoint was queued.';
+  second.notes = 'New notes while the other tab is flushing.';
+  history.schedule(second);
+  resume(); await flushing;
+  const firstList = await history.list(first.id), secondList = await history.list(second.id);
+  assert.equal(firstList.entries.length, 1);
+  assert.equal((await history.revision(first.id, firstList.headRevision)).notes, 'Author notes');
+  assert.equal(secondList.entries.length, 2);
+  assert.equal((await history.revision(second.id, secondList.headRevision)).notes, second.notes);
+});
 test('missing Git reports a useful status without changing source or recovery', async t => {
   const directory = await temporary(t); const history = new GitHistory(directory, { executable: 'wraiter-nonexistent-git-test' });
   const result = await history.list('new'); assert.equal(result.available, false); assert.match(result.error, /Git is not installed/);

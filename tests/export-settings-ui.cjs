@@ -36,9 +36,14 @@ const storageKey = 'wraiter.export-settings.v1';
   const check = (name, checked) => dialog.getByLabel(name, { exact: true }).setChecked(checked);
   const close = () => dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   const reset = () => dialog.getByRole('button', { name: 'Reset to defaults', exact: true }).click();
+  const assertAutomatic = async action => {
+    assert.equal(await dialog.getByRole('combobox', { name: 'Export destination', exact: true }).count(), 0);
+    assert.ok(await dialog.getByRole('button', { name: action, exact: true }).isVisible());
+  };
   const assertDefaults = async () => {
     assert.equal(await value('Export format'), 'pdf'); assert.equal(await value('Export scope'), 'manuscript');
     assert.equal(await value('Export destination'), 'file'); assert.equal(await value('PDF colour'), 'light');
+    assert.ok(await dialog.getByRole('button', { name: 'Save PDF file…', exact: true }).isVisible());
     for (const name of ['Include manuscript title', 'Include chapter headings']) assert.equal(await dialog.getByLabel(name, { exact: true }).isChecked(), true);
     for (const name of ['Custom page setup', 'Add generated contents list']) assert.equal(await dialog.getByLabel(name, { exact: true }).isChecked(), false);
   };
@@ -56,13 +61,14 @@ const storageKey = 'wraiter.export-settings.v1';
     assert.equal(await value('Export format'), 'pdf-mobile'); assert.equal(await value('Export destination'), 'preview');
     assert.equal(await dialog.getByLabel('Header', { exact: true }).inputValue(), 'Export header {page}');
     await select('Export format', 'discord'); await select('Export scope', 'chapter'); await select('Export chapter', 'second');
-    await select('Export destination', 'clipboard');
-    await dialog.getByRole('button', { name: 'Export to Clipboard', exact: true }).click(); await dialog.waitFor({ state: 'hidden' });
+    await assertAutomatic('Copy to clipboard');
+    await dialog.getByRole('button', { name: 'Copy to clipboard', exact: true }).click(); await dialog.waitFor({ state: 'hidden' });
     assert.equal(await app.evaluate(() => global.exportWrites.at(-1)), 'Second chapter passage.\n\n');
     await app.close(); app = null; await launch(); await open();
-    assert.equal(await value('Export format'), 'discord'); assert.equal(await value('Export destination'), 'clipboard');
+    assert.equal(await value('Export format'), 'discord'); await assertAutomatic('Copy to clipboard');
     assert.equal(await value('Export scope'), 'chapter'); assert.equal(await value('Export chapter'), 'second');
     await select('Export format', 'pdf-mobile'); assert.equal(await value('PDF colour'), 'dark');
+    assert.equal(await value('Export destination'), 'preview', 'Automatic clipboard formats must preserve the saved PDF choice');
     assert.equal(await value('Paper size'), 'Letter'); assert.equal(await value('Orientation'), 'portrait');
     assert.equal(await dialog.getByLabel('Top margin (mm)', { exact: true }).inputValue(), '14');
     assert.equal(await dialog.getByLabel('Header', { exact: true }).inputValue(), 'Export header {page}');
@@ -70,19 +76,19 @@ const storageKey = 'wraiter.export-settings.v1';
     assert.equal(await dialog.getByLabel('Add generated contents list', { exact: true }).isChecked(), true);
     await select('Export scope', 'manuscript'); assert.equal(await dialog.getByLabel('Include manuscript title', { exact: true }).isChecked(), false);
     assert.equal(await dialog.getByLabel('Include chapter headings', { exact: true }).isChecked(), false);
-    await select('Export format', 'odt'); assert.equal(await value('Export destination'), 'file');
+    await select('Export format', 'odt'); await assertAutomatic('Save ODT file…');
     assert.equal(await dialog.getByLabel('Include passage comments in Office file', { exact: true }).isChecked(), true);
     assert.equal(await dialog.getByLabel('Include tracked text changes for review', { exact: true }).isChecked(), true);
-    await select('Export format', 'discord'); assert.equal(await value('Export destination'), 'clipboard'); await close();
+    await select('Export format', 'discord'); await assertAutomatic('Copy to clipboard'); await close();
     await open('print'); assert.equal(await value('Export format'), 'pdf'); assert.equal(await value('Export destination'), 'preview');
-    await close(); await open(); assert.equal(await value('Export format'), 'discord'); assert.equal(await value('Export destination'), 'clipboard'); await close();
+    await close(); await open(); assert.equal(await value('Export format'), 'discord'); await assertAutomatic('Copy to clipboard'); await close();
 
     const editor = () => page.getByRole('textbox', { name: 'Manuscript editor', exact: true });
     await editor().evaluate(element => element.editor.commands.setTextSelection({ from: 1, to: 6 }));
     await open(); await select('Export scope', 'selection'); await close(); await open();
     assert.equal(await value('Export scope'), 'selection');
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(960, 650));
-    for (const name of ['Reset to defaults', 'Cancel', 'Export to Clipboard']) {
+    for (const name of ['Reset to defaults', 'Cancel', 'Copy to clipboard']) {
       const box = await dialog.getByRole('button', { name, exact: true }).boundingBox();
       const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
       assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height, name + ' must fit at the minimum window size');
@@ -100,13 +106,13 @@ const storageKey = 'wraiter.export-settings.v1';
     assert.equal(await value('Paper size'), 'A5'); assert.equal(await value('Orientation'), 'landscape');
     assert.equal(await dialog.getByLabel('Header', { exact: true }).inputValue(), 'Manuscript header');
     await reset(); await close(); await app.close(); app = null; await launch(); await open(); await assertDefaults();
-    await select('Export format', 'discord'); await select('Export destination', 'clipboard');
+    await select('Export format', 'discord'); await assertAutomatic('Copy to clipboard');
     await select('Export scope', 'chapter'); await select('Export chapter', 'second'); await close();
     await page.evaluate(key => { const saved = JSON.parse(localStorage.getItem(key)); saved.chapterId = 'removed'; localStorage.setItem(key, JSON.stringify(saved)); }, storageKey);
     await open(); assert.equal(await value('Export chapter'), 'first'); await select('Export chapter', 'second'); await close();
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('command', 'new'));
     await page.waitForFunction(() => document.querySelector('.manuscript')?.editor?.state.doc.textContent === '');
-    await open(); assert.equal(await value('Export format'), 'discord'); assert.equal(await value('Export destination'), 'clipboard');
+    await open(); assert.equal(await value('Export format'), 'discord'); await assertAutomatic('Copy to clipboard');
     const newChapter = await value('Export chapter');
     assert.ok(newChapter && !['first', 'second'].includes(newChapter));
     await reset(); await close();
@@ -115,8 +121,12 @@ const storageKey = 'wraiter.export-settings.v1';
       await page.evaluate(([key, value]) => localStorage.setItem(key, value), [storageKey, damaged]);
       await open(); await assertDefaults(); await close();
     }
+    for (const destination of ['file', 'clipboard', 'preview']) {
+      await page.evaluate(([key, destination]) => localStorage.setItem(key, JSON.stringify({ format: 'discord', destination })), [storageKey, destination]);
+      await open(); await assertAutomatic('Copy to clipboard'); await close();
+    }
     assert.deepEqual(errors, []);
-    console.log('PASS export options survive closing, clipboard export and restart; PDF/Office options, Print, selection fallback, reset persistence and minimum-size layout. Screenshots: ' + userData);
+    console.log('PASS remembered export settings, automatic destinations with legacy preferences, PDF/Office options, Print, selection fallback, reset persistence and minimum-size layout. Screenshots: ' + userData);
   } finally {
     if (app) { try { await page.evaluate(() => window.wraiter.finishClose()); } catch {} await app.close().catch(() => {}); }
   }

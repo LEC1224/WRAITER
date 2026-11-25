@@ -15,6 +15,21 @@ export async function runIOTests() {
   const canvas = document.createElement('canvas'); canvas.width = 80; canvas.height = 160; canvas.getContext('2d').fillRect(0, 0, 80, 160);
   const picture = canvas.toDataURL('image/png');
   const project = newProject(); project.title = 'Synthetic <test> & manuscript'; project.notes = 'PRIVATE NOTES'; project.references = [{ id: 'ref', title: 'PRIVATE REFERENCE', text: 'Not publication content.' }];
+  await test('DeviantArt publication clipboard scopes text, normalizes paragraph gaps and omits private review state', async () => {
+    const input = newProject(); input.notes = 'PRIVATE NOTES';
+    input.chapters[0].content = { type: 'doc', content: [
+      { type: 'paragraph', content: [{ type: 'text', text: 'Bold', marks: [{ type: 'bold' }] }] }, paragraph(''),
+      { type: 'paragraph', content: [{ type: 'text', text: ' removed', marks: [{ type: 'trackedChange', attrs: { id: 'delete', kind: 'delete', author: 'Private author', date: '2026-01-01T00:00:00Z' } }] }, { type: 'text', text: 'Kept', marks: [{ type: 'italic' }] }] }
+    ] };
+    const before = JSON.stringify(input);
+    const payload = await exportPayload(input, 'deviantart', extensions, { scope: 'chapter', chapterId: input.chapters[0].id, includeChapterTitles: false });
+    assert(payload.clipboardHTML === '<p><strong>Bold</strong></p><p><br></p><p><em>Kept</em></p>', 'Literature rich clipboard payload or spacing changed');
+    assert(payload.clipboardText === 'Bold\n\nKept', 'Literature plain fallback must have one empty line');
+    assert(!JSON.stringify(payload).includes('PRIVATE') && !JSON.stringify(payload).includes('removed') && !JSON.stringify(payload).includes('Private author'), 'Private content leaked');
+    assert(JSON.stringify(input) === before, 'Export mutated the editable manuscript');
+    const selection = await exportPayload(input, 'deviantart', extensions, { scope: 'selection', selectionDoc: { type: 'doc', content: [paragraph('Selected text')] } });
+    assert(selection.clipboardHTML === '<p>Selected text</p>', 'Selection must omit headings and unselected text');
+  });
   await test('Named styles remain linked and editable through Office round trips', async () => {
     const input = newProject();
     input.namedStyles = [{ id: 'my-paragraph', name: 'Novel text', kind: 'paragraph', attrs: { fontFamily: 'Georgia', fontSize: 14, bold: true, lineHeight: 2, spaceBefore: 7 } }, { id: 'my-character', name: 'Thoughts', kind: 'character', attrs: { color: '#112233', italic: true } }];

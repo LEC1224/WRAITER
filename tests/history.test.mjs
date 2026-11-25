@@ -81,6 +81,30 @@ test('history status remains current across undo, redo, branching, reload and un
   assert.deepEqual(historyStatus(null), { canUndo: false, canRedo: false, undoLabel: '', redoLabel: '', totalEdits: 0, sequence: 0 });
 });
 
+test('incremental status and timeline agree with a full recount through grouped edits and branches', () => {
+  let project = manuscript(), journal = createHistory(project);
+  const compare = () => {
+    assert.deepEqual(historyStatus(journal), historyStatus({ ...journal }));
+    assert.deepEqual(timelineEntries(journal), timelineEntries({ ...journal }));
+  };
+  compare();
+  for (const character of ' hello, world') {
+    ({ project, journal } = typeAtCaret(project, journal, character));
+    compare();
+  }
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema)); compare();
+  ({ project, journal } = applyHistory(project, journal, 'redo', schema)); compare();
+  ({ project, journal } = applyHistory(project, journal, 'undo', schema)); compare();
+  for (const character of 'there') { ({ project, journal } = typeAtCaret(project, journal, character)); compare(); }
+  const after = { ...project, title: 'A changed title' };
+  journal = recordProjectChange(journal, project, after, { label: 'Rename' }); project = after; compare();
+  journal = createHistory(structuredClone(project), { events: structuredClone(journal.events) }); compare();
+  for (const character of ' again') { ({ project, journal } = typeAtCaret(project, journal, character)); compare(); }
+  const expected = timelineEntries(journal), changed = timelineEntries(journal);
+  changed[0].summary = 'Caller-owned value'; changed[0].forward.push({ stepType: 'caller-owned' });
+  assert.deepEqual(timelineEntries(journal), expected, 'Caller edits cannot poison cached timeline rows or step arrays');
+});
+
 test('typing is undone a word at a time and grouped timeline rows survive restart', () => {
   let project = manuscript(), journal = createHistory(project);
   ({ project, journal } = typeAtCaret(project, journal, ' hello, world'));
@@ -101,6 +125,22 @@ test('typing is undone a word at a time and grouped timeline rows survive restar
   assert.equal(contents(project)[0], 'Alpha hello,');
   ({ project, journal } = applyHistory(project, journal, 'redo', schema));
   assert.equal(contents(project)[0], 'Alpha hello, world');
+});
+
+test('a later failure in a grouped undo preserves the published cursor, events and text', () => {
+  let project = manuscript(), journal = createHistory(project);
+  ({ project, journal } = typeAtCaret(project, journal, 'word'));
+  assert.equal(new Set(journal.entries.map(entry => entry.groupId)).size, 1);
+  // Three valid reversals precede the damaged oldest step.
+  const damaged = structuredClone(journal);
+  damaged.entries[0].inverse[0].stepType = 'unknown-step';
+  const original = JSON.stringify({ project, journal: damaged });
+  assert.throws(() => applyHistory(project, damaged, 'undo', schema));
+  assert.equal(JSON.stringify({ project, journal: damaged }), original);
+  const undone = applyHistory(project, journal, 'undo', schema);
+  assert.equal(undone.journal.cursor, 0);
+  assert.equal(journal.cursor, 4);
+  assert.equal(journal.events.length, 5);
 });
 
 test('a new branch and caret move separate typing undo groups', () => {

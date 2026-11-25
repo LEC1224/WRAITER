@@ -46,6 +46,19 @@ test('native ODT and DOCX save back to their existing path, retain the original 
   }
 });
 
+test('native fingerprints are recomputed between saves even when the same project object changes', async t => {
+  const f = await fixture(t), { target } = await openSynthetic(f, 'odt');
+  const draft = project('First saved text.');
+  await f.files.persist(draft, encoded('odt', 'First saved text'));
+  const firstHash = f.files.binding.contentHash;
+  draft.chapters[0].content.content[0].content[0].text = 'Second saved text.';
+  await f.files.persist(draft, encoded('odt', 'Second saved text'));
+  assert.notEqual(f.files.binding.contentHash, firstHash);
+  assert.equal((await fs.readFile(target)).toString(), 'PKSecond saved text');
+  const reopened = await new DocumentFiles(new DocumentStore(f.userData), f.userData).open(target);
+  assert.equal(reopened.project.chapters[0].content.content[0].content[0].text, 'Second saved text.');
+});
+
 test('fidelity review stages a native edit in recovery without overwriting until explicit review', async t => {
   const f = await fixture(t); const { target, original } = await openSynthetic(f, 'odt', { requiresReview: true, warnings: ['Unsupported floating drawing.'] });
   const changed = project('A staged edit.'); changed.historySequence = 2;
@@ -100,6 +113,27 @@ test('Save As converts a reviewed or unreviewed native document while preserving
   assert.equal(f.store.currentPath, destination); await assert.rejects(f.files.persist(changed, encoded('docx', 'Again'), { token: chosen.token }), /destination again/);
 });
 
+test('WRAITER Save As preserves a destination changed or created while local recovery is staged', async t => {
+  for (const existed of [false, true]) {
+    const f = await fixture(t), source = await openSynthetic(f, 'odt');
+    const target = path.join(f.directory, 'New destination.wraiter');
+    if (existed) await fs.writeFile(target, 'Existing version.');
+    const selected = await f.files.authorizeTarget(target);
+    const writeRecovery = f.store.writeRecovery.bind(f.store);
+    let changed = false;
+    t.mock.method(f.store, 'writeRecovery', async (...args) => {
+      await writeRecovery(...args);
+      if (!changed) { changed = true; await fs.writeFile(target, 'Version written by another application.'); }
+    });
+    const draft = project('Keep this local revision.');
+    await assert.rejects(f.files.persist(draft, null, { token: selected.token }), /destination changed/);
+    assert.equal(await fs.readFile(target, 'utf8'), 'Version written by another application.');
+    assert.deepEqual(await fs.readFile(source.target), source.original);
+    assert.equal(f.store.currentPath, source.target);
+    assert.deepEqual((await new DocumentStore(f.userData).boot()).project, draft);
+  }
+});
+
 test('native autosave preserves edits when another application changes or deletes the bound file', async t => {
   for (const action of ['changed', 'deleted']) {
     const f = await fixture(t); const { target } = await openSynthetic(f, 'docx');
@@ -118,6 +152,23 @@ test('native open binding refuses an altered source and stale sidecars trigger f
   const fresh = await f.files.open(target); await f.files.bind(project(), { openToken: fresh.openToken });
   await fs.writeFile(target, 'PKChanged after sidecar'); const external = await f.files.open(target);
   assert.equal(external.import, true); assert.equal(Buffer.from(external.bytes).toString(), 'PKChanged after sidecar');
+});
+
+test('a matching but invalid native sidecar is reimported without replacing the active recovery', async t => {
+  const f = await fixture(t), current = project('Keep this active draft.', 'active');
+  await f.store.replace(current);
+  const recovery = await fs.readFile(f.store.recoveryPath, 'utf8');
+  const target = path.join(f.directory, 'Invalid sidecar.odt'), bytes = Buffer.from('PKSynthetic document');
+  await fs.writeFile(target, bytes);
+  const broken = project(); broken.chapters[0].content.content = [{ type: 'text', text: 'Invalid directly in a document' }];
+  const sidecar = f.files.sidecar(target);
+  await fs.mkdir(path.dirname(sidecar), { recursive: true });
+  await fs.writeFile(sidecar, JSON.stringify({ sourceHash: hash(bytes), project: broken, binding: {} }));
+  const result = await f.files.open(target);
+  assert.equal(result.import, true); assert.deepEqual(Buffer.from(result.bytes), bytes);
+  assert.deepEqual(f.store.project, current);
+  assert.equal(await fs.readFile(f.store.recoveryPath, 'utf8'), recovery);
+  await assert.rejects(fs.stat(path.join(f.userData, 'Recovered drafts')), { code: 'ENOENT' });
 });
 
 test('native Save As checks destination freshness and invalid encodings before replacement', async t => {
@@ -146,7 +197,9 @@ test('editing journal appends durable immutable events, deduplicates retries, an
   const before = await fs.readFile(journal.filename('journal'), 'utf8'); await journal.append('journal', [first, second]); assert.equal(await fs.readFile(journal.filename('journal'), 'utf8'), before);
   await assert.rejects(journal.append('journal', [{ ...second, entry: { id: 'changed' } }]), /cannot be overwritten/);
   await assert.rejects(journal.append('journal', [{ sequence: 4, kind: 'edit' }]), /missing an earlier event/);
-  const reopened = new EditJournal(f.userData); assert.deepEqual((await reopened.read('journal')).events, [first, second]);
+  const reopened = new EditJournal(f.userData);
+  assert.deepEqual(await reopened.read('journal', 0), { events: [], totalEvents: 2 });
+  assert.deepEqual((await reopened.read('journal')).events, [first, second]);
   assert.deepEqual(await reopened.read('journal', 1), { events: [first], totalEvents: 2 });
   assert.equal(await fs.readFile(journal.filename('journal'), 'utf8'), before);
 });
@@ -168,6 +221,7 @@ test('journal append resolves only after fsync, so recovery cannot name a not-ye
 test('an unreadable interior history record never silently discards later saved edits', async t => {
   const f = await fixture(t); const journal = new EditJournal(f.userData); await fs.mkdir(journal.directory, { recursive: true });
   const text = '{"sequence":1,"kind":"init"}\n{bad}\n{"sequence":3,"kind":"edit"}\n'; await fs.writeFile(journal.filename('corrupt'), text);
+  await assert.rejects(journal.read('corrupt', 0), /unreadable record/);
   await assert.rejects(journal.read('corrupt'), /unreadable record/); assert.equal(await fs.readFile(journal.filename('corrupt'), 'utf8'), text);
 });
 

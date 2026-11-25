@@ -19,7 +19,10 @@ const root = path.resolve(__dirname, '..');
     const payload = JSON.parse(body); count++;
     if (count === 1) { seenPrompt = JSON.stringify(payload); firstSeen(); return; }
     if (count === 2) { finishSecond = () => reply(res); secondSeen(); return; }
-    reply(res);
+    res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ findings: [
+      { passageId: 'p1', start: 4, original: 'walkd', replacement: 'walked', severity: 'definite', category: 'spelling', reason: 'Past-tense spelling.' },
+      { passageId: 'p2', start: 5, original: 'walkd', replacement: 'walked', severity: 'definite', category: 'spelling', reason: 'Past-tense spelling.' }
+    ] }) } }] }));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}/v1`;
@@ -28,9 +31,9 @@ const root = path.resolve(__dirname, '..');
   const env = { ...process.env, WRAITER_USER_DATA: profile }; delete env.ELECTRON_RUN_AS_NODE;
   let app;
   try {
-    app = await _electron.launch({ args: [root], env, timeout: 60000 }); const page = await app.firstWindow();
+    app = await _electron.launch(process.env.WRAITER_EXECUTABLE ? { executablePath: process.env.WRAITER_EXECUTABLE, args: [], env, timeout: 60000 } : { args: [root], env, timeout: 60000 }); const page = await app.firstWindow();
     await page.getByRole('textbox', { name: 'Manuscript editor', exact: true }).waitFor({ timeout: 30000 });
-    const make = id => ({ id, projectId: 'inline-ipc', scope: 'selection', language: 'en-US', style: 'PRIVATE VOICE', passages: [{ id: 'p1', chapterTitle: 'PRIVATE CHAPTER', paragraph: 1, text: 'A sample sentence.' }] });
+    const make = id => ({ id, projectId: 'inline-ipc', scope: 'selection', language: 'en-US', style: 'PRIVATE VOICE', passages: [{ id: 'p1', chapterTitle: 'PRIVATE CHAPTER', paragraph: 1, text: 'She walkd home.' }, { id: 'p2', chapterTitle: 'PRIVATE OTHER CHAPTER', paragraph: 2, text: 'They walkd home.' }] });
     assert.deepEqual(await page.evaluate(request => window.wraiter.inlineGrammar(request), make('disabled')), { skipped: true }); assert.equal(count, 0);
     await page.evaluate(() => window.wraiter.settings({ aiGrammar: true }));
     await page.evaluate(request => { window.__inlinePending = window.wraiter.inlineGrammar(request); }, make('inline-1'));
@@ -42,6 +45,12 @@ const root = path.resolve(__dirname, '..');
     assert.deepEqual(await page.evaluate(request => window.wraiter.inlineGrammar(request), make('busy')), { skipped: true });
     finishSecond(); assert.deepEqual(await page.evaluate(() => window.__manualPending), { findings: [] });
     assert.ok(!seenPrompt.includes('PRIVATE CHAPTER') && !seenPrompt.includes('PRIVATE VOICE') && !seenPrompt.includes('PRIVATE NOTES'));
-    console.log('Inline grammar opt-in, privacy, foreground priority and scoped cancellation passed.');
+    assert.ok(seenPrompt.includes('She walkd home.') && seenPrompt.includes('They walkd home.'));
+    const batch = await page.evaluate(request => window.wraiter.inlineGrammar(request), make('batch-success'));
+    assert.deepEqual(batch.findings.map(item => [item.passageId, item.original, item.replacement]), [['p1', 'walkd', 'walked'], ['p2', 'walkd', 'walked']]);
+    await page.evaluate(() => window.wraiter.settings({ aiGrammar: false }));
+    const atOptOut = count;
+    assert.deepEqual(await page.evaluate(request => window.wraiter.inlineGrammar(request), make('disabled-again')), { skipped: true }); assert.equal(count, atOptOut);
+    console.log('Inline grammar bounded batching, opt-in, privacy, multi-passage findings, foreground priority and scoped cancellation passed.');
   } finally { await app?.close().catch(() => {}); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

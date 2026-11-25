@@ -43,9 +43,21 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
       const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
       element.closest('[contenteditable=true]').focus(); document.dispatchEvent(new Event('selectionchange'));
     });
+    // CDP key delivery also waits on native/automation work outside the editor.
+    // Measure every real beforeinput through the next rendered frame, including
+    // the transaction, React update and layout, rather than timing that transport.
+    await editor.evaluate(element => {
+      window.typingFrames = [];
+      element.addEventListener('beforeinput', () => { const start = performance.now(); requestAnimationFrame(() => window.typingFrames.push(performance.now() - start)); }, true);
+    });
     const typed = ' responsive typing remains local';
     const typingStarted = Date.now(); await page.keyboard.type(typed); const typingMs = Date.now() - typingStarted;
-    assert.ok(typingMs < 2000, `Typing ${typed.length} characters took ${typingMs} ms`);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    const typingFrames = await page.evaluate(() => window.typingFrames.sort((a, b) => a - b));
+    assert.equal(typingFrames.length, typed.length, 'Every character must produce an input and a frame');
+    const inputP95Ms = typingFrames[Math.ceil(typingFrames.length * .95) - 1], inputMaxMs = typingFrames.at(-1);
+    assert.ok(inputP95Ms < 50, `Input-to-frame p95 took ${inputP95Ms} ms`);
+    assert.ok(inputMaxMs < 150, `An input took ${inputMaxMs} ms to reach the next frame`);
     await waitFor(async () => (await editor.locator(':scope > p').last().innerText()).endsWith(typed), 'Tail typing did not appear');
     const addedWords = typed.trim().split(/\s+/).length;
     await waitFor(async () => (await page.locator('.session-progress > span').innerText()).startsWith(`Session: ${addedWords} /`), 'Session word count did not follow typing');
@@ -77,7 +89,7 @@ const paragraph = text => ({ type: 'paragraph', content: [{ type: 'text', text }
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('command', 'select-all'));
     assert.ok((await page.evaluate(() => window.getSelection().toString().length)) > 150000, 'Select All omitted manuscript text');
     assert.deepEqual(errors, []);
-    const report = { passed: true, baseline, manuscriptWords: 120000, activeChapterWords: 30000, activeParagraphs: 1500, initialMs, typingMs, warmSwitchMs, userData };
+    const report = { passed: true, baseline, manuscriptWords: 120000, activeChapterWords: 30000, activeParagraphs: 1500, initialMs, typingMs, inputP95Ms, inputMaxMs, warmSwitchMs, userData };
     await fs.writeFile(path.join(output, baseline ? 'large-manuscript-baseline-results.json' : 'large-manuscript-results.json'), JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report, null, 2));
   } finally { await app?.close().catch(() => {}); }

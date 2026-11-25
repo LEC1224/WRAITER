@@ -22,6 +22,7 @@ const manuscriptSchema = new Schema({
     doc: { content: 'block+' },
     paragraph: { group: 'block', content: 'inline*', attrs: { textAlign: { default: null }, firstLineIndent: { default: null } } },
     heading: { group: 'block', content: 'inline*', attrs: { level: { default: 1 } } },
+    blockquote: { group: 'block', content: 'block+' },
     hardBreak: { inline: true, group: 'inline' },
     image: { inline: true, group: 'inline', attrs: { src: {} } },
     text: { group: 'inline' }
@@ -134,12 +135,66 @@ test('replacement retains overlapping comment anchors and deletion keeps comment
   assert.deepEqual(removed.project.comments, project.comments);
 });
 
+test('replacement in a nested passage preserves comment anchors and rejects a cross-paragraph preview', () => {
+  const a = manuscriptSchema.marks.commentAnchor.create({ id: 'one' }), b = manuscriptSchema.marks.commentAnchor.create({ id: 'two' });
+  const content = doc(paragraph(text('Before.')), manuscriptSchema.node('blockquote', null, [paragraph(text('A '), text('quiet', [a]), text(' hour', [b]), text(' after.'))]), paragraph(text('Following text.')));
+  const project = { ...manuscript(), chapters: [{ id: 'nested', title: 'Nested', content: content.toJSON() }] };
+  const matches = findManuscriptMatches(project, 'quiet hour', { schema: manuscriptSchema });
+  const replaced = replaceManuscriptMatches(project, matches, 'bright evening', { schema: manuscriptSchema });
+  const changed = manuscriptSchema.nodeFromJSON(replaced.project.chapters[0].content);
+  assert.equal(changed.child(1).firstChild.textContent, 'A bright evening after.');
+  assert.deepEqual(changed.child(1).firstChild.child(1).marks.filter(mark => mark.type.name === 'commentAnchor').map(mark => mark.attrs.id).sort(), ['one', 'two']);
+  const crossing = { ...matches[0], from: matches[0].from, to: content.content.size - 1, text: content.textBetween(matches[0].from, content.content.size - 1, '') };
+  assert.throws(() => replaceManuscriptMatches(project, [crossing], 'replacement', { schema: manuscriptSchema }), SearchReplaceError);
+});
+
 test('search crosses hard breaks within a paragraph, skips images and never crosses chapter or paragraph boundaries', () => {
   const content = doc(paragraph(text('first'), manuscriptSchema.node('hardBreak'), text('second')), paragraph(text('third'), manuscriptSchema.node('image', { src: 'sample.png' }), text('fourth')), paragraph(text('fifth')));
   assert.equal(findTextMatches(content, 'first\nsecond').length, 1);
   assert.equal(findTextMatches(content, 'third\uFFFCfourth').length, 0);
   assert.equal(findTextMatches(content, 'secondthird').length, 0);
   assert.equal(findTextMatches(content, 'fourthfifth').length, 0);
+});
+
+test('format-filtered searches agree with the text marks across nested and split runs', () => {
+  const bold = manuscriptSchema.marks.bold.create(), italic = manuscriptSchema.marks.italic.create();
+  const content = doc(
+    paragraph(text('needle ', [bold]), text('needle', [bold, italic]), text(' needle')),
+    manuscriptSchema.node('blockquote', null, [paragraph(text('needle', [italic]), text(' needle', [bold]))]),
+    paragraph(text('needle', [bold]), manuscriptSchema.node('hardBreak'), text('needle', [bold]))
+  );
+  const project = { chapters: [{ id: 'one', title: 'Nested', content: content.toJSON() }] };
+  for (const query of ['needle', 'needle needle', 'needle\nneedle']) for (const format of ['bold', 'italic']) {
+    const expected = findTextMatches(content, query, Infinity).filter(({ from, to }) => {
+      let found = false, all = true;
+      content.nodesBetween(from, to, node => {
+        if (node.isText) { found = true; if (!node.marks.some(mark => mark.type.name === format)) all = false; }
+      });
+      return found && all;
+    });
+    assert.deepEqual(findTextMatches(content, query, Infinity, { format }), expected, `${format}: ${query}`);
+    assert.deepEqual(findManuscriptMatches(project, query, { schema: manuscriptSchema, format }).map(({ from, to }) => ({ from, to })), expected);
+  }
+});
+
+test('result snippets and offsets stay accurate across long, formatted and multi-block text', () => {
+  const content = doc(
+    paragraph(text('😀' + 'a'.repeat(48) + 'needle', [manuscriptSchema.marks.bold.create()]), text(' tail ' + 'b'.repeat(50))),
+    paragraph(text('before '), text('needle', [manuscriptSchema.marks.bold.create()]), manuscriptSchema.node('hardBreak'), text('after needle')),
+    paragraph(text('needle at the end'))
+  );
+  const project = { chapters: [{ id: 'one', title: 'One', content: content.toJSON() }] };
+  for (const [query, options] of [['needle', {}], ['(needle)', { regex: true }], ['needle\nafter', {}]]) {
+    const matches = findManuscriptMatches(project, query, { schema: manuscriptSchema, ...options });
+    assert.deepEqual(matches.map(({ from, to }) => ({ from, to })), findTextMatches(content, query, Infinity, options).map(({ from, to }) => ({ from, to })));
+    for (const match of matches) {
+      const start = content.resolve(match.from), end = content.resolve(match.to);
+      const source = start.parent.textBetween(0, start.parent.content.size, '', node => node.type.name === 'hardBreak' ? '\n' : '\uFFFC');
+      const expected = { before: (start.parentOffset > 44 ? '…' : '') + source.slice(Math.max(0, start.parentOffset - 44), start.parentOffset), match: source.slice(start.parentOffset, end.parentOffset), after: source.slice(end.parentOffset, end.parentOffset + 44) + (end.parentOffset + 44 < source.length ? '…' : '') };
+      assert.deepEqual(match.snippet, expected);
+      assert.equal(match.text, expected.match);
+    }
+  }
 });
 
 test('selected-match validation agrees with literal Find for Unicode, formatted runs and whole-word boundaries', () => {

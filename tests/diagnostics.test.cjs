@@ -30,6 +30,22 @@ async function aged(directory, time) {
   await fs.writeFile(file, '{}\n'); await fs.utimes(file, new Date(time), new Date(time)); return file;
 }
 
+test('slow tab reports keep only measured stages and omit fast or repeated transitions', async t => {
+  const { log } = await fixture(t);
+  const ipc = new EventEmitter(); ipc.handle = () => {};
+  installDiagnostics({ app: new EventEmitter(), ipcMain: ipc, processObject: new EventEmitter(), log, dialog: {}, shell: {} });
+  ipc.emit('diagnostics:slow-tab', {}, 40, 200, 20);
+  ipc.emit('diagnostics:slow-tab', {}, 'PRIVATE_DOCUMENT_TITLE', 1200, 0);
+  ipc.emit('diagnostics:slow-tab', {}, 50, Infinity, 1200);
+  ipc.emit('diagnostics:slow-tab', {}, 50, 1400, 90, 'PRIVATE_DOCUMENT_TITLE');
+  ipc.emit('diagnostics:slow-tab', {}, 500, 800, 120);
+  const reports = (await records(log)).filter(item => item.event === 'workspace.slow-tab-switch');
+  assert.equal(reports.length, 1);
+  const { durationMs, outgoingMs, openingMs, paintMs } = reports[0];
+  assert.deepEqual({ durationMs, outgoingMs, openingMs, paintMs }, { durationMs: 1540, outgoingMs: 50, openingMs: 1400, paintMs: 90 });
+  assert.doesNotMatch(JSON.stringify(reports), /PRIVATE_DOCUMENT_TITLE/);
+});
+
 test('records survive reopening; rotation bounds files and timestamps identify sessions', async t => {
   let now = new Date('2026-11-02T10:00:00Z');
   const { log } = await fixture(t, { now: () => now, maxBytes: 450 });
@@ -156,7 +172,7 @@ test('repeated errors are bounded and fatal/process events preserve normal excep
   assert.equal((await records(log)).length, 5);
   const app = new EventEmitter(), ipc = new EventEmitter(), proc = new EventEmitter(); ipc.handle = () => {};
   installDiagnostics({ app, ipcMain: ipc, processObject: proc, log, dialog: {}, shell: {} });
-  assert.equal(proc.listenerCount('uncaughtException'), 0); assert.equal(proc.listenerCount('unhandledRejection'), 0);
+  assert.equal(proc.listenerCount('uncaughtException'), 0); assert.equal(proc.listenerCount('unhandledRejection'), 1);
   proc.emit('uncaughtExceptionMonitor', new TypeError('PRIVATE_FATAL'), 'unhandledRejection');
   app.emit('render-process-gone', {}, { id: 7 }, { reason: 'crashed', exitCode: -1 });
   app.emit('child-process-gone', {}, { type: 'GPU', reason: 'oom', exitCode: -2, name: 'PRIVATE_PROCESS_NAME' });

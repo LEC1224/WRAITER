@@ -72,6 +72,10 @@ Git is an optional tool for named version checkpoints. You can still save, use r
 
 Open **Settings → Logging → Open log folder**. WRAITER saves local activity and error logs, normally under `%APPDATA%\WRAITER\Logs`. Match the time of the problem to the timestamped entries. Logs include settings changes, panels/windows, document operations, error source locations and detected renderer crashes, while excluding typing and private writing. A `previous-session-interrupted` entry means the last session did not finish normally; it cannot distinguish a crash from a power loss or forced close.
 
+Look for a `wraiter-crash-…json` report near the failure time and the `.jsonl` files with its session ID. The report includes recent activity, pending operations, error causes/source locations and memory/runtime details. If WRAITER cannot open, use File Explorer to visit the profile's `Logs` folder directly. A native main-process crash, forced termination or power loss may leave only the interrupted-session evidence.
+
+For a recurring native crash, enable **Settings → Logging → Save native crash dumps**, save and restart before reproducing it. **Open crash dump folder** finds the resulting binary dumps. These are off by default and never uploaded automatically; they can contain private writing and credentials from memory, so do not attach them to a public issue. Log cleanup does not delete native dumps.
+
 Automatic cleanup keeps one calendar month by default. In **Settings → Logging**, change the retention to 1–24 months or turn **Automatically delete old logs** off, then apply/save. If you want to keep evidence for longer, copy the relevant log files elsewhere before they expire. Logs are stored locally and are not sent with a bug report automatically.
 
 ## I still need help

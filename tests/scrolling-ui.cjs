@@ -39,6 +39,13 @@ const range = (samples, key) => Math.max(...samples.map(item => item[key])) - Ma
     const initialMs = Date.now() - started;
     assert.equal(await editor.locator(':scope > p').count(), 1500);
     await page.waitForFunction(async () => (await window.wraiter.boot()).project.historySequence > 0);
+    // Initial schema normalization is saved asynchronously. Compare scrolling
+    // against that durable editor snapshot, not the pre-normalization fixture.
+    for (let attempt = 0; ; attempt++) {
+      if (await page.evaluate(async () => JSON.stringify((await window.wraiter.boot()).project.chapters[0].content) === JSON.stringify(document.querySelector('.manuscript').editor.getJSON()))) break;
+      assert.ok(attempt < 100, 'The initial editor snapshot was not saved');
+      await page.waitForTimeout(50);
+    }
     const before = await page.evaluate(() => window.wraiter.boot());
     const historyBefore = await page.evaluate(id => window.wraiter.loadEditHistory(id), fixture.id);
     const session = await page.context().newCDPSession(page); await session.send('Performance.enable');

@@ -51,9 +51,11 @@ Run `npm test` and `npm run build`, then the workflow tests relevant to your cha
 | Editor right-click menu and its selection, formatting or AI actions | `npm run test:context-menu` |
 | General editor workflows | `npm run test:app` |
 | Toolbar formatting, highlight colours or their theme contrast | `npm run test:formatting` |
+| Exported highlight opacity and automatic text contrast | `npm run test:highlight-export`, `npm run test:highlight-export-ui`, `npm run test:io` |
 | Whole-manuscript search, anchored comments or format copy/paste | `npm run test:revision-tools` |
 | Assistant document tools, change reports or reverting edits | `npm run test:editorial` |
 | Project tabs and startup | `npm run test:v06` |
+| Side-by-side panels, tab drops and dividers | `npm run test:multitask` and `npm run test:v06` |
 | Explorer file opening and single-instance handling | `npm run test:file-open` |
 | Windows installer file associations and installation/launch/uninstall | `npm run test:installer` and `npm run test:installer-package` |
 | Pagination and rephrasing alternatives | `npm run test:v05` |

@@ -53,7 +53,7 @@ const envelope = (tools = [], message = 'Removed 3 repeated-space runs across bo
   const exportFile = async (format, scope, filename) => {
     const target = path.join(userData, filename); await destination(target); await menu('File', 'Export…');
     await page.getByRole('combobox', { name: 'Export scope', exact: true }).selectOption(scope); await page.getByRole('combobox', { name: 'Export format', exact: true }).selectOption(format);
-    await page.getByRole('dialog').getByRole('button', { name: 'Export', exact: true }).click(); await waitFor(async () => (await fs.stat(target)).size > 0, `${format} ${scope} export`);
+    await page.getByRole('dialog').getByRole('button', { name: /^Save .+ file…$/ }).click(); await waitFor(async () => (await fs.stat(target)).size > 0, `${format} ${scope} export`);
     // The file can appear before the IPC reply closes the export dialog.
     await page.getByRole('dialog', { name: 'Export document', exact: true }).waitFor({ state: 'hidden' });
     // Informational format-fidelity notices are allowed, and must be dismissed

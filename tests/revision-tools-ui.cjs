@@ -68,7 +68,13 @@ const annotations = (node, id) => all(node).filter(node => node.marks?.some(mark
   const waitTexts = async expected => waitFor(async () => JSON.stringify(texts(await saved())) === JSON.stringify(expected), 'complete manuscript text persisted');
   try {
     await launch(); await chapter('Opening', 'Comment passage here.');
-    await command('find'); await search().waitFor(); await page.getByRole('textbox', { name: 'Find text', exact: true }).fill('river'); await expectCount(9);
+    await command('find'); await search().waitFor();
+    await page.getByRole('textbox', { name: 'Find text', exact: true }).fill('formatting'); await expectCount(2);
+    await page.getByLabel('Find formatting', { exact: true }).selectOption('bold'); await expectCount(1);
+    assert.match(await search().locator('.manuscript-search-result').first().innerText(), /Copy visual formatting/);
+    await page.getByLabel('Find formatting', { exact: true }).selectOption(''); await expectCount(2);
+    checks.push('Formatting filters find only matching styled passages and clear back to all results.');
+    await page.getByRole('textbox', { name: 'Find text', exact: true }).fill('river'); await expectCount(9);
     assert.deepEqual(await search().locator('.manuscript-search-group h3').allTextContents(), ['Opening4', 'Ending2', 'Epilogue3']);
     await search().getByRole('button').filter({ hasText: 'valley' }).first().click();
     await waitFor(async () => (await editor.innerText()).includes('river in the valley.'), 'search navigates to inactive chapter');
@@ -84,6 +90,7 @@ const annotations = (node, id) => all(node).filter(node => node.marks?.some(mark
     await chapter('Opening', 'Comment passage here.'); await page.getByLabel('Replacement text', { exact: true }).fill('stream');
     const beforePreview = texts(await saved()); await search().getByRole('button', { name: 'Preview replace all', exact: true }).click();
     await page.getByRole('region', { name: 'Replace all preview', exact: true }).waitFor(); assert.deepEqual(texts(await saved()), beforePreview);
+    assert.match(await page.getByRole('region', { name: 'Replace all preview', exact: true }).innerText(), /Replace 7 matches in 3 chapters\?/);
     assert.equal(await page.locator('.search-replace-preview .manuscript-search-result').count(), 7);
     await select('Comment passage here.'); await page.keyboard.press('ArrowRight'); await page.keyboard.insertText('!');
     await waitFor(async () => words((await saved()).chapters[0].content).includes('Comment passage here.!'), 'edit during replacement preview saved');
@@ -171,7 +178,8 @@ const annotations = (node, id) => all(node).filter(node => node.marks?.some(mark
     await waitFor(async () => (await page.evaluate(() => window.wraiter.boot())).path === otherFile && (await editor.innerText()).includes('two other matches.'), 'second synthetic project opened');
     await command('find'); await search().waitFor(); await page.getByLabel('Find text', { exact: true }).fill('stream'); await expectCount(2);
     assert.equal(await page.getByRole('region', { name: 'Replace all preview', exact: true }).count(), 0, 'A replacement preview must stay in its originating project.');
-    await page.locator('.sidebar').getByRole('button', { name: /^Comments/ }).click(); await panel().waitFor();
+    // Comments stays open across tabs; its draft and cards belong to the active document.
+    await panel().waitFor();
     assert.equal(await panel().getByRole('textbox', { name: 'New comment text', exact: true }).inputValue(), '');
     assert.equal(await panel().locator('.comment-card').count(), 0); assert.ok(!(await page.locator('body').innerText()).includes('PRIVATE_'));
     assert.deepEqual(JSON.parse(await fs.readFile(otherFile, 'utf8')).comments, []);

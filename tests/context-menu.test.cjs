@@ -7,11 +7,47 @@ const selected = { editor: true, hasSelection: true, hasTextSelection: true, can
 const callbacks = () => { const calls = []; return { calls, command: value => calls.push(['command', value]), replaceMisspelling: value => calls.push(['spelling', value]), addToDictionary: value => calls.push(['dictionary', value]) }; };
 const byId = (menu, id) => menu.find(item => item.id === id);
 const settled = () => new Promise(resolve => setImmediate(resolve));
+test('Multitask routes both sides and removal, respecting busy and current-tab states', () => {
+  const handlers = callbacks(), context = { tab: true, tabId: '12345678-1234-1234-1234-123456789abc', canMultitask: true, inMultitask: true };
+  const menu = byId(contextMenuTemplate(params, context, handlers), 'tab-multitask');
+  for (const command of ['tab-multitask-left', 'tab-multitask-right', 'tab-multitask-remove']) { assert.equal(byId(menu.submenu, command).enabled, true); byId(menu.submenu, command).click(); }
+  assert.deepEqual(handlers.calls.map(call => call[1]), ['tab-multitask-left', 'tab-multitask-right', 'tab-multitask-remove']);
+  assert.equal(byId(contextMenuTemplate(params, { ...context, blocked: true }, handlers), 'tab-multitask').enabled, false);
+  const active = byId(contextMenuTemplate(params, { ...context, canMultitask: false }, handlers), 'tab-multitask');
+  assert.equal(byId(active.submenu, 'tab-multitask-left').enabled, false);
+  assert.equal(byId(active.submenu, 'tab-multitask-remove').enabled, true);
+});
 test('object menus expose image properties and link actions with appropriate busy states', () => {
   const handlers = callbacks(), menu = contextMenuTemplate(params, { ...selected, hasLink: true, hasImage: true, blocked: true }, handlers, { insertLink: 'Ctrl+K' });
   assert.equal(byId(menu, 'open-link').enabled, true); assert.equal(byId(menu, 'edit-link').enabled, false); assert.equal(byId(menu, 'remove-link').enabled, false); assert.equal(byId(menu, 'image-properties').enabled, false);
   byId(menu, 'open-link').click(); assert.deepEqual(handlers.calls, [['command', 'open-link']]);
 });
+test('tab file actions require a saved file and respect blocked transitions', () => {
+  const context = { tab: true, tabId: '12345678-1234-1234-1234-123456789abc', hasFile: true };
+  const handlers = callbacks();
+  for (const update of [{}, { hasFile: false }, { hasFile: 'true' }, { blocked: true }]) {
+    const menu = contextMenuTemplate(params, { ...context, ...update }, handlers);
+    for (const id of ['tab-reveal', 'tab-copy-path', 'tab-copy-name']) {
+      assert.equal(byId(menu, id).enabled, !Object.keys(update).length);
+      if (byId(menu, id).enabled) byId(menu, id).click();
+    }
+  }
+  assert.deepEqual(handlers.calls.map(call => call[1]), ['tab-reveal', 'tab-copy-path', 'tab-copy-name']);
+});
+
+test('document actions also work for unnamed tabs but not during transitions', () => {
+  const context = { tab: true, tabId: '12345678-1234-1234-1234-123456789abc' }, handlers = callbacks();
+  const commands = ['tab-save', 'tab-save-as', 'tab-export', 'tab-print', 'tab-history'];
+  for (const hasFile of [false, true]) for (const blocked of [false, true]) {
+    const menu = contextMenuTemplate(params, { ...context, hasFile, blocked }, handlers);
+    for (const command of commands) {
+      assert.equal(byId(menu, command).enabled, !blocked);
+      if (!blocked) byId(menu, command).click();
+    }
+  }
+  assert.deepEqual(handlers.calls.map(call => call[1]), [...commands, ...commands]);
+});
+
 test('tab menus describe the clicked tab with close and keyboard accessible reorder actions', () => {
   const context = { tab: true, tabId: '12345678-1234-1234-1234-123456789abc', canMoveRight: true, canCloseOthers: true }, menu = contextMenuTemplate(params, context, callbacks());
   assert.equal(byId(menu, 'tab-close').enabled, true); assert.equal(byId(menu, 'tab-left').enabled, false); assert.equal(byId(menu, 'tab-close-right').enabled, true);
@@ -88,6 +124,21 @@ test('an existing AI hint has its own actions after dictionary suggestions and b
   for (const context of [{ editor: false, grammarHint }, { ...selected, aiEnabled: false, grammarHint }, { ...selected, blocked: true, grammarHint }, { ...selected, grammarHint: { ...grammarHint, preview: 'fake\taction' } }]) {
     assert.ok(!contextMenuTemplate(params, context, handlers).some(item => item.id?.endsWith('grammar-hint')));
   }
+});
+
+test('local suggestions work with AI disabled and sanitize menu text', () => {
+  const handlers = callbacks();
+  const localHint = { category: 'spelling', previews: [{ preview: 'freind → friend', reviewOnly: false }, { preview: 'freind → fiend', reviewOnly: false }], canAdd: true };
+  const menu = contextMenuTemplate(params, { ...selected, aiEnabled: false, localHint }, handlers);
+  assert.equal(byId(menu, 'apply-local-hint-0').label, 'Local spelling: freind → friend');
+  byId(menu, 'apply-local-hint-1').click(); byId(menu, 'add-local-word').click(); byId(menu, 'review-local-hint').click();
+  assert.deepEqual(handlers.calls.map(call => call[1]), ['apply-local-hint-1', 'add-local-word', 'review-local-hint']);
+  for (const context of [
+    { ...selected, blocked: true, localHint },
+    { ...selected, localHint: { ...localHint, category: 'other' } },
+    { ...selected, localHint: { ...localHint, previews: [{ preview: 'unsafe\tmenu', reviewOnly: false }] } },
+    { ...selected, localHint: { ...localHint, previews: Array(6).fill({ preview: 'x', reviewOnly: false }) } }
+  ]) assert.equal(byId(contextMenuTemplate(params, context, handlers), 'add-local-word'), undefined);
 });
 
 function bridge(t, timeout = 1000) {

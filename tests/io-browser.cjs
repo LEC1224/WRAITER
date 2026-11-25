@@ -5,8 +5,13 @@ const { validateProject } = require('../electron/core.cjs');
 
 (async () => {
   const { createServer } = await import('vite');
-  const server = await createServer({ root: path.resolve(__dirname, '..'), server: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
-  server.middlewares.use('/__io-tests', (_req, res) => { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><html><head><meta charset="utf-8"></head><body>IO test harness</body></html>'); });
+  const server = await createServer({ root: path.resolve(__dirname, '..'), appType: 'custom', server: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+  server.middlewares.use('/__io-tests', async (_req, res, next) => {
+    try {
+      const html = await server.transformIndexHtml('/__io-tests', '<!doctype html><html><head><meta charset="utf-8"></head><body>IO test harness</body></html>');
+      res.setHeader('Content-Type', 'text/html'); res.end(html);
+    } catch (error) { next(error); }
+  });
   let browser;
   try {
     await server.listen();

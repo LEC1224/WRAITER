@@ -4,9 +4,20 @@ const http = require('node:http');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { CodexBridge, serverArgs } = require('../electron/codex-bridge.cjs');
-const { generate, ollamaContextWindow, outputLimit } = require('../electron/providers.cjs');
+const { generate, generateStructured, ollamaContextWindow, outputLimit } = require('../electron/providers.cjs');
 const { isLocalOllama } = require('../electron/ollama-service.cjs');
 const { estimateTokens } = require('../electron/continuation-context.cjs');
+
+test('guided story naming requests an object with real scene markers', async t => {
+  const schema = { type: 'object', properties: { sections: { type: 'array', items: { type: 'string', enum: ['A', 'C'] } } }, required: ['sections'] };
+  const api = await server(t, ({ body }) => {
+    assert.deepEqual(body.format, schema);
+    assert.doesNotMatch(body.messages[0].content, /serialized as a JSON string/);
+    return { data: { message: { content: JSON.stringify({ sections: ['A', 'C'] }) } } };
+  });
+  const raw = await generateStructured({ provider: 'ollama', baseUrl: api.baseUrl, model: 'scene-index', ollamaMode: 'auto' }, '', { system: 'Choose scenes.', user: 'A, B, C' }, undefined, schema);
+  assert.deepEqual(JSON.parse(raw), { sections: ['A', 'C'] });
+});
 
 async function bridge(t) {
   const client = await new CodexBridge(process.execPath, { args: [path.join(__dirname, 'codex-server.fixture.cjs')] }).start();
@@ -56,7 +67,13 @@ test('Codex forks a clean reference base, rehashes changed text, and rejects mod
 test('Codex cancellation interrupts the active turn and leaves the connection usable', async t => {
   const client = await bridge(t); const controller = new AbortController();
   const work = client.complete({ model: 'test-model' }, { system: 'Synthetic.', user: 'HANG_REQUEST' }, [], controller.signal);
-  setTimeout(() => controller.abort(), 60);
+  // Cancel an actual running turn even when the fixture process starts slowly.
+  const deadline = Date.now() + 10000;
+  while (!(await client.rpc('test/records', {})).records.some(item => item.method === 'turn/start')) {
+    assert.ok(Date.now() < deadline, 'The mock provider did not start its turn');
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  controller.abort();
   await assert.rejects(work, /cancelled|abort/i);
   assert.equal((await client.accountStatus()).signedIn, true);
   const records = (await client.rpc('test/records', {})).records;

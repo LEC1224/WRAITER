@@ -1,3 +1,291 @@
+# Copy selected text between Multitask panes — 0.21.0-rc.4 — 2026-11-15
+
+Dragging a selected passage into another visible document copies rich text at a blue insertion marker. Hovering leaves source focus intact; dropping synchronously activates the destination and lets its normal ProseMirror drop, schema and history handlers insert the copy. Undo belongs to the destination. Dragging within the same document retains the native move operation, and Escape cancels without changing either document. The marker is positioned directly without rerendering editors on drag-over and is removed on leave, cancellation or unmount.
+
+`multitask-text-drag-ui.cjs` passed against source and the exact packaged executable, using real mouse gestures and two 1,502-paragraph documents. It checks exact insertion position, retained bold formatting, unchanged source, independent undo, native same-document move/undo, cancellation, and rapid focus/editing while disk saves are held open. The source maximum focus event was 33.3 ms; the packaged measurement was 38.6 ms. Synthetic documents and isolated profiles were used. Unit and broader Multitask verification are recorded below.
+
+A separate checkout of the selected Git index also built and passed the complete native text-drag regression, excluding unrelated work. Its maximum measured focus event was 41.3 ms.
+
+This feature is included in the unsigned `v0.21.0-rc.4-multitask-live` installer recorded below. It adds `src/pane-text-drag.js`, pane event handlers, the insertion marker style, its desktop regression and package script, and the user-guide paragraph. Unrelated workspace changes remain outside the local commits.
+
+# Resident Multitask focus — 0.21.0-rc.4 — 2026-11-15
+
+Visible documents retain their editor, journal and file binding. Pointer-down switches the editable pane and shared manuscript/sidebar context synchronously, without waiting for autosave, disk, IPC or a journal reload. Restored visible journals are hydrated during startup. Native mouse selection and clipboard handling replace the previous asynchronous gesture replay. The editor's guarded per-view click timer resets only on pane activation, so rapid returns do not become accidental triple-clicks while native double-click selection remains available.
+
+Background saves and view updates carry their originating tab, project and format. The main process captures the destination file binding before asynchronous work; a completed save cannot overwrite another pane's binding or status. Duplicate pending snapshots are coalesced, saved snapshots are released when tabs close, and focus checkpoints are debounced outside the input event. Explicit file loading, pending assistant document replacements and journal repair retain the existing guarded transition.
+
+Verification:
+
+- `npm test`: **606 passed**, no failures or skipped tests. Production build passed.
+- The selected Git index built separately and passed both `multitask-selection-ui.cjs` and `multitask-resident-ui.cjs`, excluding unrelated pre-existing workspace edits.
+- The exact packaged application passed all 12 native selection checks: first-click cursor/paste, forward/backward/wrapped selection, Shift-click, double-click, rapid returns, immediate clipboard input with delayed saves, pane-local autoscroll, and zero document activations or workspace input blocks during resident focus. The test preserves the system clipboard.
+- Packaged mixed WRAITER/TXT tests held saves open during switches, verified both files and format labels, restarted the app, and verified independent restored undo/redo without any full activation calls. All six sidebar contexts, drafts and actions also passed the packaged sidebar regression.
+- Source tests passed three-document editing with 1,500 paragraphs each, workspace restoration, and the existing v06 tab/background-chat regressions. The combined packaged drag test held writes open across 12 switches between 1,502-paragraph documents; the maximum measured pointer event duration was **38.6 ms**, with one editable editor and native focus committed before bubbling finished. This is a local regression measurement, not a hardware-independent guarantee.
+- The packaged three-document, preview/layout and workspace-restart suites also passed: retained editors, hover-only scrolling, divider input, all 11 preview/final geometry comparisons, closing/reopening panes without lost space, and restored widths/reading positions/sidebar choices. The large-document packaged frame interval p95 was **7.1 ms**.
+
+Combined unsigned preview: `release/unsigned-preview/v0.21.0-rc.4-multitask-live/WRAITER-0.21.0-rc.4-Setup.exe` — **506,986,006 bytes**, product version **0.21.0-rc.4**, Authenticode **NotSigned**, SHA-256 `714ADEB5B8F9502DE5E941981365BC1E18F39AFCBE8E795BE81641FC61B8DF6C`. Previous artifacts were preserved. The installer was not installed or published. Reports and logs are under `test-output/multitask-live-*` and `test-output/multitask-*-packaged-results.json`.
+
+# Multitask first-click selection — 0.21.0-rc.4 — 2026-11-15
+
+The initial mouse press in an inactive document now places its cursor or starts a selection while that pane becomes active. The selection handoff retains both endpoints across the asynchronous save/activation boundary, including backward drags, wrapped lines, Shift-click and mouseup before activation finishes. Focus is committed with the editable pane. Selection movement is coalesced per animation frame, and edge autoscroll stays inside the dragged panel.
+
+Copy, cut and text/HTML paste events arriving during activation retain their intended document and selection. Paste/cut run through the destination editor's normal transaction and history handling only after successful activation. Cancellation or failed activation discards pending edits. Existing mounted editors, sidebar context, scroll positions and per-document history are retained.
+
+Changed for this fix: `src/App.jsx`, `src/DocumentPane.jsx`, new `src/pane-selection.js`, new `tests/multitask-selection-ui.cjs`, its package script, the multitask user-guide paragraph and this report. The previously uncommitted multitask feature was recorded separately before this fix; unrelated workspace edits were left outside those commits.
+
+Verification:
+
+- Reproduced the original bug with an actual mouse drag: expected selection 7 → 20, but the old code left a collapsed cursor at 7.
+- `npm test`: **605 passed**, no failures or skipped tests; `npm run build` passed.
+- A separate checkout of the selected Git index also built and passed all 11 focused selection checks, without the unrelated uncommitted workspace changes.
+- The new desktop regression passed with an isolated profile and synthetic documents. It uses actual mouse input and Ctrl+C/Ctrl+V/Ctrl+X, checks exact cursor/selection positions and copied formatting, imposes a 500 ms activation delay, and verifies cancellation, failed activation, independent cut/undo, retained editors and pane-local selection autoscroll. The test snapshots and restores the system clipboard.
+- All four suites (`multitask-selection-ui.cjs`, `multitask-sidebar-ui.cjs`, `multitask-ui.cjs`, `multitask-layout-ui.cjs`) passed against the exact packaged `win-unpacked/WRAITER.exe`. This includes all six sidebar contexts and muted indicators, 11 preview/final geometry comparisons, divider input, close/reopen sizing, independent hover scrolling and writing/save/history in three documents with **1,500 paragraphs each**. Packaged frame interval p95 was **8.1 ms**; source was **7.1 ms**. These are local regression measurements, not a guarantee for every machine.
+- Installer product version, Authenticode status, file size and SHA-256 verified. Previous installers were preserved; this installer was not installed or published.
+
+Unsigned installer: `release/unsigned-preview/v0.21.0-rc.4-multitask-selection/WRAITER-0.21.0-rc.4-Setup.exe` — **506,983,681 bytes**, Authenticode **NotSigned**, SHA-256 `8F12D477E30DA34F27F9C00B6AE4C37791EDFAAFB7B0A97132035438B77F6502`. Checksums and the portable build are in the same directory. Test reports: `test-output/multitask-selection-packaged-results.json`, `test-output/multitask-sidebar-packaged-results.json`, `test-output/multitask-packaged-results.json`, `test-output/multitask-layout-packaged-results.json`, and `test-output/multitask-selection-unit-tests.txt`.
+
+# Account password document access — 0.21.0-rc.4 — 2026-11-11
+
+Signing in opens encrypted documents with the account password. Browser CryptoKey caching retains access through reloads, and desktop caches its document key inside Windows-protected account storage. Existing separate-passphrase vaults migrate once while preserving their random key, recovery access and exact document ciphertext. Password changes atomically update authentication and the key wrapper; password resets preserve existing documents and can retain access through a validated trusted-browser key.
+
+Verification:
+
+- `npm test`: 602 passed; `npm run test:cloud`: 33 passed. Coverage includes v1/v2 browser/Node interoperability, authentication hashes failing to decrypt documents, atomic password changes and rollback, reset preservation, user/session binding and stale asynchronous operations.
+- Browser suites `web-cloud-ui.cjs`, `cloud-mobile-ui.cjs` and `web-account-access-ui.cjs` passed. They cover ordinary sign-in, fresh-device access, reload/new-tab caching, logout, missing cache, one-time migration, password changes, remote and trusted-device resets, and old tabs preserving a newer session's cache.
+- Packaged RC4 `cloud-vault-desktop-ui.cjs` passed with the actual bundled UI, real process restart, protected key-cache restoration, encrypted upload/open, and a pre-existing v1 document whose ciphertext remained unchanged through migration. Plain packaged `cloud-desktop-ui.cjs` also passed. Isolated profiles and synthetic credentials were used throughout; no paid provider requests were made.
+- Final deployment archive was checked for private configuration/data and stale hashed bundles. Its sole entry bundle is `web-DgYE1_TW.js`. Release staging now uses a fresh directory on every package operation.
+- Production read-only browser smoke passed over HTTPS with RC4 health, account-password access copy, desktop/phone forms, verification/reset routing and privacy. No production mutations, paid AI calls or email requests were made. Deployment preserved the exact opaque document and vault records while the site was stopped; no client migration or document decryption was attempted by the operator.
+
+Unsigned installer: `release/unsigned-preview/0.21.0-rc.4-cloud/WRAITER-0.21.0-rc.4-Setup.exe` (506,977,127 bytes; SHA-256 `3C684DA3C1D3D31C8859A09E74B98D0F8D76D42313F466AEB0917F6B2E372645`). Earlier artifacts and unrelated workspace changes were preserved. Encryption protects stored data; the authentication server receives the password during login, so it is not protection against an actively malicious modified service.
+
+# Encrypted cloud beta — 0.21.0-rc.3 — 2026-11-11
+
+WRAITER web at https://wraiter.lecani.se now uses client-side encrypted documents and titles, a separate document passphrase/recovery key, whole-library ZIP export, direct user-owned cloud AI connections, desktop styling, compact mobile controls, and restored desktop panels after resizing. Desktop Cloud library uses the same vault format for explicit upload/open operations. Earlier plaintext documents migrate on owner unlock; invalid or conflicted rows remain preserved and clearly marked.
+
+Validation:
+
+- `npm test`: 592 passed. Shared crypto includes actual browser/Node interoperability; portable writing-agent fingerprints match the native implementation.
+- `npm run test:cloud`: 23 passed, including account isolation, encrypted quotas and metadata-only listings, vault/revision CAS, backup restoration, migration, and revocation during uploads.
+- `npm run test:web-cloud`: passed against the real local backend with synthetic accounts. Covers vault setup/recovery, mandatory recovery-key acknowledgement, opaque database/IndexedDB storage, editing/import/history/conflicts, ZIP extraction, themes, damaged-record isolation and account deletion while locked. A delayed AES operation completing after switching to another account retains its original binding and cannot write into the newer account.
+- `npm run test:cloud-mobile`: passed. Covers desktop/mobile panel restoration, formatting, own-provider AI suggestion/accept, keyboard viewport placement, encrypted save, and hidden local providers.
+- Packaged `cloud-vault-desktop-ui.cjs` and `cloud-desktop-ui.cjs`: passed using isolated profiles with the actual RC3 bundle. No genuine AI requests or production credentials were used.
+- Production `web-production-smoke.cjs`: passed over HTTPS, including current-version health, desktop/phone forms, 320 px layout and the updated privacy notice. No production account/document mutation or email request was made.
+
+The unsigned installer is `release/unsigned-preview/0.21.0-rc.3-cloud/WRAITER-0.21.0-rc.3-Setup.exe` (506,973,236 bytes; SHA-256 `1237D0A7DD9B176D6C98B9FC9409180B4DC8AD8FAE1ECEB854E0E5091CAE4BF3`). Earlier installers and unrelated workspace changes were preserved. Physical iOS/Android keyboard testing remains outside these desktop browser checks. The cryptographic design and implementation have not had an independent external audit.
+
+# Multitask preview and workspace sizing — 0.20.5 — 2026-11-10
+
+Fixed two layout regressions. Pane proportions are normalized after removal, tab closure, insertion and resize so the complete workspace remains allocated. Surviving panels retain their relative widths. Drag previews now use the resulting pane order, proportions, dividers and minimum widths, including the distinction between moving an existing pane and splitting a target to add another document. A separate overlay leaves the live editors and scroll positions unchanged while dragging. Regression checks also exposed an intermittent focus race; pane clicks now focus the editor after React commits the active editor and removes the workspace's temporary input block.
+
+Files changed for this fix: `src/multitask.js`, `src/MultitaskWorkspace.jsx`, `src/App.jsx`, `src/styles.css`, `tests/multitask.test.mjs`, `tests/multitask-ui.cjs`, the new `tests/multitask-layout-ui.cjs` and `test:multitask-layout` script in `package.json`, `docs/USER-GUIDE.md`, and this report. Other workspace changes and previous release artifacts were preserved.
+
+Verification:
+
+- Reproduced both reported bugs against the previous `v0.20.5-neural-grammar-r2` packaged app: a 331 px preview became a 678 px pane, and the right/remove/left sequence left 678 px of a 1,364 px workspace unused.
+- The fixed layout regression passed 11 real mouse drags with matching preview and final coordinates/widths, repeated alternating-side reopening, resized proportions, three-pane moves, hidden-tab insertion, panel-title dragging, cancellation, sidebar changes, narrow windows with horizontal overflow, and closing actual document tabs. Previewing and moving retained existing editor instances. Results: `test-output/multitask-layout-results.json`.
+- Five layout unit tests passed, including 100 alternating close/reopen cycles. The full suite passed **564 tests** using `node --test --test-force-exit tests/*.test.cjs tests/*.test.mjs` (`test-output/multitask-layout-unit-force-exit.txt`). The initial plain `npm test` run stopped advancing after all native neural-worker assertions passed and did not terminate; it was stopped and rerun with Node's test-completion exit option. No grammar code was changed for this task.
+- Production build passed. The existing sidebar regression passed all six contexts, per-document actions, pending checkpoints, keyboard focus and tab indicators. The three-document, 1,500-paragraph-per-document desktop test passed after the focus correction with an 8.3 ms frame p95.
+
+Built `release/unsigned-preview/v0.20.5-multitask-layout/WRAITER-0.20.5-Setup.exe` and the portable executable with `npm run package:preview`. Both report version 0.20.5 and Authenticode `NotSigned`. The installer is 506,846,033 bytes, with SHA-256 `45b9afca7ee75805d79925107879a2a4c03d452c7ca65059c625bf7ca78d27d3`; both checksums are in `WRAITER-0.20.5-SHA256SUMS.txt`. The installer was built locally without installing or publishing.
+
+The exact final packaged app passed the layout, sidebar and large multitask desktop regressions in isolated profiles. All 11 preview comparisons matched the resulting pane positions and widths, with no unused workspace after removal/reopening. The large multitask run retained all three editors and measured a 7.1 ms frame p95. Results: `test-output/multitask-layout-packaged-results.json`, `test-output/multitask-sidebar-packaged-results.json`, and `test-output/multitask-packaged-results.json`.
+
+---
+
+# Offline neural grammar — 0.20.5 — 2026-11-10
+
+Completed the interrupted grammar-model work and built a final local preview at
+`release/unsigned-preview/v0.20.5-neural-grammar-r2/`. The English checker now adds
+a bundled GECToR/ONNX model and broader compact-model candidates to the existing
+rules, Harper, and LanguageTool. Checks run locally with optional AI disabled.
+The compact scorer was trained on 1,374 deduplicated examples; an independent
+review reproduced its weights and found no normalized training/evaluation text
+overlap. Development sets are distinguished from the frozen fresh evaluation in
+`tools/grammar-model/README.md`.
+
+Final review fixed unsafe noun suffix decoding (`movies` must not become
+`movy`) and native-worker shutdown during model startup or inference. Shutdown
+now rejects pending callers, drains active native work, releases the ONNX session,
+and waits for worker exit. App quit preserves the existing save/cancel flow and
+uses a ten-second shutdown bound. Store packaging also prepares the new model.
+The offline UI regression now waits for the dictionary-triggered recheck before
+asserting that Ignore preserves a different completed suggestion.
+
+Files changed while resuming: `electron/main.cjs`, the three
+`electron/neural-grammar*.cjs` files, `tools/store-package.cjs`,
+`tests/neural-grammar.test.cjs`, `tests/neural-grammar-shutdown-ui.cjs`,
+`tests/offline-grammar-ui.cjs`, `docs/OFFLINE-GRAMMAR.md`,
+`docs/releases/v0.20.5.md`, `tools/grammar-model/README.md`, and this report.
+
+Validation:
+
+- **562 unit tests passed**, including actual native inference and shutdown
+  during model initialization and active checking. Evidence:
+  `test-output/grammar-v2-r2-unit-tests.log`.
+- The exact packaged application passed correction/right-click menus, formatting
+  and comment preservation, Undo, Ignore, independent spelling/grammar switches,
+  personal dictionary persistence, and English/Swedish offline network checks.
+- Packaged shutdown regression passed during initialization (**2,904 ms**) and
+  queued inference (**1,275 ms**), with pending requests at permanent shutdown,
+  graceful native cleanup, zero workers, exit code zero, confirmed process exit,
+  and preserved synthetic manuscript content. Evidence:
+  `test-output/grammar-v2-r2-shutdown-ui-final.log` and its profile evidence files.
+- Packaged long-paragraph checking crossed the 3,500-character boundary while
+  retaining exact text and correct underline ranges; input-to-frame p95 was
+  **8.2 ms**. The 1,300-paragraph test retained tail hints and measured **33.9 ms**
+  input-to-frame p95. Both processes closed successfully. Logs:
+  `test-output/grammar-v2-r2-offline-*-ui.log`.
+- Final packaged fresh evaluation: **40/60 labeled issues detected**, versus
+  **32/60**, with unsupported underlines **4 versus 5**. Final original-race
+  replay: **16/21**, no unsupported underlines, versus the older saved WRAITER
+  result of 9/21 with one unsupported underline. The saved Google Docs result
+  remains 17/21 with none. Evidence:
+  `test-output/grammar-v2-r2-fresh-score.json` and
+  `test-output/grammar-v2-r2-race-score.json`.
+- These are underline-detection scores, not correction accuracy. Fresh results
+  still contain incorrect or incomplete proposed fixes. The known original
+  race and earlier Terra sets were used during development; they do not establish
+  independent broad parity with Google Docs. No evaluation labels were changed.
+- Verified packaged main/neural/offline engine files against source, all five
+  pinned model resource hashes, and unpacked ONNX native binaries. Evidence:
+  `test-output/grammar-v2-r2-package-verification.json`. Diff whitespace checks
+  passed for the resumed work.
+
+`npm run package:preview -- --output release/unsigned-preview/v0.20.5-neural-grammar-r2`
+produced unsigned Windows x64 artifacts, both reporting version **0.20.5**:
+
+- Installer: `WRAITER-0.20.5-Setup.exe`, **506,842,538 bytes**, SHA-256
+  `aae9ee23f0a985fb9d0a12ec30f201ce4389db9ca8e807a9d0d5c363a4a49e0a`.
+- Portable: `WRAITER-0.20.5-Windows.exe`, **506,595,419 bytes**, SHA-256
+  `46e26baeae97e6bab7012a5fc4f832d668ced93c0c4f002b018d7b61c2991a95`.
+
+Build log: `test-output/grammar-v2-r2-package.log`. Checksums are also beside the
+installer in `WRAITER-0.20.5-SHA256SUMS.txt`. Earlier installers were preserved.
+The installer was built locally, not installed or published. Desktop tests used
+isolated profiles and synthetic documents; no author manuscript was modified.
+
+---
+
+# Multitask sidebar context and tab indicators — 0.20.4 — 2026-11-10
+
+The selected sidebar is now shared workspace state. Switching documents keeps it open and updates revision history, assistant conversations, comments, references, notes and tracked edits to the focused document. Explicitly closing it keeps it closed across switches. Checkpoint entries clear while the new document loads, and obsolete asynchronous responses cannot overwrite the current history. An earlier Add comment focus request cannot steal focus on another document.
+
+Conversation caching reads the active project's saved messages, preventing consecutive file opens from replacing a loaded conversation with stale renderer state. Multitask tabs use the same 2 px overline as the focused tab: muted grey-blue for other visible documents, bright blue for the focused document. Removing a pane clears its indicator; collapsing to one panel clears all Multitask indicators. Tooltips and accessible descriptions identify participating tabs.
+
+Changes for this follow-up: `src/App.jsx`, `src/HistoryPanel.jsx`, `src/ProjectTabs.jsx`, `src/styles.css`, `tests/multitask-sidebar-ui.cjs`, the `test:multitask-sidebar` package script, `docs/USER-GUIDE.md`, and this report. Existing workspace changes and release artifacts were preserved.
+
+Verification:
+
+- The new regression reproduced the disappearing revision sidebar against the preceding `v0.20.4-multitask-r2` packaged application, then passed with the fix.
+- The regression uses three synthetic documents and isolated profiles. It checks all six sidebar contexts, retained editors during focus changes, independent chat drafts and saved conversations, note editing, comment resolution, tracked-edit acceptance, keyboard focus, delayed checkpoint responses, normal tab switches, explicit sidebar closure, and Multitask indicators in light and dark themes.
+- **507 unit tests passed** (`test-output/multitask-sidebar-unit.txt`); the production build passed.
+- Existing `v06-app`, `multitask-ui` and `side-panels-ui` desktop regressions passed, covering background chat completion, per-document undo/save, restart recovery, dragging and previews, resizing, independent scrolling, minimum window layout and Focus view.
+
+Built `release/unsigned-preview/v0.20.4-multitask-sidebar/WRAITER-0.20.4-Setup.exe` and the portable executable with `npm run package:preview`. Both report version 0.20.4 and Authenticode `NotSigned`; checksums are in `WRAITER-0.20.4-SHA256SUMS.txt`. The installer is 119,925,484 bytes with SHA-256 `32ce6f3a3096fc8978fa733ea6e3640ce07f4fb7d2c1b85223253694864bdac9`. It was built locally without installing or publishing.
+
+The exact packaged application passed the new sidebar regression (`test-output/multitask-sidebar-packaged-results.json`) and the full three-document multitask check (`test-output/multitask-packaged-results.json`) using isolated profiles. With 1,500 paragraphs per document, the latter measured 8.8 ms frame p95. Light and dark screenshots are `test-output/multitask-sidebar-light.png` and `test-output/multitask-sidebar-dark.png`.
+
+---
+
+# Side-by-side multitasking — 0.20.4 local preview — 2026-11-10
+
+Added native tab **Multitask → Open to the left/right**, tab and panel-title dragging with two preview fields and Escape cancellation, multiple document panels, independent hover scrolling, and dividers with pointer, keyboard and double-click controls. A panel can be removed while retaining its tab. Hidden tabs replace the focused panel; visible tabs focus their existing editor. Narrow workspaces retain 240 px minimum panel widths, allow horizontal scrolling and reveal the active panel when the available width changes.
+
+Visible editors remain mounted across focus changes and panel moves. Their styles are scoped by panel; inactive documents do not rerender on another document's keystrokes. Divider frames update only layout styles; pagination is deferred until resizing settles. A weak cache shares already parsed immutable document trees with the outline and tracked-edit summaries. Existing save, recovery and journal boundaries remain in use when changing the active project.
+
+Files changed for this feature:
+
+- Workspace: `src/App.jsx`, `src/ProjectTabs.jsx`, `src/DocumentPane.jsx`, `src/MultitaskWorkspace.jsx`, `src/multitask.js`, `src/styles.css`, `electron/context-menu.cjs`.
+- Editor performance and lifecycle: `src/Editor.jsx`, `src/pagination.js`, `src/document-cache.js`, `src/history.js`, `src/headings.js`, `src/review-changes.js`.
+- Verification: `tests/multitask.test.mjs`, `tests/multitask-ui.cjs`, `tests/context-menu.test.cjs`, `tests/large-manuscript-ui.cjs`, `tests/scrolling-ui.cjs`, and the `test:multitask` package script.
+- Documentation: `docs/USER-GUIDE.md`, `CONTRIBUTING.md`, this report. Pre-existing and concurrent workspace changes were preserved.
+
+Source verification:
+
+- **489 unit tests passed** in the final workspace (`test-output/multitask-final-unit.txt`), and the production build passed.
+- The multitask desktop check passed with three synthetic documents of 1,500 paragraphs each: native menu placement, cursor activation, save/undo isolation, hover scrolling, retained editor identities, divider dragging/keyboard controls, real drag previews/cancellation/moves, panel removal, and 960 × 650 / 1600 × 1000 layouts.
+- Existing project-tab/startup, general editor, native context-menu, tab file-action, large-manuscript, scrolling and undo-scroll desktop checks passed. These used isolated profiles and synthetic documents; AI workflow checks used local mock providers.
+- The 120,000-word manuscript check measured **13.2 ms input-to-next-frame p95**, **36.9 ms maximum**, and a 1.52 s warm tab switch. The scrolling check measured no document-height or tail-position change, no additional layout time, and a 7 ms frame p95.
+- The large-manuscript test now measures every real `beforeinput` through the next animation frame, with 50 ms p95 / 150 ms maximum budgets and exact input-count/content checks. End-to-end automation time is still recorded. The former 2 s CDP delivery limit also failed on the previous packaged build; profiling showed most of that time idle outside the editor. The scrolling check now waits for the initial normalized snapshot to be saved before asserting that scrolling changes neither content nor history.
+
+The final unsigned installer and portable executable are under `release/unsigned-preview/v0.20.4-multitask-r2/`; previous release artifacts were preserved. Both report product version 0.20.4 and Authenticode `NotSigned`. SHA-256 checksums are in `WRAITER-0.20.4-SHA256SUMS.txt` in that directory. The installer was built, not installed or published.
+
+The exact final `win-unpacked/WRAITER.exe` passed the expanded multitask desktop check, including inactive panel-title dragging, per-panel chapter selection and divided-page resizing (`test-output/multitask-packaged-results.json`). It also passed the 120,000-word manuscript workflow with **12.1 ms input-to-next-frame p95**, **40.4 ms maximum**, and a 1.56 s warm switch (`test-output/large-manuscript-results.json`). Packaged project-tab/startup regression checks also passed on the preceding preview before the final header-focus correction. Source and packaged windows used separate disposable profiles.
+
+---
+
+# Grammar coverage and accuracy — 0.20.4 — 2026-11-06
+
+Implemented automatic manuscript-wide AI grammar checking, current-chapter priority, bounded multi-paragraph requests, approximately 500 ms edit scheduling, sentence-aware persistent hints and late-result mapping. Unchanged paragraphs are cached; edits and continuous typing cannot indefinitely postpone other chapters. The opt-in setting explicitly describes AI usage/cost. Local rules now favor precision for valid repeated words and uncertain pronunciation.
+
+Validation:
+
+- All **484 unit tests passed** (`test-output/v0.20.4-unit.txt`).
+- Packaged `ai-grammar-coverage-ui.cjs` passed: automatic existing-text checks, unopened chapters, real multiline paste, progress, cache, opt-out, delayed results surviving 150 unrelated edits and requests starting during continued typing.
+- Packaged `ai-grammar-ui.cjs` passed: hover/explanations, native mouse/keyboard menu correction, deletion, formatting/comment preservation, Undo, Ignore and stale menu rejection.
+- Packaged `inline-grammar-ipc.cjs` passed: request bounds, multi-passage findings, metadata exclusion, opt-in enforcement, foreground priority and cancellation.
+- Checked the actual settings screenshot: `test-output/ai-grammar-coverage-settings.png`. Usage notice and Save/Cancel controls are readable and visible.
+
+Tests use synthetic manuscripts and a local mock provider. They verify lifecycle and safeguards, not a measured accuracy score for the user's chosen AI model. Local rules intentionally trade some recall for fewer false alarms. Individual sentences over 4,000 characters and unsupported text structures remain excluded, as described in the guide.
+
+Built the unsigned installer and portable app under `release/unsigned-preview/v0.20.4/`, verified version metadata, and generated SHA-256 checksums. Package evidence: `test-output/v0.20.4-package.txt` and `test-output/v0.20.4-packaged-*.txt`. The installer was not run and no release was published.
+
+---
+
+# Logging and crash diagnostics — 2026-11-06
+
+The existing logs established when a failure occurred but were insufficient for several cause investigations: application imports ran before diagnostics, Electron's entry loader could bypass the exception monitor, renderer error categories and nested causes were lost, simultaneous operations had no correlation IDs, and native failures had no optional dump capture.
+
+Updated `electron/diagnostics.cjs`, `electron/main.cjs`, `electron/preferences.cjs`, `electron/preload.cjs`, `src/diagnostics.js`, `src/main.jsx`, `src/Settings.jsx` and `vite.config.js`. Added filtered JSON incident reports with recent events, pending operations, memory/runtime/build details, bounded underlying causes, source-map lookup, operation/session correlation, earlier startup capture and optional local-only native dumps. Updated the user guide and troubleshooting instructions. Existing unrelated working-tree changes were preserved.
+
+Verification:
+
+- `npm test`: **468 passing tests**. New coverage includes privacy, bounded nested errors, report retention, concurrent operation IDs, hourly report limits with reserved critical capacity, process fingerprints, failed reporter initialization and safe opt-in settings.
+- `node tests/startup-diagnostics-ui.cjs`: **2 passing injected startup failures**, using copied application files and isolated profiles. A main module failure produces `app.startup-failed`; a renderer module failure produces a recovery screen and `renderer.react.boundary` report.
+- `node tests/crash-diagnostics-ui.cjs`: **6 passing groups against the final packaged app**, including actual renderer and native main crashes, **2 native dumps**, **3 structured reports**, unhandled main rejection, overlapping operations, previous-session links, opt-in/restart behaviour and uploads disabled.
+- `node tests/logging-ui.cjs`: **8 passing groups against the final packaged app**, including cleanup, settings persistence, quiet typing/autosave, privacy, real renderer crash and interrupted-session recovery. Reviewed the minimum-size Logging settings screenshot.
+- `node tests/file-open-ui.cjs`: **6 passing groups**, including actual second-process launches, Unicode/relative filenames, multiple files and setup/modal handling after moving startup diagnostics earlier.
+- Confirmed generated renderer locations map to `src/main.jsx`, packaged renderer source maps are present, and packaged main/diagnostic/preference/preload files match the final source.
+
+Evidence: `test-output/crash-diagnostics-unit-tests.txt`, `test-output/startup-diagnostics-ui-results.json`, `test-output/crash-diagnostics-packaged-results.json`, `test-output/logging-packaged-results.json` and `test-output/file-open-results.json`.
+
+Final **unsigned** Windows installer: `release/unsigned-preview/v0.20.3-crash-diagnostics-r2/WRAITER-0.20.3-Setup.exe`. Built with `npm run package:preview -- --output release/unsigned-preview/v0.20.3-crash-diagnostics-r2`; previous artifacts were preserved. Tested its unpacked application with isolated profiles; the installer was not installed and nothing was published.
+
+Limits: raw messages remain excluded to protect private writing and credentials. Native dumps are off by default and require restart when changed; they can contain private memory and are not covered by log cleanup. A native main-process crash, power loss or forced termination may prevent a final JSON report. Native dump analysis can require matching Electron symbols and Windows debugging tools; reports improve evidence but do not guarantee the cause of every crash.
+
+# WRAITER 0.20.3 local installer — 2026-11-05
+
+Built the simplified export dialog as application **0.20.3**, keeping it distinct from public 0.20.2. `npm run package:preview -- --output release/unsigned-preview/v0.20.3` produced the Windows x64 NSIS installer and portable app, with current notices and a fresh production frontend.
+
+- Verified application, installer and portable resource versions are **0.20.3**. Both downloads are **unsigned**.
+- Matched **50 owned runtime files** and all **10 declared runtime dependency versions** against the current source/build. The packaged runtime uses the ordinary Windows distribution.
+- `test:export-settings` and `test:clipboard` passed against **release/unsigned-preview/v0.20.3/win-unpacked/WRAITER.exe**, using isolated profiles and intercepted clipboard writes. Covered remembered settings/Reset/restarts, automatic Office/EPUB file saves, eight clipboard formats, text-file saves, PDF actions, legacy preferences and scoped exports.
+- Wrote `BUILD-VERIFICATION.json` and `WRAITER-0.20.3-SHA256SUMS.txt` beside the downloads. Build/test evidence is in `tmp/installer-0.20.3-{build,export-settings,clipboard}.log`.
+
+| File | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `WRAITER-0.20.3-Setup.exe` | 118,356,306 | `8197e472348bcd3bca84d0b39ae9777ea74ff373a99aca689e8bdf8db2b38bd3` |
+| `WRAITER-0.20.3-Windows.exe` | 118,109,178 | `7cd59d56845d986cfbe41f8d83e5e5a9772bdfa7e16c25b1daa6dde51a9ad859` |
+
+Downloads are under `release/unsigned-preview/v0.20.3/`. The installer has not been run; workflows exercised its packaged runtime directly. No new GitHub/Store release or MSIX was published/built for this local installer request.
+
+---
+
+# Export destination simplification — unreleased — 2026-11-05
+
+The export popup hides Destination for DOCX/ODT/EPUB and saves directly, and for Discord/Telegram/formatted text and copies directly. Buttons name the actual action and file format. Plain text, Markdown, BBCode and HTML retain file/clipboard choices; PDFs retain only file/preview. Chat format labels no longer imply downloadable file extensions. Automatic actions ignore incompatible saved destinations while preserving meaningful destination preferences for other formats.
+
+Validation of the local source after v0.20.2:
+
+- `npm run build` and `npm test`: passed; **445/445 unit tests**.
+- `npm run test:clipboard`: passed eight clipboard formats, actual DOCX/ODT/EPUB file creation with ZIP/contents validation, four text-file formats, scope, failed-copy retry, fixed destinations with no irrelevant selector, the two PDF actions and IPC validation. Checks confirm file exports do not write to the clipboard and chat copying never opens a save dialog. The user's clipboard is intercepted.
+- `npm run test:export-settings`: passed restart persistence, Reset, Office/PDF settings, Print, selection/chapter fallbacks, corrupt preferences, legacy destinations and minimum-window controls. A remembered PDF preview choice survives switching through automatic destinations.
+- `npm run test:v03`: passed, including actual standard/desktop/mobile PDFs, EPUB, selection/chapter/manuscript exports, Office saving, editing/history and local mock AI.
+- Visually checked the ODT and Discord popups at 960 × 650: no destination selector; clear **Save ODT file…** and **Copy to clipboard** buttons; visible Reset/Cancel controls. Screenshots are under `test-output/export-clipboard-drKXPt/` and `test-output/export-settings-JUJv3T/`.
+- `git diff --check`: passed. Logs are `tmp/export-actions-{build,unit,clipboard,settings,v03}.log`. Checks use synthetic manuscripts and isolated profiles. This is an unreleased source change; no new installer/MSIX was built.
+
+---
+
 # WRAITER 0.20.2 release — remembered exports — 2026-11-04
 
 The final 0.20.2 packages include persistent export settings and **Reset to defaults** in the export popup, in addition to the writing/review, grammar, diagnostics and distribution work recorded below. The [complete changelist](docs/releases/v0.20.2.md) covers changes since public version 0.17.0. Earlier entries are historical validation records; their older package paths and publication status describe those earlier checks.
@@ -57,7 +345,7 @@ Remaining limits are explicit in the UI/guide: recording covers text within one 
 
 Updated package and lockfile versions to 0.19.0 and built the unsigned local installer and portable app under `release/unsigned-preview/v0.19.0/`. The installer upgraded the existing per-user installation with exit code 0. Installed executable metadata and Windows uninstall registration both confirm 0.19.0.
 
-`npm run test:logging` passed against `C:\Users\carl1\AppData\Local\Programs\WRAITER\WRAITER.exe` with an isolated synthetic profile, including persisted cleanup settings, deletion, privacy filtering, actual renderer crash recording and abnormal-exit detection after restart. Evidence: `test-output/v0.19.0-installed-logging.txt`. No public release was published.
+`npm run test:logging` passed against `%LOCALAPPDATA%\Programs\WRAITER\WRAITER.exe` with an isolated synthetic profile, including persisted cleanup settings, deletion, privacy filtering, actual renderer crash recording and abnormal-exit detection after restart. Evidence: `test-output/v0.19.0-installed-logging.txt`. No public release was published.
 
 ---
 

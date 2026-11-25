@@ -48,9 +48,9 @@ const geometry = () => {
     }
     assert.fail(`${label}: ${JSON.stringify(result)}`);
   };
-  const jump = async index => {
+  const jump = async (index, label = `Scroll to paragraph ${index + 1}`) => {
     await editor.locator(':scope > p').nth(index).evaluate(element => element.scrollIntoView({ block: 'start' }));
-    await aligned(`Scroll to paragraph ${index + 1}`);
+    await aligned(label);
   };
   try {
     app = await _electron.launch(options); page = await app.firstWindow();
@@ -58,6 +58,13 @@ const geometry = () => {
     editor = page.getByRole('textbox', { name: 'Manuscript editor', exact: true }); await editor.waitFor();
     await page.locator('.paragraph-numbers .text-number').first().waitFor();
     await page.waitForFunction(async () => (await window.wraiter.boot()).project.historySequence > 0);
+    // Startup saves a schema-normalized recovery snapshot asynchronously. Wait
+    // for it before checking that scrolling itself leaves the manuscript alone.
+    for (let attempt = 0; ; attempt++) {
+      if (await page.evaluate(async () => JSON.stringify((await window.wraiter.boot()).project.chapters[0].content) === JSON.stringify(document.querySelector('.manuscript').editor.getJSON()))) break;
+      assert.ok(attempt < 100, 'The initial editor snapshot was not saved');
+      await pause(50);
+    }
     const before = await page.evaluate(() => window.wraiter.boot());
     const historyBefore = await page.evaluate(id => window.wraiter.loadEditHistory(id), fixture.id);
     await aligned('Initial paragraphs');
@@ -66,7 +73,10 @@ const geometry = () => {
     await page.getByRole('combobox', { name: 'Document zoom', exact: true }).selectOption('150');
     await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.writing-sheet')).zoom) === 1.5);
     await aligned('150% zoom');
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(960, 650)); await aligned('Minimum window at 150%');
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(960, 650));
+    // Rewrapping can leave the whole viewport inside one tall paragraph.
+    // Bring a known start into view before comparing its label to its glyphs.
+    await jump(330, 'Minimum window at 150%');
     await page.screenshot({ path: path.join(output, 'long-numbering-minimum.png') });
     await page.getByRole('combobox', { name: 'Document zoom', exact: true }).selectOption('100');
     await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('.writing-sheet')).zoom) === 1);
