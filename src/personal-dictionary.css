@@ -4,13 +4,6 @@
 .dictionary-list li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .dictionary-list li > span { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .dictionary-list small { display: block; color: var(--muted); }
-:root[data-theme="paper"] .dictionary-list .danger-button {
-  background-color: #f4e9ea; border-color: #a27c80; color: #623b40;
-}
-:root[data-theme="dark"] .dictionary-list .danger-button {
-  background-color: #573c40; border-color: #94696d; color: #f3e8e8;
-}
-:root[data-theme="dark"] .dictionary-list .danger-button:hover:not(:disabled) { filter: brightness(1.12); }
 .dictionary-form label { display: grid; gap: 4px; margin: 8px 0; }
 .dictionary-fields { display: flex; gap: 12px; flex-wrap: wrap; }
 .dictionary-fields label { flex: 1 1 10rem; }

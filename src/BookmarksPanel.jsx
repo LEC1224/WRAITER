@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { addBookmark, removeBookmark, bookmarkRows } from './bookmarks.js';
 import './navigation.css';
 
@@ -21,6 +22,6 @@ export default function BookmarksPanel({ project, editor, chapterId, onChange, o
   }
   return <details className="bookmarks-panel"><summary>Bookmarks ({rows.length})</summary>
     <form onSubmit={add}><label>Bookmark selected text<input className="field-input" aria-label="Bookmark name" value={label} onChange={event => setLabel(event.target.value)} maxLength={200} placeholder="Bookmark name" /></label><button type="submit" className="secondary-button" disabled={disabled || !label.trim()} title="Select a passage and enter a name to save a bookmark to it.">Add bookmark</button></form>
-    {rows.map(({ comment, chapter, ranges, detached }) => <div className="bookmark-row" key={comment.id}><button disabled={disabled || detached} title={detached ? 'The bookmarked passage was removed.' : `Go to ${chapter?.title || 'bookmark'}`} onClick={() => onNavigate(chapter.id, ranges[0])}>{comment.text}<small>{detached ? 'Passage removed' : chapter?.title}</small></button><button disabled={disabled} aria-label={`Remove bookmark ${comment.text}`} onClick={() => remove(comment.id)} title="Remove this bookmark while keeping the passage.">×</button></div>)}
+    {rows.map(({ comment, chapter, ranges, detached }) => <div className="bookmark-row" key={comment.id}><button disabled={disabled || detached} title={detached ? 'The bookmarked passage was removed.' : `Go to ${chapter?.title || 'bookmark'}`} onClick={() => onNavigate(chapter.id, ranges[0])}>{comment.text}<small>{detached ? 'Passage removed' : chapter?.title}</small></button><button type="button" className="icon-button" disabled={disabled} aria-label={`Remove bookmark ${comment.text}`} onClick={() => remove(comment.id)} title="Remove this bookmark while keeping the passage."><Trash2 className="delete-icon" size={15} aria-hidden="true" /></button></div>)}
   </details>;
 }

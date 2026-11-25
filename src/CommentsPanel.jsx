@@ -30,8 +30,8 @@ function CommentCard({ row, active, disabled, onNavigate, onChange }) {
     </form> : <p className="comment-body">{comment.text}</p>}
     <div className="comment-actions">
       <button className="text-button" disabled={disabled} onClick={() => { setDraft(comment.text); setEditing(true); }}><Pencil size={13} />Edit</button>
-      <button className="text-button" disabled={disabled} onClick={() => onChange({ resolved: !comment.resolved }, comment.resolved ? 'Reopen comment' : 'Resolve comment')} title={comment.resolved ? "Move this comment back to the open list." : "Mark this comment as resolved. It stays available in resolved comments."}>{comment.resolved ? <CornerUpLeft size={13} /> : <Check size={13} />}{comment.resolved ? 'Reopen' : 'Resolve'}</button>
-      <button className="text-button comment-delete" disabled={disabled} onClick={() => onChange(null, 'Delete comment')} title="Delete this comment while keeping the passage."><Trash2 size={13} />Delete</button>
+      <button className="text-button" disabled={disabled} onClick={() => onChange({ resolved: !comment.resolved }, comment.resolved ? 'Reopen comment' : 'Resolve comment')} title={comment.resolved ? "Move this comment back to the open list." : "Mark this comment as resolved. It stays available in resolved comments."}>{comment.resolved ? <CornerUpLeft size={13} /> : <Check className="resolve-icon" size={13} aria-hidden="true" />}{comment.resolved ? 'Reopen' : 'Resolve'}</button>
+      <button className="text-button comment-delete" disabled={disabled} onClick={() => onChange(null, 'Delete comment')} title="Delete this comment while keeping the passage."><Trash2 className="delete-icon" size={13} aria-hidden="true" />Delete</button>
     </div>
   </article>;
 }
