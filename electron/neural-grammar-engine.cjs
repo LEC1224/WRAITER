@@ -31,6 +31,43 @@ const singularForms = Object.fromEntries(Object.entries(pluralForms).map(([singu
 const invariantNouns = new Set('sheep deer fish salmon trout moose bison offspring series species aircraft spacecraft watercraft information advice furniture equipment luggage baggage news physics mathematics politics economics measles mumps scissors trousers pants clothes'.split(' '));
 const baseAux = new Set('can could may might must shall should will would do does did cannot'.split(' '));
 const normalize = text => text.replaceAll('’', "'").toLowerCase();
+const verbModifiers = /^(?:not|never|ever|already|just|still|yet|always|often|also|even|almost|once|twice|sometimes|[a-z]+ly)$/u;
+// These common forms are absent from the model's verb transformation table.
+const extraParticiples = new Set(['been', 'had', 'done', 'left', 'got', 'paid']);
+const pastAuxiliaries = new Set(['had', 'was', 'were', 'did']);
+
+function acceptsComplement(auxiliary, verb, forms) {
+  const participle = extraParticiples.has(verb) || forms.has(verb + ':VBN_VB') || /^[a-z]+ed$/u.test(verb);
+  if (['have', 'has', 'had'].includes(auxiliary)) return participle;
+  if (['am', 'is', 'are', 'was', 'were', 'be', 'been'].includes(auxiliary))
+    return participle || /^[a-z]+ing$/u.test(verb);
+  return baseAux.has(auxiliary) &&
+    (['be', 'do', 'have'].includes(verb) || forms.has(verb + ':VB_VBD') || forms.has(verb + ':VB_VBN'));
+}
+
+// A grammatical past auxiliary carries relative time, voice, or emphasis.
+// A one-token edit prediction alone cannot tell us the writer meant to drop
+// that meaning. Verify its complement using the model's verb vocabulary.
+function canDeleteFromPastVerbGroup(words, index, forms) {
+  const auxiliary = normalize(words[index].word);
+  if (!pastAuxiliaries.has(auxiliary)) return true;
+  let right = index + 1;
+  while (right < words.length && verbModifiers.test(normalize(words[right].word)) &&
+    !acceptsComplement(auxiliary, normalize(words[right].word), forms)) right++;
+  if (right === words.length) return true;
+  const complement = normalize(words[right].word);
+  if (!acceptsComplement(auxiliary, complement, forms)) return true;
+
+  // A preceding auxiliary can instead license the verb after deletion, as
+  // in “were were waiting”. In “have had” the second verb can be lexical.
+  let left = index - 1;
+  while (left >= 0 && verbModifiers.test(normalize(words[left].word))) left--;
+  if (left < 0) return false;
+  const previous = normalize(words[left].word);
+  if (['have', 'has', 'had'].includes(previous) && auxiliary === 'had') return false;
+  return acceptsComplement(previous, complement, forms);
+}
+
 const sameCase = (source, value) => source === source.toUpperCase() ? value.toUpperCase() : /^\p{Lu}/u.test(source) ? value[0]?.toUpperCase() + value.slice(1) : value;
 
 function insideDialogue(text, position) {
@@ -180,6 +217,7 @@ class NeuralGrammarEngine {
           for (let label = 1; label < width; label++) if (probabilities[position * width + label] > probabilities[position * width + best]) best = label;
           const confidence = probabilities[position * width + best], tag = this.labels[best];
           if (confidence < .6 || tag === '$KEEP' || tag.startsWith('$TRANSFORM_CASE_')) continue;
+          if (tag === '$DELETE' && !canDeleteFromPastVerbGroup(words, i - 1, this.verbs)) continue;
           const replacement = this.decode(word.word, tag);
           if (replacement == null || !allowedEdit(text, word, replacement, tag)) continue;
           let from = word.from, to = word.to, original = word.word;
@@ -198,7 +236,7 @@ class NeuralGrammarEngine {
     return hints;
   }
 }
-module.exports = { NeuralGrammarEngine, allowedEdit, insideDialogue };
+module.exports = { NeuralGrammarEngine, allowedEdit, insideDialogue, canDeleteFromPastVerbGroup };
 
 
 
