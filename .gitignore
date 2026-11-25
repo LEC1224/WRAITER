@@ -13,5 +13,6 @@ build/neural-grammar-cache/
 dist-web/
 cloud/data/
 cloud/config/
+/config/*.env
 cloud/.backup-transfer/
 cloud/.runtime/

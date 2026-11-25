@@ -38,9 +38,17 @@
 }
 
 /* Cloud and browser controls share the manuscript editor with the desktop. */
-.desktop-cloud-navigation { position:absolute; top:4px; right:6px; z-index:9; }
-.desktop-cloud-navigation .secondary-button { min-height:25px; font-size:11px; padding:3px 8px; }
-.desktop-cloud-navigation + .project-tabs-bar { padding-right:108px; }
+.desktop-cloud-navigation { position:absolute; top:4px; right:6px; z-index:9; display:flex; gap:6px; }
+.desktop-cloud-navigation :is(.secondary-button,.primary-button) { min-height:25px; font-size:11px; padding:3px 8px; }
+.desktop-cloud-navigation + .project-tabs-bar { padding-right:166px; }
+.suggestion-form { display:grid; gap:14px; }
+.suggestion-form label { display:grid; gap:6px; color:var(--text); font-weight:600; }
+.suggestion-form textarea { resize:vertical; font:inherit; font-weight:400; color:var(--text); }
+.suggestion-form label.suggestion-consent { display:flex; align-items:center; gap:8px; font-weight:400; }
+.suggestion-consent input { margin:0; accent-color:var(--accent); }
+.suggestion-form fieldset { display:grid; gap:10px; border:1px solid var(--line); }
+.suggestion-form .modal-footer { margin-top:0; }
+.suggestion-error { color:var(--danger); overflow-wrap:anywhere; }
 .web-writing-navigation { display:flex; align-items:center; gap:6px; flex:0 0 auto; padding:5px 9px; border-bottom:1px solid var(--line); background:var(--panel); }
 .mobile-nav-only { display:none !important; }
 .web-writing-navigation .secondary-button { min-height:30px; }

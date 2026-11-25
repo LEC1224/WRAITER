@@ -313,6 +313,15 @@ app.whenReady().then(async () => {
   require('./setup.cjs').registerSetup({ ipcMain: { handle }, app, dialog, shell, win: () => win, draftConnection });
   handle('boot', () => ({ ...bootResult, ...workspace.snapshot(), layout: profileLayout.view, prefs: publicPrefs(), availableSpellLanguages: win.webContents.session.availableSpellCheckerLanguages }));
   const cloud = new CloudClient(app.getPath('userData'), { safeStorage });
+  handle('cloud:suggest', async (_event, input) => {
+    const state = await cloud.load();
+    if (!state?.token) return { signInRequired: true };
+    const { id, description, includeDiagnostics } = input || {};
+    const attachments = includeDiagnostics === true ? await require('./suggestion-diagnostics.cjs').collectDiagnostics(diagnostics) : [];
+    try {
+      return await cloud.request('/api/suggestions', { method: 'POST', expectedUserId: state.userId, expectedToken: state.token, body: { id, description, includeDiagnostics, attachments } });
+    } catch (error) { if (error.code === 401) return { signInRequired: true }; throw error; }
+  });
   handle('cloud:status', () => cloud.status());
   handle('cloud:login', (_e, credentials) => cloud.login(credentials));
   handle('cloud:logout', () => cloud.logout());

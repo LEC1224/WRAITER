@@ -7,8 +7,11 @@ async function sendMail(to, kind, link, env = process.env) {
   const text = `${subject}\n\n${explanation}\n\n${link}\n\nIf you did not request this, you can ignore this email.`;
   const from = `WRAITER <${env.WRAITER_MAIL_FROM || 'noreply@example.net'}>`;
   const message = { from,to,subject,text,html:`<div style="font-family:system-ui;max-width:560px;margin:32px auto;color:#25282d"><h1 style="font-size:24px">${subject}</h1><p>${explanation}</p><p><a style="display:inline-block;padding:12px 18px;background:#244b53;color:#fff;border-radius:6px;text-decoration:none" href="${escape(link)}">${verify ? 'Confirm email' : 'Reset password'}</a></p><p>Or open: ${escape(link)}</p><p style="color:#667">If you did not request this, you can ignore this email.</p><p>WRAITER</p></div>` };
+  return deliver(message, env);
+}
+async function deliver(message, env, idempotencyKey) {
   if (env.WRAITER_RESEND_KEY) {
-    const response = await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${env.WRAITER_RESEND_KEY}`},body:JSON.stringify(message),signal:AbortSignal.timeout(20000),redirect:'error'});
+    const response = await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${env.WRAITER_RESEND_KEY}`,...(idempotencyKey ? {'Idempotency-Key':idempotencyKey} : {})},body:JSON.stringify(message),signal:AbortSignal.timeout(20000),redirect:'error'});
     if (!response.ok) throw new CloudError(503,'Confirmation email could not be sent. Please try again shortly.'); return;
   }
   if (env.WRAITER_MAIL_RELAY_URL) {
@@ -24,4 +27,4 @@ async function sendMail(to, kind, link, env = process.env) {
   }
   throw new CloudError(503,'Email confirmation is temporarily unavailable. Please try again shortly.');
 }
-module.exports = { configured, sendMail };
+module.exports = { configured, sendMail, deliver };

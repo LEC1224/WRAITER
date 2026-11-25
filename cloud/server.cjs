@@ -6,6 +6,7 @@ const { Store, CloudError, encryptedInput } = require('./store.cjs');
 const auth = require('./auth.cjs');
 const mail = require('./mail.cjs');
 const { siteOrigins } = require('./site-origins.cjs');
+const { createSuggestions } = require('./suggestions.cjs');
 const VERSION = '0.21.0-rc.4';
 const HOUR = 3600000;
 const MIME = { '.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.ico':'image/x-icon','.woff2':'font/woff2','.txt':'text/plain; charset=utf-8','.aff':'text/plain','.dic':'text/plain' };
@@ -15,6 +16,7 @@ function createApplication(options = {}) {
   const store = options.store || new Store(env.WRAITER_DATA_DIR || path.join(__dirname,'data'));
   const secure = env.WRAITER_SECURE_COOKIES !== '0', cookieName = secure ? '__Host-wraiter' : 'wraiter';
   const sendMail = options.sendMail || mail.sendMail;
+  const suggestions = createSuggestions({ store, env, selectSite, deliver: options.deliverSuggestionMail, pollMs: options.suggestionPollMs });
   let hashing = 0;
   async function passwordWork(action) { if (hashing >= 3) throw new CloudError(429,'Too many sign-in requests. Please try again shortly.'); hashing++; try { return await action(); } finally { hashing--; } }
   function limited(key,max,time) { if (store.limited(key,max,time)) throw new CloudError(429,'Too many requests. Please try again later.'); }
@@ -33,6 +35,12 @@ function createApplication(options = {}) {
     if (!['GET','HEAD'].includes(method)) {
       if (request.headers['x-wraiter-request'] !== '1') throw new CloudError(403,'The request needs a WRAITER security header.');
       if (request.headers.origin && request.headers.origin !== site.origin || request.headers['sec-fetch-site']==='cross-site') throw new CloudError(403,'This request did not come from WRAITER.');
+    }
+    if (route.startsWith('/api/suggestion-relay/') && method === 'POST') {
+      suggestions.requireRelay(request);
+      if (route === '/api/suggestion-relay/poll') return json(response, await suggestions.poll(await body(request,256*1024), response));
+      if (route === '/api/suggestion-relay/receipt') return json(response, suggestions.receipt(await body(request,4096)));
+      throw new CloudError(404,'Unknown developer PC request.');
     }
     if (route.startsWith('/api/auth/') && method==='POST') {
       const action=route.slice('/api/auth/'.length);
@@ -69,6 +77,17 @@ function createApplication(options = {}) {
     }
     if (route==='/api/auth/me' && method==='GET') { const current=session(request,false); return json(response,{...store.account(current.user),sessionCacheTag:sessionCacheTag(current.hash)}); }
     const {user}=session(request); limited('api-user:'+user.id,2000,60000);
+    if (route === '/api/suggestions' && method === 'POST') {
+      limited('suggestions:'+user.id,12,HOUR);
+      return json(response, suggestions.submit(user,site,await authenticatedBody(request,user,640*1024)),201);
+    }
+    if (route === '/api/admin/suggestions' || route.startsWith('/api/admin/suggestions/')) {
+      suggestions.requireAdmin(user);
+      if (route === '/api/admin/suggestions' && method === 'GET') return json(response,suggestions.list(url.searchParams.get('before')));
+      const match = /^\/api\/admin\/suggestions\/([a-f0-9-]{36})\/(edit|approve|decline|retry)$/.exec(route);
+      if (match && method === 'POST') return json(response,suggestions.review(match[1],match[2],await authenticatedBody(request,user,48*1024)));
+      throw new CloudError(404,'Suggestion action not found.');
+    }
     if (route.startsWith('/api/ai/')) throw new CloudError(410,'AI now connects directly from your device to your own provider. Reload WRAITER or install the updated desktop app. This server no longer processes document text or provider keys.','CLIENT_UPGRADE_REQUIRED');
     if (route==='/api/account/password' && method==='POST') {
       limited('password-change:'+user.id,6,15*60000);
@@ -111,17 +130,25 @@ function createApplication(options = {}) {
       if(url.pathname.startsWith('/api/')) return await api(request,response,url,site);
       if(!['GET','HEAD'].includes(request.method)) throw new CloudError(405,'Method not allowed.');
       let pathname; try { pathname=decodeURIComponent(url.pathname); } catch { throw new CloudError(400,'Invalid URL.'); }
+      if (/^\/admin\/?$/.test(pathname)) {
+        try { suggestions.requireAdmin(session(request).user); }
+        catch (error) {
+          if (error.status !== 401) throw error;
+          response.writeHead(303, { Location: '/?next=admin', 'Cache-Control': 'no-store' });
+          return response.end();
+        }
+      }
       if(pathname.includes('\\')||pathname.includes('\0')||pathname.split('/').some(part=>part.startsWith('.'))) throw new CloudError(404,'Not found.');
       if (site.alternate && /\.map$/i.test(pathname)) throw new CloudError(404,'Not found.');
       let file=path.resolve(staticDir,'.'+pathname); if(file!==staticDir && !file.startsWith(staticDir+path.sep)) throw new CloudError(404,'Not found.');
       let stat; try { stat=fs.statSync(file); } catch {}
       if(!stat?.isFile()) { if(path.extname(pathname)) throw new CloudError(404,'Not found.'); file=path.join(staticDir,'index.html'); try{stat=fs.statSync(file);}catch{throw new CloudError(503,'The writing app is being prepared. Please try again shortly.');} }
-      response.writeHead(200,{'Content-Type':MIME[path.extname(file)]||'application/octet-stream','Content-Length':stat.size,'Cache-Control':file.endsWith('.html')?'no-cache':pathname.startsWith('/assets/')?'public, max-age=31536000, immutable':'public, max-age=3600'});
+      response.writeHead(200,{'Content-Type':MIME[path.extname(file)]||'application/octet-stream','Content-Length':stat.size,'Cache-Control':/^\/admin\/?$/.test(pathname)?'private, no-store':file.endsWith('.html')?'no-cache':pathname.startsWith('/assets/')?'public, max-age=31536000, immutable':'public, max-age=3600'});
       if(request.method==='HEAD') return response.end(); await pipeline(fs.createReadStream(file),response);
     } catch(error) { if(response.headersSent) { response.destroy(); return; } const status=error.status || (/document|chapter|format|history|reference|Invalid|damaged|preview supports/i.test(error.message)?400:500); if(status===500) console.error(JSON.stringify({event:'request-error',code:error.code||error.name})); json(response,{error:status===500?'The request could not be completed. Please try again.':error.message,...(error.code?{code:error.code}:{})},status); }
   });
   server.requestTimeout=300000; server.headersTimeout=15000; server.keepAliveTimeout=5000; server.maxRequestsPerSocket=1000;
-  const cleanup=setInterval(()=>store.cleanup(),HOUR); cleanup.unref(); server.on('close',()=>{clearInterval(cleanup); if(!options.store)store.close();});
+  const cleanup=setInterval(()=>store.cleanup(),HOUR); cleanup.unref(); server.on('close',()=>{clearInterval(cleanup); suggestions.close(); if(!options.store)store.close();});
   return { server,store };
 }
 if(require.main===module) { const app=createApplication(); app.server.listen(Number(process.env.PORT || 3020),process.env.HOST || '127.0.0.1',()=>console.log(JSON.stringify({event:'listening',port:app.server.address().port,version:VERSION}))); for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>app.server.close()); }

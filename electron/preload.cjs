@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const invoke = channel => (...args) => ipcRenderer.invoke(channel, ...args);
 contextBridge.exposeInMainWorld('wraiter', {
+  submitSuggestion: invoke('cloud:suggest'),
   platform: 'desktop',
   cloudStatus: invoke('cloud:status'), cloudLogin: invoke('cloud:login'), cloudLogout: invoke('cloud:logout'), cloudList: invoke('cloud:list'), cloudUpload: invoke('cloud:upload'), cloudOpen: invoke('cloud:open'),
   cloudVaultStatus: invoke('cloud:vault-status'), cloudVaultCreate: invoke('cloud:vault-create'), cloudVaultUnlock: invoke('cloud:vault-unlock'), cloudVaultRecover: invoke('cloud:vault-recover'), cloudVaultLock: invoke('cloud:vault-lock'), cloudVaultChange: invoke('cloud:vault-change'), cloudVaultMigrate: invoke('cloud:vault-migrate'),

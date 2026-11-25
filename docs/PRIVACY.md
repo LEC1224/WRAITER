@@ -28,6 +28,8 @@ The web library provides individual downloads, a ZIP of the whole library, docum
 
 ## Local diagnostic logs
 
+The Suggest dialog sends your description and WRAITER account email to the developer. If you select **Include recent logs and crash reports**, it also sends recent diagnostic records. Desktop attachments contain application logs and structured crash reports. The browser supplies error records from your current signed-in session. The service stores suggestions and attachments for review. Approved prompts and attachments go to the developer’s local Codex project and selected model. A transactional mail provider delivers new-suggestion notifications and decline explanations.
+
 WRAITER keeps local diagnostic logs of settings changes, panels and windows opening or closing, explicit document/connection operations, operation timing, errors, and detected process crashes. Records include timestamps, a random app-session identifier, app/runtime versions and operating-system version. Typing, manuscript contents, chats, document names and paths, credentials and free-text setting values are excluded. Errors retain types, known codes and application source locations rather than raw messages or memory dumps.
 
 Logs stay in the app's `Logs` folder and are not uploaded to the publisher or attached to reports automatically. **Settings → Logging → Open log folder** opens that folder. Automatic cleanup is on by default and deletes log files last written more than one calendar month ago. You can select 1–24 months or turn cleanup off. The app also keeps a small local marker to detect sessions that ended without a normal exit. Diagnostic cleanup does not delete manuscripts, settings, recovery files or editing history.
