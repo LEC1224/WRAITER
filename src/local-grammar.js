@@ -4,6 +4,7 @@ import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { updateHintDecorations } from './grammar-decorations.js';
+import { grammarDismissal, mapGrammarDismissal } from './grammar-dismissal.js';
 import { checkAdvancedOffline, checkOffline, currentDictionaryVersion, subscribeDictionary } from './offline-grammar-client.js';
 
 import { grammarHints } from './local-grammar-rules.js';
@@ -156,17 +157,6 @@ function reserveChunks(tasks, status, signal) {
 }
 
 export const grammarKey = new PluginKey('localGrammar');
-const ignoreKey = hint => `${hint.category}\0${hint.rule}\0${hint.original.toLocaleLowerCase('en')}`;
-function mapIgnoredHint(hint, transaction) {
-  if (!transaction.docChanged) return hint;
-  try {
-    const from = transaction.mapping.mapResult(hint.from, 1), to = transaction.mapping.mapResult(hint.to, -1);
-    if (from.deletedAcross || to.deletedAcross || from.pos >= to.pos ||
-        transaction.before.resolve(hint.from).parent !== transaction.doc.resolve(from.pos).parent ||
-        transaction.doc.textBetween(from.pos, to.pos, '', '\n') !== hint.original) return null;
-    return { ...hint, from: from.pos, to: to.pos };
-  } catch { return null; }
-}
 export function localDecorationWindow(hints, position, maximum = 1000) {
   if (hints.length <= maximum) return hints;
   let low = 0, high = hints.length;
@@ -204,19 +194,23 @@ export const LocalGrammar = Extension.create({
         if (tr.selectionSet && !Object.hasOwn(update || {}, 'viewport')) options.viewport = null;
         const active = activeChecker(options);
         const changedOptions = ['enabled', 'spelling', 'review', 'language'].some(key => options[key] !== state[key]);
-        let ignoredOnce = tr.docChanged && state.ignoredOnce.length ? state.ignoredOnce.map(hint => mapIgnoredHint(hint, tr)).filter(Boolean) : state.ignoredOnce;
+        let ignoredOnce = tr.docChanged && state.ignoredOnce.length ? state.ignoredOnce.map(item => mapGrammarDismissal(item, tr)).filter(Boolean) : state.ignoredOnce;
         let ignoredAll = state.ignoredAll;
         const requested = update?.ignore;
         if (requested && state.allHints.some(hint => hint.id === requested.id && hint.original === requested.original)) {
-          if (requested.all) ignoredAll = new Set(ignoredAll).add(ignoreKey(requested));
-          else ignoredOnce = [...ignoredOnce, requested];
+          const dismissal = grammarDismissal(requested);
+          if (requested.all) ignoredAll = new Set(ignoredAll).add(dismissal.key);
+          else ignoredOnce = [...ignoredOnce, dismissal];
         }
         const collect = tr.docChanged || update?.refresh || changedOptions;
         const deferred = collect ? [] : state.deferred;
         const rawHints = collect ? (active ? documentGrammar(tr.doc, options.language, { spelling: true, deferred }) : []) : state.rawHints;
         const needsFiltering = rawHints !== state.rawHints || tr.docChanged || !!requested;
         const allHints = !needsFiltering ? state.allHints : !ignoredAll.size && !ignoredOnce.length ? rawHints :
-          rawHints.filter(hint => !ignoredAll.has(ignoreKey(hint)) && !ignoredOnce.some(ignored => ignored.from === hint.from && ignored.to === hint.to && ignoreKey(ignored) === ignoreKey(hint)));
+          rawHints.filter(hint => {
+            const { from, to, key } = grammarDismissal(hint);
+            return !ignoredAll.has(key) && !ignoredOnce.some(ignored => ignored.from === from && ignored.to === to && ignored.key === key);
+          });
         const hints = allHints === state.allHints && !changedOptions ? state.hints : options.spelling && options.enabled ? allHints :
           allHints.filter(hint => hint.category === 'spelling' ? options.spelling : options.enabled);
         const visible = localDecorationWindow(hints, options.viewport ?? tr.selection.head);
