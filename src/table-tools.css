@@ -1,0 +1,131 @@
+.modal.table-tools-dialog {
+  width: min(820px, 100%);
+  padding: 20px 22px 16px;
+}
+.table-tools-dialog .modal-heading { margin-bottom: 15px; }
+.table-mode-bar, .table-modes, .table-shape, .table-section-heading, .table-range,
+.table-tool-button, .table-insert-control, .table-tools-footer, .table-color-line,
+.table-color-line label, .table-header-option { display: flex; align-items: center; }
+.table-mode-bar { justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.table-modes { gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); }
+.table-shape { gap: 7px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.table-tool-button, .table-insert-control {
+  justify-content: center; gap: 6px; min-height: 32px; padding: 5px 9px;
+  color: var(--text); background: var(--panel-raised); border: 1px solid var(--line-strong);
+  border-radius: 4px; font: 500 12px/1.35 "Segoe UI", sans-serif; white-space: nowrap;
+}
+.table-tool-button:hover:not(:disabled) { background: var(--panel-soft); border-color: var(--muted); }
+.table-tool-button[aria-pressed="true"], .table-tool-button[aria-pressed="true"]:hover {
+  background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
+}
+.table-modes .table-tool-button { min-height: 29px; padding: 4px 11px; border-color: transparent; background: transparent; }
+.table-modes .table-tool-button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.table-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 21px; align-items: start; }
+.table-workspace h3 { color: var(--text); font: 600 13px/1.4 "Segoe UI", sans-serif; margin: 0 0 9px; }
+.table-selection-panel {
+  min-width: 0; padding: 12px 13px 10px; border: 1px solid var(--line);
+  border-radius: 5px; background: var(--canvas);
+}
+.table-section-heading { justify-content: space-between; gap: 10px; }
+.table-section-heading h3 { margin: 0; }
+.table-range {
+  gap: 5px; min-height: 21px; padding: 2px 6px; border-radius: 3px; background: var(--accent-faint);
+  color: var(--accent); font: 600 11px/1.25 Consolas, monospace;
+}
+.table-compass {
+  display: grid; grid-template-columns: 68px minmax(0, 1fr) 68px;
+  grid-template-areas: ". above ." "left matrix right" ". below ."; gap: 8px;
+  align-items: center; margin: 14px 0 9px;
+}
+.table-insert-control {
+  color: var(--accent); border-color: var(--line); background: var(--panel);
+  font-size: 11px; min-height: 26px; padding: 3px 7px; gap: 4px;
+}
+.table-insert-control:hover { border-color: var(--accent); background: var(--accent-faint); }
+.insert-above { grid-area: above; justify-self: center; }
+.insert-below { grid-area: below; justify-self: center; }
+.insert-left { grid-area: left; }
+.insert-right { grid-area: right; }
+.insert-left, .insert-right { flex-direction: column; gap: 2px; padding: 5px 2px; font-size: 11px; }
+.table-map-scroll {
+  grid-area: matrix; min-width: 0; max-height: 227px; overflow: auto; overscroll-behavior: contain;
+  border: 1px solid var(--line-strong); border-radius: 3px; background: var(--panel); scrollbar-width: thin;
+}
+.table-map { width: 100%; table-layout: fixed; border-spacing: 0; user-select: none; }
+.table-axis-col { width: 27px; }
+.table-map th, .table-map td { padding: 0; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.table-map tr > :last-child { border-right: 0; }
+.table-map tbody tr:last-child > * { border-bottom: 0; }
+.table-map tbody tr { height: 32px; }
+.table-map th, .table-axis-corner {
+  background: var(--panel-soft); color: var(--muted); text-align: center; font: 500 10px/1.3 "Segoe UI", sans-serif;
+}
+.table-map thead { position: sticky; top: 0; z-index: 2; }
+.table-map thead th, .table-axis-corner { height: 22px; }
+.table-map tbody th, .table-axis-corner { position: sticky; left: 0; z-index: 1; }
+.table-map th.axis-selected { color: var(--accent); background: var(--accent-faint); }
+.table-map td { position: relative; background: var(--map-fill, var(--panel)); box-shadow: inset 0 0 0 1px var(--map-border, transparent); }
+.table-map td.table-axis-corner { background: var(--panel-soft); }
+.table-map td.map-header { background: var(--map-fill, var(--panel-raised)); }
+.table-map td[data-selected] { background: var(--accent-soft); }
+.table-map td[data-selected]::after { content: ""; position: absolute; inset: 0; border: 0 solid var(--accent); pointer-events: none; }
+.table-map td[data-top]::after { border-top-width: 1px; }
+.table-map td[data-bottom]::after { border-bottom-width: 1px; }
+.table-map td[data-left]::after { border-left-width: 1px; }
+.table-map td[data-right]::after { border-right-width: 1px; }
+.table-map button {
+  position: absolute; inset: 0; display: block; width: 100%; height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 5px 7px; color: var(--map-ink, var(--text)); font: 400 12px/1.4 "Segoe UI", sans-serif; text-align: left; user-select: none;
+}
+.table-map .map-header button { font-weight: 650; }
+.table-map [data-selected] button { color: var(--text); }
+.table-map button:hover { box-shadow: inset 0 0 0 1px var(--accent); }
+.table-map button:focus-visible { outline-offset: -3px; }
+.empty-table-cell { color: var(--faint); }
+.table-range-help { color: var(--muted); font-size: 11px; line-height: 1.4; text-align: center; margin: 10px 0 0; }
+.table-inspector { min-width: 0; padding-top: 1px; }
+.table-inspector section + section { border-top: 1px solid var(--line); margin-top: 13px; padding-top: 12px; }
+.table-tool-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.table-tool-pair .table-tool-button { padding: 5px 4px; }
+.table-inspector .table-color-line + .table-color-line { margin-top: 4px; }
+.table-color-line { gap: 4px; }
+.table-color-line label { gap: 7px; flex: 1; min-width: 0; font-size: 12px; }
+.table-color-line label > svg { color: var(--muted); }
+.table-color-line input[type="color"] {
+  box-sizing: border-box; display: block; width: 34px; height: 26px; min-height: 0; margin: 0 3px 0 auto;
+  padding: 3px; cursor: pointer; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--panel-raised);
+}
+.table-color-line input::-webkit-color-swatch-wrapper { padding: 0; }
+.table-color-line input::-webkit-color-swatch { border: 1px solid var(--line); border-radius: 1px; }
+.table-color-line .table-tool-button { min-height: 27px; width: 28px; padding: 3px; }
+.table-tools-footer { gap: 7px; border-top: 1px solid var(--line); margin-top: 16px; padding-top: 13px; }
+.table-tools-footer .table-remove { margin-left: auto; min-height: 32px; padding: 5px 10px; border-radius: 4px; }
+.table-new-footer { justify-content: flex-end; }
+.table-new-footer .primary-button { min-height: 32px; }
+.table-picker-panel { padding-bottom: 17px; }
+.table-size-grid { width: min(100%, 302px); display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 3px; margin: 17px auto 0; }
+.table-size-grid button { height: 21px; padding: 0; border: 1px solid var(--line-strong); border-radius: 2px; background: var(--panel); }
+.table-size-grid .picked { background: var(--accent-soft); border-color: var(--accent); }
+.table-size-grid .picked-header { background: var(--accent); }
+.table-size-grid button:focus-visible { outline-offset: 0; }
+.table-dimensions label { display: flex; align-items: center; gap: 7px; min-height: 31px; font-size: 12px; }
+.table-dimensions label + label { margin-top: 6px; }
+.table-dimensions .field-input { width: 72px; min-height: 30px; margin-left: auto; }
+.table-header-option svg { color: var(--muted); }
+.table-header-option input { margin-left: auto; }
+
+@media (max-width: 720px) {
+  .modal.table-tools-dialog { padding: 17px 15px 13px; }
+  .table-workspace { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .table-inspector { display: grid; grid-template-columns: repeat(auto-fit, minmax(146px, 1fr)); gap: 12px; }
+  .table-inspector section + section { margin: 0; padding: 0; border: 0; }
+  .table-tool-pair .table-tool-button { flex-direction: column; gap: 3px; white-space: normal; }
+}
+@media (max-width: 450px) {
+  .table-mode-bar { flex-wrap: wrap; gap: 6px; }
+  .table-selection-panel { padding: 9px 7px; }
+  .table-compass { grid-template-columns: 45px minmax(0, 1fr) 45px; gap: 4px; }
+  .insert-left, .insert-right { white-space: normal; }
+  .table-tools-footer { flex-wrap: wrap; }
+  .table-tools-footer .table-tool-button, .table-tools-footer .table-remove { gap: 4px; padding: 4px 6px; font-size: 11px; }
+}

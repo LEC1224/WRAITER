@@ -88,6 +88,14 @@ Choose **Document templates…** in the manuscript sidebar to save the current c
 
 Select text and choose **Change case** in the formatting toolbar for uppercase, lowercase, title case or sentence case. Title case capitalizes each word; sentence case capitalizes the first letter of each paragraph and after `.`, `!` or `?`. The change is one undoable action and keeps existing formatting and private passage anchors.
 
+### Table tools
+
+Open **Table tools** from the formatting toolbar. In a table, click a cell in the preview or drag across several cells. Shift-click and Shift+arrow keys also extend the selection. The four plus buttons insert rows and columns along the corresponding edge of the selection. Use **Merge** to join selected cells or **Split** to divide a merged cell.
+
+![Table tools with cells B2 through C2 selected](images/table-tools.png)
+
+Choose **New table** to pick a size on the grid or enter exact row and column counts. Set **Header row** as needed, then choose **Insert table**.
+
 ## Page setup and manuscript notes
 
 **File → Page setup…** sets the manuscript's A4, A5 or Letter paper size, orientation, margins, header and footer. These settings are saved in WRAITER documents, templates and revision snapshots, and are undoable. Standard PDF, DOCX and ODT exports use them. Enter `{page}` or `{pages}` in a header or footer for automatic page numbers. The export dialog starts with the manuscript's setup and can override it for that export. **File → Print preview…** or **Ctrl+P** opens the generated local PDF for preview and printing; the divided-page editing surface remains an approximate writing view.

@@ -1,21 +1,96 @@
-import React, { useState } from 'react';
+import React, { useEffect, useReducer, useState } from 'react';
+import { columnIsHeader, isInTable, rowIsHeader, selectedRect } from '@tiptap/pm/tables';
+import {
+  Check, Columns2, Eraser, Grid2X2Plus, PaintBucket, PanelLeft, PanelTop, RotateCcw,
+  Rows2, SquareDashed, Table2, TableCellsMerge, TableCellsSplit, Trash2
+} from 'lucide-react';
+import TableSelectionGrid from './TableSelectionGrid';
+import TableSizePicker from './TableSizePicker';
+import './table-tools.css';
+
+function ToolButton({ icon: Icon, label, children, title = label, ...props }) {
+  return <button type="button" className="table-tool-button" aria-label={label} title={title} {...props}>
+    <Icon size={16} aria-hidden="true" />{children}
+  </button>;
+}
+
+function ColorControl({ label, inputLabel, icon: Icon, fallback, current, applyLabel, clearLabel, resetIcon, apply, canClear }) {
+  const [color, setColor] = useState(/^#[0-9a-f]{6}$/i.test(current || '') ? current : fallback);
+  return <div className="table-color-line">
+    <label><Icon size={15} aria-hidden="true" /><span>{label}</span>
+      <input type="color" aria-label={inputLabel} title={inputLabel} value={color} onChange={e => setColor(e.target.value)} /></label>
+    <ToolButton icon={Check} label={applyLabel} onClick={() => apply(color)} />
+    <ToolButton icon={resetIcon} label={clearLabel} onClick={() => apply(null)} disabled={!canClear} />
+  </div>;
+}
+
+function TableInspector({ editor, rect, execute }) {
+  const { map, table, tableStart } = rect;
+  const cells = map.cellsInRect(rect);
+  const first = table.nodeAt(cells[0]);
+  function setColor(attribute, value) {
+    execute(chain => chain.command(({ tr }) => {
+      for (const offset of cells) {
+        if (table.nodeAt(offset).attrs[attribute] !== value) tr.setNodeAttribute(tableStart + offset, attribute, value);
+      }
+      return true;
+    }));
+  }
+  return <div className="table-inspector">
+    <section><h3>Cells</h3><div className="table-tool-pair">
+      <ToolButton icon={TableCellsMerge} label="Merge selected cells" title="Merge selected cells" disabled={!editor.can().mergeCells()} onClick={() => execute(c => c.mergeCells())}>Merge</ToolButton>
+      <ToolButton icon={TableCellsSplit} label="Split cell" title="Split a merged cell" disabled={!editor.can().splitCell()} onClick={() => execute(c => c.splitCell())}>Split</ToolButton>
+    </div></section>
+    <section><h3>Headers</h3><div className="table-tool-pair">
+      <ToolButton icon={PanelTop} label="Toggle header row" aria-pressed={rowIsHeader(map, table, 0)} onClick={() => execute(c => c.toggleHeaderRow())}>Top row</ToolButton>
+      <ToolButton icon={PanelLeft} label="Toggle header column" aria-pressed={columnIsHeader(map, table, 0)} onClick={() => execute(c => c.toggleHeaderColumn())}>First column</ToolButton>
+    </div></section>
+    <section><h3>Cell colours</h3>
+      <ColorControl key={'fill-' + first?.attrs.cellBackground} label="Fill" inputLabel="Cell background" icon={PaintBucket} fallback="#ffffcc" current={first?.attrs.cellBackground}
+        applyLabel="Apply background" clearLabel="Clear background" resetIcon={Eraser}
+        apply={value => setColor('cellBackground', value)} canClear={cells.some(pos => table.nodeAt(pos).attrs.cellBackground)} />
+      <ColorControl key={'border-' + first?.attrs.cellBorder} label="Border" inputLabel="Cell border colour" icon={SquareDashed} fallback="#888888" current={first?.attrs.cellBorder}
+        applyLabel="Apply border colour" clearLabel="Reset border" resetIcon={RotateCcw}
+        apply={value => setColor('cellBorder', value)} canClear={cells.some(pos => table.nodeAt(pos).attrs.cellBorder)} />
+    </section>
+  </div>;
+}
 
 export default function TableTools({ Modal, editor, onClose }) {
-  const [rows, setRows] = useState(3), [columns, setColumns] = useState(3), [header, setHeader] = useState(true);
-  const [background, setBackground] = useState('#ffffcc'), [border, setBorder] = useState('#888888');
-  const inside = !!editor?.isActive('table');
-  const actions = [
-    ['Add row above', c => c.addRowBefore(), "Insert a row above the current row."], ['Add row below', c => c.addRowAfter(), "Insert a row below the current row."],
-    ['Add column before', c => c.addColumnBefore(), "Insert a column to the left of the current column."], ['Add column after', c => c.addColumnAfter(), "Insert a column to the right of the current column."],
-    ['Merge selected cells', c => c.mergeCells(), "Combine the selected adjacent cells into one cell."], ['Split cell', c => c.splitCell(), "Split a merged cell back into separate cells."],
-    ['Toggle header row', c => c.toggleHeaderRow(), "Turn header formatting on or off for the first row."], ['Toggle header column', c => c.toggleHeaderColumn(), "Turn header formatting on or off for the first column."],
-    ['Delete row', c => c.deleteRow(), "Delete the current row, including its contents."], ['Delete column', c => c.deleteColumn(), "Delete the current column, including its contents."], ['Remove table', c => c.deleteTable(), "Delete this table, including all of its contents.", 'danger-button subtle']
-  ];
-  function execute(command) { if (editor && !editor.isDestroyed) command(editor.chain().focus()).run(); onClose(); }
-  return <Modal title="Table tools" onClose={onClose}><form onSubmit={event => {
-    event.preventDefault();
-    const r = Number(rows), c = Number(columns);
-    if (!Number.isInteger(r) || !Number.isInteger(c) || r < 1 || r > 50 || c < 1 || c > 20) return;
-    execute(chain => chain.insertTable({ rows: r, cols: c, withHeaderRow: header }));
-  }}><div className="form-grid"><label>Rows<input className="field-input" type="number" min="1" max="50" required value={rows} onChange={event => setRows(event.target.value)} /></label><label>Columns<input className="field-input" type="number" min="1" max="20" required value={columns} onChange={event => setColumns(event.target.value)} /></label></div><label className="check-label"><input type="checkbox" checked={header} onChange={event => setHeader(event.target.checked)} />Header row</label><button className="secondary-button" type="submit" title="Insert a table at the cursor using the chosen row, column and header settings.">Insert table</button></form><div className="button-grid">{actions.map(([label, command, hint, className = 'secondary-button']) => <button type="button" className={className} key={label} disabled={!inside} onClick={() => execute(command)} title={inside ? hint : "Place the cursor in a table to use this tool."}>{label}</button>)}</div><div className="form-grid"><label>Cell background<input aria-label="Cell background" type="color" value={background} onChange={event => setBackground(event.target.value)} /></label><button type="button" disabled={!inside} onClick={() => execute(c => c.setCellAttribute('cellBackground', background))} title={inside ? "Apply this background colour to the current or selected cells." : "Place the cursor in a table to use this tool."}>Apply background</button><button type="button" disabled={!inside} onClick={() => execute(c => c.setCellAttribute('cellBackground', null))} title={inside ? "Remove the background colour from the current or selected cells." : "Place the cursor in a table to use this tool."}>Clear background</button><label>Cell border<input aria-label="Cell border colour" type="color" value={border} onChange={event => setBorder(event.target.value)} /></label><button type="button" disabled={!inside} onClick={() => execute(c => c.setCellAttribute('cellBorder', border))} title={inside ? "Apply this border colour to the current or selected cells." : "Place the cursor in a table to use this tool."}>Apply border colour</button><button type="button" disabled={!inside} onClick={() => execute(c => c.setCellAttribute('cellBorder', null))} title={inside ? "Restore the default border colour for the current or selected cells." : "Place the cursor in a table to use this tool."}>Reset border</button></div></Modal>;
+  const inside = !!editor && !editor.isDestroyed && isInTable(editor.state);
+  const [mode, setMode] = useState(inside ? 'edit' : 'new');
+  const [, refresh] = useReducer(value => value + 1, 0);
+  useEffect(() => {
+    if (!editor) return;
+    const changed = ({ transaction }) => { if (transaction.selectionSet || transaction.docChanged) refresh(); };
+    editor.on('transaction', changed);
+    return () => editor.off('transaction', changed);
+  }, [editor]);
+  const editing = inside && mode === 'edit';
+  const rect = editing ? selectedRect(editor.state) : null;
+
+  function execute(command) {
+    if (editor && !editor.isDestroyed && command(editor.chain().focus()).run()) onClose();
+  }
+
+  return <Modal title="Table tools" className="table-tools-dialog" onClose={onClose}>
+    <div className="table-mode-bar">
+      <div className="table-modes" role="group" aria-label="Table tools mode">
+        <ToolButton icon={Table2} label="Edit table" aria-pressed={editing} disabled={!inside} data-initial-focus={editing || undefined} onClick={() => setMode('edit')}>Edit table</ToolButton>
+        <ToolButton icon={Grid2X2Plus} label="New table" aria-pressed={!editing} data-initial-focus={!editing || undefined} onClick={() => setMode('new')}>New table</ToolButton>
+      </div>
+      {editing && <span className="table-shape">{rect.map.height} {rect.map.height === 1 ? 'row' : 'rows'}<span aria-hidden="true">·</span>{rect.map.width} {rect.map.width === 1 ? 'column' : 'columns'}</span>}
+    </div>
+    {editing ? <>
+      <div className="table-workspace">
+        <TableSelectionGrid editor={editor} rect={rect} execute={execute} />
+        <TableInspector editor={editor} rect={rect} execute={execute} />
+      </div>
+      <footer className="table-tools-footer">
+        <ToolButton icon={Rows2} label="Delete row" title="Delete selected rows" disabled={rect.bottom - rect.top === rect.map.height} onClick={() => execute(c => c.deleteRow())}>Delete row</ToolButton>
+        <ToolButton icon={Columns2} label="Delete column" title="Delete selected columns" disabled={rect.right - rect.left === rect.map.width} onClick={() => execute(c => c.deleteColumn())}>Delete column</ToolButton>
+        <button type="button" className="danger-button subtle table-remove" title="Remove the entire table and its contents" onClick={() => execute(c => c.deleteTable())}><Trash2 size={15} aria-hidden="true" />Remove table</button>
+      </footer>
+    </> : <TableSizePicker execute={execute} />}
+  </Modal>;
 }
