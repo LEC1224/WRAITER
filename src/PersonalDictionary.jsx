@@ -142,7 +142,7 @@ export default function PersonalDictionary({ Modal, onClose, language = 'en' }) 
             <span>{label}{!words && <small>{languageName(entry.language)}</small>}</span>
             <button type="button" className="secondary-button" disabled={pending} aria-label={'Edit ' + target}
               onClick={() => { setForm({ entry }); setError(''); }}>Edit</button>
-            <button type="button" className="secondary-button" disabled={pending} aria-label={'Delete ' + target}
+            <button type="button" className="danger-button" disabled={pending} aria-label={'Delete ' + target}
               onClick={() => change(() => words ? removePersonalWord(entry) : removeGrammarException(entry))}>Delete</button>
           </li>;
         })}</ul>}
