@@ -341,6 +341,19 @@ app.whenReady().then(async () => {
   }));
 
   handle('offline-dictionary:words', () => win.webContents.session.listWordsInSpellCheckerDictionary());
+  const { grammarExceptionStore, maximumExceptionBytes } = await import('./grammar-exceptions.mjs');
+  const exceptionFile = file('grammar-exceptions.json');
+  const grammarExceptions = grammarExceptionStore({
+    async read() {
+      try { return (await readLimited(exceptionFile, maximumExceptionBytes)).toString('utf8'); }
+      catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+    },
+    write: json => atomicWrite(exceptionFile, json)
+  });
+  handle('grammar-exceptions:list', () => grammarExceptions.list());
+  handle('grammar-exceptions:add', (_event, entry) => grammarExceptions.add(entry));
+  handle('grammar-exceptions:remove', (_event, entry) => grammarExceptions.remove(entry));
+  handle('grammar-exceptions:edit', (_event, previous, entry) => grammarExceptions.edit(previous, entry));
   handle('offline-grammar:check', async (_event, request) => {
     const [rules, neural] = await Promise.all([
       offlineGrammar.check(request),

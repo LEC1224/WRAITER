@@ -5,6 +5,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { updateHintDecorations } from './grammar-decorations.js';
 import { grammarDismissal, mapGrammarDismissal } from './grammar-dismissal.js';
+import { grammarExceptionKeys, loadGrammarExceptions, subscribeGrammarExceptions } from './personal-grammar-exceptions.js';
 import { checkAdvancedOffline, checkOffline, currentDictionaryVersion, subscribeDictionary } from './offline-grammar-client.js';
 
 import { grammarHints } from './local-grammar-rules.js';
@@ -85,6 +86,7 @@ function prepareLocalRules(node, language) {
 export function documentGrammar(doc, language = 'en-US', { spelling = false, grammar = true, dictionaryVersion = currentDictionaryVersion(), deferred } = {}) {
   if (!supported(language)) return [];
   const hints = [];
+  const exceptions = grammarExceptionKeys(language);
   const entryKey = `${language}:${dictionaryVersion}`, cacheKey = `${entryKey}:${grammar}:${spelling}`;
   let checkedNewBlock = false;
   textblocks(doc, (node, pos) => {
@@ -100,7 +102,7 @@ export function documentGrammar(doc, language = 'en-US', { spelling = false, gra
     }
     const entry = data.advanced.get(entryKey);
     let merged = data.merged.get(cacheKey);
-    if (!merged || merged.revision !== (entry?.revision ?? -1)) {
+    if (!merged || merged.revision !== (entry?.revision ?? -1) || merged.exceptions !== exceptions) {
       const local = grammar ? data.local.get(language).map(hint => ({ ...hint, category: 'grammar', rule: 'wraiter' })) : [];
       const advanced = entry ? entry.chunks.flatMap(chunk => [...chunk.hints, ...chunk.deepHints].map(hint => ({ ...hint, from: hint.from + chunk.from, to: hint.to + chunk.from }))) : [];
       const candidates = [...local.map(hint => ({ ...hint, priority: 0 })), ...advanced.filter(hint => hint.category === 'spelling' ? spelling : grammar).map(hint => ({ ...hint, priority: hint.rule === 'wraiter' ? 0 : hint.category === 'spelling' ? 4 : hint.rule?.startsWith('neural:') ? 3 : hint.rule?.startsWith('learned:') ? 2 : 1 }))];
@@ -109,6 +111,7 @@ export function documentGrammar(doc, language = 'en-US', { spelling = false, gra
       for (const hint of candidates.sort((a, b) => a.priority - b.priority || a.from - b.from || a.to - b.to)) {
         if (!data.keepHint(hint)) continue;
         if (hint.from < 0 || hint.to > data.text.length || hint.to <= hint.from || data.text.slice(hint.from, hint.to) !== hint.original) continue;
+        if (hint.category === 'grammar' && exceptions?.has(grammarDismissal(hint).key)) continue;
         let overlaps = false;
         if (occupied) { for (let position = hint.from; position < hint.to && !overlaps; position++) overlaps = !!occupied[position]; }
         else overlaps = chosen.some(other => hint.from < other.to && hint.to > other.from);
@@ -116,7 +119,7 @@ export function documentGrammar(doc, language = 'en-US', { spelling = false, gra
         if (occupied) occupied.fill(1, hint.from, hint.to);
         chosen.push(hint);
       }
-      merged = { revision: entry?.revision ?? -1, hints: chosen.sort((a, b) => a.from - b.from) };
+      merged = { revision: entry?.revision ?? -1, exceptions, hints: chosen.sort((a, b) => a.from - b.from) };
       data.merged.set(cacheKey, merged);
     }
     if (merged.hints.length) {
@@ -252,6 +255,9 @@ export const LocalGrammar = Extension.create({
         }
       };
       const unsubscribe = subscribeDictionary(() => { basicFailed = false; deepFailed = false; refresh({ status: 'checking', refresh: true }); schedule(0); });
+      const unsubscribeExceptions = subscribeGrammarExceptions(() => refresh({ refresh: true }));
+      // Initial load can finish after the first local marks are drawn.
+      loadGrammarExceptions().catch(() => {});
       const scrolled = () => {
         const options = grammarKey.getState(view.state);
         if (scrollFrame || (options.hints.length <= 1000 && options.deferred.length <= 1000)) return;
@@ -334,7 +340,7 @@ export const LocalGrammar = Extension.create({
             if (activeChecker(options)) schedule(250);
           }
         },
-        destroy() { destroyed = true; controller.abort(); clearTimeout(timer); clearTimeout(localTimer); clearTimeout(basicRetry); clearTimeout(deepRetry); if (scrollFrame) cancelAnimationFrame(scrollFrame); scrollParent?.removeEventListener('scroll', scrolled); unsubscribe(); }
+        destroy() { destroyed = true; controller.abort(); clearTimeout(timer); clearTimeout(localTimer); clearTimeout(basicRetry); clearTimeout(deepRetry); if (scrollFrame) cancelAnimationFrame(scrollFrame); scrollParent?.removeEventListener('scroll', scrolled); unsubscribe(); unsubscribeExceptions(); }
       };
     } })];
   }

@@ -77,6 +77,7 @@ import AIGrammarHints from './AIGrammarHints.jsx';
 import { grammarCorrectionTransaction, grammarHintForMenu, grammarMenuPreview } from './ai-grammar.js';
 import { grammarKey, localGrammarHintForMenu } from './local-grammar.js';
 import { addPersonalWord } from './offline-grammar-client.js';
+import { addGrammarException } from './personal-grammar-exceptions.js';
 import StatisticsDialog from './StatisticsDialog.jsx';
 import NamedStyles from './NamedStyles.jsx';
 import TabStops from './TabStops.jsx';
@@ -1658,7 +1659,7 @@ export default function App() {
     const localHint = !requestRef.current ? localGrammarHintForMenu(current.state, localGrammarId, keyboard) : null;
     const localReplacements = localHint ? (localHint.alternatives || (typeof localHint.replacement === 'string' ? [localHint.replacement] : [])) : [];
     const localMenu = localHint && { category: localHint.category, previews: localReplacements.map(replacement => grammarMenuPreview({ ...localHint, replacement })), canAdd: localHint.category === 'spelling' && /^\p{L}+(?:[’'-]\p{L}+)*$/u.test(localHint.original) && localHint.original.length <= 100 };
-    editorMenuRef.current = { id: request.id, editor: current, projectId: projectRef.current.id, chapterId: activeId, doc: current.state.doc, selection: selection.toJSON(), linkPosition, linkHref: clickedLink?.getAttribute('href'), grammarHint, localHint, localReplacements };
+    editorMenuRef.current = { id: request.id, editor: current, projectId: projectRef.current.id, chapterId: activeId, doc: current.state.doc, selection: selection.toJSON(), linkPosition, linkHref: clickedLink?.getAttribute('href'), grammarHint, localHint, localReplacements, language: grammarKey.getState(current.state)?.language };
     return { editor: true, ...(grammarHint && { grammarHint: grammarMenuPreview(grammarHint) }), ...(localMenu && { localHint: localMenu }), hasImage: !!selectedImage(current), hasLink: !!clickedLink || current.isActive('link'), hasSelection: !selection.empty, hasTextSelection: !selection.empty && !!current.state.doc.textBetween(selection.from, selection.to, '\n', '\n').trim(), blocked: !!requestRef.current, canUndo: undo.canUndo, canRedo: undo.canRedo, canCopyFormatting: !!shape, canPasteFormatting: !!shape && !!formatting, canSplitChapter: !!chapterSplitPlan(current.state), aiEnabled: prefsRef.current.enabled, hasSuggestion: !!suggestion?.text && suggestion.kind !== 'loading' };
   }
   function runEditorMenuAction(action) {
@@ -1686,6 +1687,14 @@ export default function App() {
       aiGrammarRef.current?.actOnHint(context.grammarHint, action.command === 'apply-grammar-hint' ? 'apply' : 'review'); return;
     }
     if (action.command === 'review-local-hint') { setModal({ type: 'local-grammar' }); return; }
+    if (action.command === 'add-grammar-exception') {
+      const checker = grammarKey.getState(current.state), hint = context.localHint;
+      const fresh = checker?.hints.find(item => item.category === 'grammar' && item.id === hint?.id &&
+        item.original === hint.original && item.replacement === hint.replacement && item.reason === hint.reason);
+      if (!fresh || checker.language !== context.language || requestRef.current) { notify('The suggestion changed. Right-click it again.'); return; }
+      addGrammarException(checker.language, fresh).catch(error => notify(errorText(error)));
+      return;
+    }
     if (action.command === 'ignore-local-hint' || action.command === 'ignore-local-matching') {
       const hint = context.localHint, fresh = grammarKey.getState(current.state)?.hints.find(item => item.id === hint?.id && item.original === hint.original);
       if (!fresh || requestRef.current) { notify('The passage changed. Right-click it again.'); return; }

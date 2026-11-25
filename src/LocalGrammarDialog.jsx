@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { grammarKey } from './local-grammar.js';
 import { grammarCorrectionTransaction } from './ai-grammar.js';
 import { addPersonalWord } from './offline-grammar-client.js';
+import { addGrammarException } from './personal-grammar-exceptions.js';
 
 export default function LocalGrammarDialog({ Modal, editor, language, onClose }) {
   const [, refresh] = useState(0), [error, setError] = useState('');
@@ -28,6 +29,16 @@ export default function LocalGrammarDialog({ Modal, editor, language, onClose })
     try { await addPersonalWord(hint.original); setError(''); }
     catch (problem) { setError(problem.message); }
   }
+  async function saveException(hint) {
+    const state = editor && !editor.isDestroyed ? editor.state : null;
+    const current = state && grammarKey.getState(state);
+    if (state?.doc !== doc || current?.language !== language || !current.allHints.includes(hint)) {
+      setError('The suggestion changed. Wait for a fresh check.');
+      return;
+    }
+    try { await addGrammarException(language, hint); setError(''); }
+    catch (problem) { setError(problem.message); }
+  }
   function ignore(hint, all) {
     if (!editor || editor.isDestroyed || editor.state.doc !== doc) { setError('The passage changed. Wait for a fresh check.'); return; }
     editor.view.dispatch(editor.state.tr.setMeta(grammarKey, { ignore: { ...hint, all } }).setMeta('addToHistory', false));
@@ -47,6 +58,7 @@ export default function LocalGrammarDialog({ Modal, editor, language, onClose })
         {hint.category === 'spelling' && /^\p{L}+(?:[’'-]\p{L}+)*$/u.test(hint.original) && hint.original.length <= 100 && <button type="button" className="secondary-button" onClick={() => addWord(hint)}>Add to personal dictionary</button>}
         <button type="button" className="secondary-button" onClick={() => ignore(hint, false)}>Ignore this suggestion</button>
         <button type="button" className="secondary-button" onClick={() => ignore(hint, true)}>Ignore matching suggestions in this chapter</button>
+        {hint.category === 'grammar' && <button type="button" className="secondary-button" onClick={() => saveException(hint)}>Add grammar exception to personal dictionary</button>}
       </div>;
     })}
     {hints.length > 100 && <p className="small-muted">Showing the first 100 suggestions in this chapter.</p>}

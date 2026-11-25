@@ -5,7 +5,8 @@ import scenes from '../../electron/story-scenes.cjs';
 import { request as accountRequest, getRequestSession, download, filename } from './api.js';
 import { runBrowserAI } from './ai.js';
 import { readRecovery, saveRecovery } from './recovery.js';
-import { sealDocument } from '../cloud-vault.js';
+import { sealDocument, openGrammarDictionary, sealGrammarDictionary } from '../cloud-vault.js';
+import { grammarExceptionStore } from '../../electron/grammar-exceptions.mjs';
 import { readCloudDocument } from './vault-client.js';
 
 const TASKS = ['continue', 'correct', 'rewrite', 'proofread', 'chat', 'checkpoint'];
@@ -32,6 +33,26 @@ export function createBrowserAdapter({ user, vaultKey, sessionTag = getRequestSe
   if (!PROVIDERS.has(prefs.provider)) prefs = { ...prefs, provider: 'openai', baseUrl: defaults.baseUrl, model: '', enabled: false, taskProfiles: {} };
   let activeId = null, order = [], commands = new Set(), cancelled = new Map(), pendingOpen = new Map(), queues = new Map(), saveCurrent = null;
   const entries = new Map(), keys = new Map();
+  const dictionarySlot = 'wraiter-grammar-exceptions:' + user.id;
+  const grammarListeners = new Set();
+  const dictionaryChanged = event => {
+    if (event.storageArea === localStorage && (event.key === dictionarySlot || event.key === null)) {
+      for (const listener of grammarListeners) listener();
+    }
+  };
+  const grammarExceptions = grammarExceptionStore({
+    async read() {
+      if (!vaultKey) throw new Error('Unlock the editor before accessing your dictionary.');
+      const saved = localStorage.getItem(dictionarySlot);
+      return saved === null ? null : openGrammarDictionary(vaultKey, user.id, JSON.parse(saved));
+    },
+    async write(json) {
+      const sealed = await sealGrammarDictionary(vaultKey, user.id, json);
+      if (!vaultKey) throw new Error('Unlock the editor before changing your dictionary.');
+      localStorage.setItem(dictionarySlot, JSON.stringify(sealed));
+    },
+    lock: run => navigator.locks.request(dictionarySlot, run)
+  });
   const profile = task => cloudProfile({ ...prefs, ...(prefs.taskProfiles?.[task] || {}) });
   const signature = value => `${value.provider}|${String(value.baseUrl || '').replace(/\/+$/, '')}`;
   const publicPrefs = () => ({ ...prefs, hasKey: keys.has(signature(profile('continue'))), taskHasKey: Object.fromEntries(TASKS.map(task => [task, PROVIDERS.has((prefs.taskProfiles?.[task] || prefs).provider) && keys.has(signature({ ...prefs, ...prefs.taskProfiles?.[task] }))])), recent: order.map(id => `cloud:${id}`) });
@@ -119,7 +140,7 @@ export function createBrowserAdapter({ user, vaultKey, sessionTag = getRequestSe
   }
   const api = {
     platform: 'web', setSessionTag: tag => { sessionTag = tag; }, openLibrary: () => onLibrary?.(),
-    dispose() { vaultKey = null; saveCurrent = null; entries.clear(); keys.clear(); commands.clear(); pendingOpen.clear(); queues.clear(); order = []; activeId = null; for (const controller of cancelled.values()) controller.abort(); cancelled.clear(); window.removeEventListener('online', online); },
+    dispose() { vaultKey = null; saveCurrent = null; entries.clear(); keys.clear(); commands.clear(); pendingOpen.clear(); queues.clear(); order = []; activeId = null; for (const controller of cancelled.values()) controller.abort(); cancelled.clear(); window.removeEventListener('online', online); window.removeEventListener('storage', dictionaryChanged); grammarListeners.clear(); },
     async selectDocument(id) { return loadCloud(id); },
     async initialize(id) { if (id) await loadCloud(id); },
     registerSave(callback) { saveCurrent = callback; return () => { if (saveCurrent === callback) saveCurrent = null; }; },
@@ -248,6 +269,14 @@ export function createBrowserAdapter({ user, vaultKey, sessionTag = getRequestSe
     async tabFileAction(id, action) { const project = entries.get(id)?.project; if (!project) throw new Error('Open the document first.'); if (action === 'reveal') onLibrary?.(); else await navigator.clipboard.writeText(action === 'copy-name' ? project.title : `${location.origin}/?document=${entries.get(id).cloudId}`); return true; },
     async listFonts() { return ['Arial', 'Cambria', 'Calibri', 'Georgia', 'Times New Roman', 'Verdana', 'Tahoma', 'Courier New', 'Trebuchet MS', 'serif', 'sans-serif', 'monospace']; },
     async offlineDictionaryWords() { return prefs.personalDictionary || []; }, async addOfflineDictionaryWord(word) { const words = [...new Set([...(prefs.personalDictionary || []), word])]; await api.settings({ personalDictionary: words }); return true; },
+    personalGrammarExceptions: grammarExceptions.list,
+    addPersonalGrammarException: grammarExceptions.add,
+    updatePersonalGrammarException: grammarExceptions.edit,
+    removePersonalGrammarException: grammarExceptions.remove,
+    onPersonalGrammarExceptionsChanged(listener) {
+      grammarListeners.add(listener);
+      return () => grammarListeners.delete(listener);
+    },
     async offlineGrammar({ texts = [] }) { return texts.map(() => []); },
     async thesaurus(word, language) { return (await import('./thesaurus.js')).browserThesaurus(word, language); },
     async setDocumentLanguage() { return true; }, async setShortcutCapture() { return true; }, async externalFilesReady() { return true; }, async nextExternalFile() { return null; }, async completeExternalFile() { return true; },
@@ -262,5 +291,6 @@ export function createBrowserAdapter({ user, vaultKey, sessionTag = getRequestSe
   };
   const online = () => api.flush().catch(error => onError?.(error.message));
   window.addEventListener('online', online);
+  window.addEventListener('storage', dictionaryChanged);
   return api;
 }

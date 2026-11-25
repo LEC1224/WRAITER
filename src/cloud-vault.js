@@ -193,3 +193,14 @@ export async function openMetadata(key, userId, id, metadata) {
   } catch { fail('This encrypted document title could not be decrypted.'); }
   finally { raw?.fill(0); }
 }
+
+// Grammar exceptions can contain exact phrases from a private manuscript.
+export async function sealGrammarDictionary(key, userId, json) {
+  const bytes = encoder.encode(json);
+  try { return await encrypt(key, userId, '', 'personal-grammar-dictionary', bytes); }
+  finally { bytes.fill(0); }
+}
+export async function openGrammarDictionary(key, userId, box) {
+  const bytes = await decrypt(key, userId, '', 'personal-grammar-dictionary', box);
+  try { return decoder.decode(bytes); } finally { bytes.fill(0); }
+}

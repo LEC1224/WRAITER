@@ -131,6 +131,7 @@
       "dist/**/*",
       "electron/**/*",
       "src/tabs.js",
+      "src/grammar-dismissal.js",
       "src/named-styles.js",
       "src/cloud-vault.js",
       "package.json",

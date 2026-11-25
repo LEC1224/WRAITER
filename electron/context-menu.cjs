@@ -57,8 +57,9 @@ function contextMenuTemplate(params, context, handlers, shortcuts = {}) {
       items.push(action(reviewOnly ? 'Review local suggestion: ' + label : `Local ${category}: ` + label,
         reviewOnly ? 'review-local-hint' : `apply-local-hint-${index}`));
     });
-    if (canAdd) items.push(action('Add to personal dictionary', 'add-local-word'));
+    if (category === 'spelling' && canAdd) items.push(action('Add to personal dictionary', 'add-local-word'));
     items.push(action('Ignore this suggestion', 'ignore-local-hint'), action('Ignore matching suggestions in this chapter', 'ignore-local-matching'));
+    if (category === 'grammar') items.push(action('Add grammar exception to personal dictionary', 'add-grammar-exception'));
     items.push(action('Review local spelling and grammar…', 'review-local-hint'), separator);
   }
   if (params.isEditable && editor?.grammarHint) {
